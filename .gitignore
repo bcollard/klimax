@@ -1,0 +1,4 @@
+dist/
+config.yaml
+*.docker.sock
+.claude/

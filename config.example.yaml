@@ -1,0 +1,85 @@
+# klimax configuration file
+# Copy to config.yaml and adjust to your needs.
+# Run: klimax up -c config.yaml
+
+# ── VM ──────────────────────────────────────────────────────────────────────
+vm:
+  name: "klimax"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
+  cpus: 4
+  memory: "10GiB"
+  disk: "40GiB"
+
+# ── Networking ───────────────────────────────────────────────────────────────
+network:
+  # Subnet for the Docker bridge network named "kind".
+  # macOS routes this CIDR → VM's lima0 IP for pure L3 access (no SNAT).
+  kindBridgeCIDR: "172.30.0.0/16"
+
+# ── Kind clusters ────────────────────────────────────────────────────────────
+kind:
+  # kindest/node image tag used when creating clusters.
+  nodeVersion: "v1.32.0"
+
+  # MetalLB manifest version installed in every cluster.
+  metalLBVersion: "v0.14.9"
+
+  # Custom DNS domains forwarded to 8.8.8.8/8.8.4.4 by CoreDNS.
+  # Add any internal or development domains you need resolved inside clusters.
+  coreDNSDomains:
+    - "runlocal.dev"
+    - "local.test"
+
+  # Clusters to create/ensure during `klimax up`.
+  # Each cluster gets:
+  #   • API port   : 70<num>   (e.g. 7001 for num=1)
+  #   • Service CIDR: 10.<num>.0.0/16
+  #   • Pod CIDR   : 10.1<num>.0.0/16
+  #   • MetalLB pool: 172.30.<num>.1-7  and  172.30.<num>.16-254
+  #
+  # `num` is auto-assigned (lowest free slot) when not specified.
+  clusters:
+    - name: "dev"
+      num: 1
+      region: "europe-west1"   # optional; default: europe-west<N>
+      zone: "europe-west1-b"   # optional; default: europe-west<N>-b
+
+    - name: "staging"
+      num: 2
+      # region/zone use defaults: europe-west2 / europe-west2-b
+
+# ── Registries ───────────────────────────────────────────────────────────────
+registries:
+  # Local push registry available inside every cluster as kind-registry:5000.
+  # Push with: docker push kind-registry:5000/myimage:tag
+  localRegistry:
+    enabled: true
+    port: 5000
+
+  # Pull-through mirror containers running in the VM.
+  # All mirrors are connected to the "kind" Docker network so cluster nodes
+  # resolve them by hostname (e.g. registry-dockerio:5030).
+  # Set to an empty list ([]) to disable all mirrors.
+  mirrors:
+    - name: "registry-dockerio"
+      port: 5030
+      remoteURL: "https://registry-1.docker.io"
+      # Optional Docker Hub credentials to avoid rate limits:
+      # username: "your-dockerhub-username"
+      # password: "your-dockerhub-password"
+
+    - name: "registry-quayio"
+      port: 5010
+      remoteURL: "https://quay.io"
+
+    - name: "registry-gcrio"
+      port: 5020
+      remoteURL: "https://gcr.io"
+
+    # Uncomment to add Google Artifact Registry mirrors:
+    # - name: "registry-us-docker-pkg-dev"
+    #   port: 5040
+    #   remoteURL: "https://us-docker.pkg.dev"
+
+    # - name: "registry-us-central1-docker-pkg-dev"
+    #   port: 5050
+    #   remoteURL: "https://us-central1-docker.pkg.dev"

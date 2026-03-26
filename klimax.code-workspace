@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../kind-on-lima"
+		},
+		{
+			"path": "../../public/lima-vm/lima"
+		},
+		{
+			"path": "../../public/abiosoft/colima"
+		}
+	],
+  "settings": {}
+}

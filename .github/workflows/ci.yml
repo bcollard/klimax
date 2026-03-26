@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest  # CGO_ENABLED=1 required; lima/vz links against macOS frameworks
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build
+        env:
+          CGO_ENABLED: "1"
+        run: go build ./...
+
+      - name: Test
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./...
+
+      - name: Vet
+        env:
+          CGO_ENABLED: "1"
+        run: go vet ./...
+
+      - name: GoReleaser check
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: check

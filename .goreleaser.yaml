@@ -1,0 +1,63 @@
+version: 2
+
+project_name: klimax
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/klimax
+    binary: klimax
+    # CGO_ENABLED=1 is required: Lima's instance/store packages call into
+    # macOS frameworks (Virtualization.framework) at link time on darwin.
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # macOS system clang handles cross-compilation between amd64/arm64
+    # without extra CC flags — the universal SDK covers both targets.
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    formats: ["tar.gz"]
+    files:
+      - LICENSE
+      - README.md
+      - config.example.yaml
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+homebrew_casks:
+  - name: klimax
+    binaries: ["klimax"]
+    repository:
+      owner: bcollard
+      name: homebrew-klimax
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/bcollard/klimax
+    description: Lima-based macOS VZ VM + multi-kind cluster manager
+    directory: Casks
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com

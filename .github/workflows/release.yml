@@ -1,0 +1,31 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write  # needed to create the GitHub release and upload assets
+
+jobs:
+  release:
+    runs-on: macos-latest  # ARM64; macOS system clang cross-compiles to amd64 transparently
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history so goreleaser can generate the changelog
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
