@@ -83,8 +83,9 @@ func (c *Client) Run(ctx context.Context, cmd string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// RunScript uploads and runs a multi-line shell script (via stdin) in the guest.
-// The script is run with `bash -s` so it does not need to be pre-installed.
+// RunScript uploads and runs a multi-line shell script (via stdin) in the guest
+// with root privileges. Lima always configures passwordless sudo for the guest
+// user, so all klimax provisioning scripts can rely on this.
 func (c *Client) RunScript(ctx context.Context, description, script string) error {
 	slog.Info("guest script", "description", description)
 	slog.Debug("guest script content", "script", script)
@@ -105,7 +106,7 @@ func (c *Client) RunScript(ctx context.Context, description, script string) erro
 	sess.Stdin = strings.NewReader(script)
 	sess.Stderr = &stderr
 
-	if err := sess.Run("bash -s"); err != nil {
+	if err := sess.Run("sudo bash -s"); err != nil {
 		return fmt.Errorf("script %q failed: %w\nstderr: %s", description, err, stderr.String())
 	}
 	return nil

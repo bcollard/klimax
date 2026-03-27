@@ -25,7 +25,7 @@ install:
 	go install $(LDFLAGS) ./cmd/klimax/...
 
 dev-install: build
-	cp $(BUILD_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
+	sudo cp $(BUILD_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
 
 clean:
 	rm -rf $(BUILD_DIR)
