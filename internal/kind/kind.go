@@ -24,7 +24,7 @@ import (
 //  4. Creates the local-registry-hosting ConfigMap in kube-public.
 //  5. Exports the kubeconfig to ~/.kube/kind/<name>.kubeconfig on the host,
 //     patching the API server address from 127.0.0.1 to the VM's lima0 IP.
-func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR, lima0IP string) error {
+func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR string) error {
 	// Apply locality defaults based on num.
 	if cl.Region == "" {
 		cl.Region = fmt.Sprintf("europe-west%d", cl.Num)
@@ -101,7 +101,7 @@ echo "kind cluster %s created"
 		}
 	}
 
-	if err := exportKubeconfig(ctx, g, cl.Name, lima0IP, apiPort); err != nil {
+	if err := exportKubeconfig(ctx, g, cl.Name, apiPort); err != nil {
 		return fmt.Errorf("exporting kubeconfig for cluster %q: %w", cl.Name, err)
 	}
 
@@ -148,7 +148,7 @@ func installMetalLB(ctx context.Context, g *guest.Client, cl config.ClusterConfi
 	metallbScript := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
-kind get kubeconfig --name %s > ${KIND_KUBECONFIG}
+kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 
 kubectl --kubeconfig ${KIND_KUBECONFIG} apply \
   -f https://raw.githubusercontent.com/metallb/metallb/%s/config/manifests/metallb-native.yaml
@@ -199,7 +199,7 @@ func applyLocalRegistryConfigMap(ctx context.Context, g *guest.Client, clusterNa
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
-kind get kubeconfig --name %s > ${KIND_KUBECONFIG}
+kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 cat <<EOF | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -219,16 +219,18 @@ EOF
 // exportKubeconfig fetches the kubeconfig from the VM, patches the server address
 // from 127.0.0.1/0.0.0.0 to the VM's lima0 IP, and writes it to
 // ~/.kube/kind/<name>.kubeconfig on the macOS host.
-func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName, lima0IP string, apiPort int) error {
-	slog.Info("Exporting kubeconfig to host", "cluster", clusterName, "lima0IP", lima0IP, "apiPort", apiPort)
+func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName string, apiPort int) error {
+	slog.Info("Exporting kubeconfig to host", "cluster", clusterName, "apiPort", apiPort)
 
 	raw, err := g.Run(ctx, fmt.Sprintf("kind get kubeconfig --name %s", clusterName))
 	if err != nil {
 		return fmt.Errorf("getting kubeconfig: %w", err)
 	}
 
-	patched := strings.ReplaceAll(raw, "https://127.0.0.1:", "https://"+lima0IP+":")
-	patched = strings.ReplaceAll(patched, "https://0.0.0.0:", "https://"+lima0IP+":")
+	// Lima's hostagent automatically forwards guest TCP ports to 127.0.0.1 on the host
+	// via the guest agent event stream — no static portForwards config needed.
+	// Using 127.0.0.1 works with any security software that blocks direct vzNAT IP access.
+	patched := strings.ReplaceAll(raw, "https://0.0.0.0:", "https://127.0.0.1:")
 
 	outPath := kindKubeconfigPath(clusterName)
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil {
@@ -260,40 +262,44 @@ func applyCoreDNSPatch(ctx context.Context, g *guest.Client, clusterName string,
 	// Build a stanza per extra domain.
 	var domainBlocks strings.Builder
 	for _, d := range domains {
-		domainBlocks.WriteString(fmt.Sprintf(`    %s:53 {
-        errors
-        cache 30
-        forward . 8.8.8.8 8.8.4.4
-    }
+		domainBlocks.WriteString(fmt.Sprintf(`%s:53 {
+    errors
+    cache 30
+    forward . 8.8.8.8 8.8.4.4
+}
 `, d))
 	}
 
+	// Corefile content (unindented); will be indented for YAML embedding below.
 	corefile := fmt.Sprintf(`%s.:53 {
-        errors
-        health {
-           lameduck 5s
-        }
-        ready
-        kubernetes cluster.local in-addr.arpa ip6.arpa {
-           pods insecure
-           fallthrough in-addr.arpa ip6.arpa
-           ttl 30
-        }
-        prometheus :9153
-        forward . /etc/resolv.conf {
-           max_concurrent 1000
-        }
-        cache 30
-        loop
-        reload
-        loadbalance
+    errors
+    health {
+       lameduck 5s
     }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+       ttl 30
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf {
+       max_concurrent 1000
+    }
+    cache 30
+    loop
+    reload
+    loadbalance
+}
 `, domainBlocks.String())
+
+	// Indent every line by 4 spaces so the block scalar is valid YAML under "Corefile: |".
+	indentedCorefile := "    " + strings.ReplaceAll(strings.TrimRight(corefile, "\n"), "\n", "\n    ")
 
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
-kind get kubeconfig --name %s > ${KIND_KUBECONFIG}
+kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 cat <<'EOF' | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
 apiVersion: v1
 kind: ConfigMap
@@ -310,7 +316,7 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} \
 kubectl --kubeconfig ${KIND_KUBECONFIG} \
   -n kube-system rollout status deployment/coredns --timeout=60s
 echo "CoreDNS patched for cluster %s"
-`, clusterName, clusterName, corefile, clusterName)
+`, clusterName, clusterName, indentedCorefile, clusterName)
 
 	return g.RunScript(ctx, fmt.Sprintf("CoreDNS patch for cluster %q", clusterName), script)
 }

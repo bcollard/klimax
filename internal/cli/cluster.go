@@ -14,7 +14,6 @@ import (
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -75,12 +74,7 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone}
 
-	lima0IP, err := routing.Lima0IP(ctx, g)
-	if err != nil {
-		return fmt.Errorf("detecting lima0 IP: %w", err)
-	}
-
-	return kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, lima0IP)
+	return kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR)
 }
 
 // ─── delete ──────────────────────────────────────────────────────────────────
