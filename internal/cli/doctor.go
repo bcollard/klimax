@@ -30,7 +30,7 @@ func runDoctor(ctx context.Context) error {
 	ok := true
 
 	// Check VM
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		fmt.Printf("[FAIL] Could not inspect VM: %v\n", err)

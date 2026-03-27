@@ -39,7 +39,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	}
 
 	// 1. Ensure VM is running.
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 	inst, err := mgr.EnsureRunning(ctx, cfg, showVMLogs)
 	if err != nil {
 		return fmt.Errorf("vm: %w", err)

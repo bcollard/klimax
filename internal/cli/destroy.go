@@ -28,7 +28,7 @@ func runDestroy(ctx context.Context) error {
 		return err
 	}
 
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 
 	// Delete kind clusters first (while VM is still running).
 	inst, err := mgr.Inspect(ctx)

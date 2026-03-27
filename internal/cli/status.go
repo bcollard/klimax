@@ -28,7 +28,7 @@ func runStatus(ctx context.Context) error {
 		return err
 	}
 
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return fmt.Errorf("inspecting VM: %w", err)

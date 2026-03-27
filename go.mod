@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/lima-vm/lima/v2 v2.1.0
+	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -46,7 +47,9 @@ require (
 	github.com/inetaf/tcpproxy v0.0.0-20250222171855-c4b9df066048 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20240710054256-ddd8a41251c9 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/lima-vm/go-qcow2reader v0.7.1 // indirect
+	github.com/lima-vm/sshocker v0.3.9 // indirect
 	github.com/linuxkit/virtsock v0.0.0-20220523201153-1a23e78aa7a2 // indirect
 	github.com/magiconair/properties v1.8.10 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -65,9 +68,11 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/pierrec/lz4/v4 v4.1.22 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/sftp v1.13.10 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rjeczalik/notify v0.9.3 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
-	github.com/sirupsen/logrus v1.9.4 // indirect
+	github.com/sethvargo/go-password v0.3.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect

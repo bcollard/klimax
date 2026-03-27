@@ -359,7 +359,7 @@ func connectToRunningVM(ctx context.Context) (*config.Config, *guest.Client, err
 		return nil, nil, err
 	}
 
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("inspecting VM: %w", err)

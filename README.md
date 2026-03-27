@@ -27,7 +27,7 @@
 - **`sudo` access** — klimax calls `sudo /sbin/route` to add/remove the kind CIDR route; `/sbin/route` is built into macOS, nothing to install
 - **Go 1.22+** — only if building from source; not needed for the pre-built binary
 
-> **Lima is used as a Go library** (`github.com/lima-vm/lima/v2`), not as a CLI. You do **not** need `limactl` installed.
+> klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary (a small Linux binary that Lima uploads into the VM at startup to handle port forwarding and file sharing). No separate Lima installation required.
 
 ### Inside the VM (auto-provisioned by `klimax up`)
 

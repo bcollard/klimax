@@ -20,12 +20,13 @@ import (
 
 // Manager handles the Lima VM lifecycle for a named klimax instance.
 type Manager struct {
-	name string
+	name       string
+	klimaxHome string // ~/.klimax — used to locate the cached guest agent
 }
 
 // New creates a Manager for the given Lima instance name.
-func New(name string) *Manager {
-	return &Manager{name: name}
+func New(name, klimaxHome string) *Manager {
+	return &Manager{name: name, klimaxHome: klimaxHome}
 }
 
 // EnsureRunning is idempotent: creates the instance if it doesn't exist,
@@ -60,7 +61,12 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config, showLog
 		go tailLimaLog(logCtx, filepath.Join(inst.Dir, "ha.stderr.log"), "lima-err")
 	}
 
-	if err := instance.Start(ctx, inst, false, showLogs); err != nil {
+	guestAgent, err := EnsureGuestAgent(ctx, m.klimaxHome)
+	if err != nil {
+		return nil, fmt.Errorf("guest agent: %w", err)
+	}
+
+	if err := instance.StartWithPaths(ctx, inst, false, showLogs, "", guestAgent); err != nil {
 		return nil, fmt.Errorf("starting instance %q: %w", m.name, err)
 	}
 	cancelLogs()

@@ -35,7 +35,7 @@ func runDown(ctx context.Context, keepRoute bool) error {
 		}
 	}
 
-	mgr := vm.New(cfg.VM.Name)
+	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 	if err := mgr.Stop(ctx); err != nil {
 		return fmt.Errorf("stopping VM: %w", err)
 	}
