@@ -76,8 +76,9 @@ cp config.example.yaml config.yaml
 # 2. Bring up the VM + Docker + networking
 klimax up
 
-# 3. Point your shell at the VM's Docker daemon
-eval $(klimax docker-env)
+# 3. Point your shell at the VM's Docker daemon (pick one)
+eval $(klimax docker-env)   # env var — current shell only
+# or: klimax docker-context  # Docker context — persistent across shells
 docker ps   # runs inside the VM
 
 # 4. Create a kind cluster
@@ -180,10 +181,23 @@ klimax <command> --help      # same, inline
 
 ### Docker
 
+Two ways to point your shell at the klimax VM's Docker daemon:
+
+**Option A — environment variable (current shell only)**
+
 ```sh
-eval $(klimax docker-env)          # activate: export DOCKER_HOST=unix://...
-eval $(klimax docker-env --unset)  # deactivate
+eval $(klimax docker-env)          # export DOCKER_HOST=unix://...
+eval $(klimax docker-env --unset)  # unset DOCKER_HOST
 ```
+
+**Option B — Docker context (persistent across shells)**
+
+```sh
+klimax docker-context              # create/update "klimax" context + docker context use klimax
+klimax docker-context --unset      # docker context use default
+```
+
+> The two options conflict: if `DOCKER_HOST` is set, Docker ignores the active context. Use one or the other. `klimax docker-context` will warn you if `DOCKER_HOST` is still set in your shell.
 
 ### Clusters
 
@@ -262,7 +276,7 @@ All registry containers are attached to the `kind` Docker network so cluster nod
 klimax/
 ├── cmd/klimax/              # main entrypoint
 ├── internal/
-│   ├── cli/                 # Cobra commands (up, down, destroy, status, doctor, cluster, docker-env)
+│   ├── cli/                 # Cobra commands (up, down, destroy, status, doctor, cluster, docker-env, docker-context)
 │   ├── config/              # YAML schema, defaults, validation
 │   ├── vm/                  # Lima instance manager (create/start/stop/delete/inspect)
 │   ├── limatemplate/        # Builds limatype.LimaYAML (VZ, portForwards, provision scripts)

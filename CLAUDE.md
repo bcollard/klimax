@@ -80,6 +80,8 @@ internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters,
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
+internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
+
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
 internal/cli/down.go                 `klimax down`
@@ -88,7 +90,9 @@ internal/cli/status.go               `klimax status`
 internal/cli/doctor.go               `klimax doctor`
 internal/cli/version.go              `klimax version`
 internal/cli/cluster.go              `klimax cluster` subcommands
-internal/cli/docker_env.go           `klimax docker-env`
+internal/cli/docker_env.go           `klimax docker-env` — prints DOCKER_HOST export (current shell only)
+internal/cli/docker_context.go       `klimax docker-context` — creates/switches Docker context (persistent)
+internal/cli/hostagent.go            `klimax hostagent` — hidden; Lima spawns this as a detached daemon
 ```
 
 ---
@@ -142,7 +146,7 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 1. Set inotify limits (`fs.inotify.max_user_watches=524288`, `max_user_instances=512`)
 2. Enable `net.ipv4.ip_forward=1`
 3. Install: `jq`, `iptables`, `curl`, `net-tools`, `python3`
-4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=${LIMA_CIDATA_USER}`)
+4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=` resolved via `getent passwd 1000`)
 5. Install Docker via `get.docker.com`
 6. Install kind CLI `v0.27.0`
 7. Install kubectl (latest stable)
@@ -151,9 +155,23 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 
 Lima `portForwards` forwards `/run/docker.sock` → `~/.<vmName>.docker.sock` on the host.
 
-```bash
-eval $(klimax docker-env)   # sets DOCKER_HOST
-```
+Two ways to use it:
+- `eval $(klimax docker-env)` — sets `DOCKER_HOST` in the current shell
+- `klimax docker-context` — creates/updates a named Docker context (persistent across shells); conflicts with `DOCKER_HOST` if both are set
+
+### Self-contained guest agent
+
+Lima requires a small Linux binary (`lima-guestagent`) uploaded into the VM at startup for port forwarding. `internal/vm/guestagent.go` (`EnsureGuestAgent`) downloads it from Lima's GitHub release on first `klimax up` and caches it at `~/.klimax/share/lima/lima-guestagent.Linux-<arch>.gz`. No separate Lima installation required.
+
+The downloaded version is matched to the Lima Go module version at runtime via `runtime/debug.ReadBuildInfo()`. The release asset uses `uname -m` naming: `Darwin-arm64` / `Darwin-x86_64` (not `Darwin-amd64`).
+
+### hostagent subprocess
+
+Lima's `instance.StartWithPaths()` spawns `os.Executable() hostagent INSTANCE --socket ... --guestagent ...` as a detached daemon. `internal/cli/hostagent.go` implements this hidden subcommand (ports Lima's `cmd/limactl/hostagent.go`). It must configure **logrus JSON formatter** — Lima's event watcher parses JSON log lines to detect VM readiness. `runtime.LockOSThread()` is required when `--run-gui` is set (VZ on macOS).
+
+### Binary replacement safety
+
+Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `amfid` to kill subsequent klimax execs. `make dev-install` aborts if a hostagent process is detected. `klimax doctor` also warns with the kill+cleanup fix command.
 
 ---
 
@@ -187,6 +205,9 @@ klimax version                         Print version
 klimax docker-env                      Print: export DOCKER_HOST=unix://~/.<name>.docker.sock
 klimax docker-env --unset              Print: unset DOCKER_HOST
 
+klimax docker-context                  Create/update "klimax" Docker context + docker context use <name>
+klimax docker-context --unset          docker context use default
+
 klimax cluster create <name>           Create a kind cluster (num auto-assigned)
   --num N                              Override cluster num (1-99)
   --region europe-west1                Override topology region label
@@ -217,6 +238,8 @@ Global flags (all commands): `-c config.yaml`, `--debug`
 - macOS VPN software can conflict with the host route → `klimax doctor` warns.
 - `podSubnet: 10.1<num>.0.0/16` overlaps with `serviceSubnet: 10.<num+10>.0.0/16` for num≥10. In practice keep num 1–9 per VM.
 - The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).
+- `DOCKER_HOST` env var overrides the active Docker context — use one mechanism or the other, not both.
+- Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
 
 ---
 
