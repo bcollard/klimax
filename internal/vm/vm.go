@@ -175,5 +175,12 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 	if err != nil {
 		return nil, fmt.Errorf("creating Lima instance %q: %w", m.name, err)
 	}
+
+	// instance.Create writes lima-version using Lima's internal version.Version,
+	// which is "<unknown>" when built without -ldflags. Overwrite it with the
+	// actual Lima module version so store.Inspect doesn't emit a warning on every run.
+	limaVerFile := filepath.Join(inst.Dir, "lima-version")
+	_ = os.WriteFile(limaVerFile, []byte(limaModuleVersion()), 0o444)
+
 	return inst, nil
 }

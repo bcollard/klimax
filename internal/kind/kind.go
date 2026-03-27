@@ -254,7 +254,7 @@ func KindKubeconfigPath(clusterName string) string {
 
 func kindKubeconfigPath(clusterName string) string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".kube", "kind", clusterName+".kubeconfig")
+	return filepath.Join(home, ".kube", "klimax", clusterName+".kubeconfig")
 }
 
 // applyCoreDNSPatch patches the CoreDNS ConfigMap to forward the given custom domains

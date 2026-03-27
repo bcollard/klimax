@@ -41,6 +41,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 	root.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfig, "Path to klimax config file")
 	root.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
 
+	root.CompletionOptions.DisableDefaultCmd = true
 	root.AddCommand(
 		newUpCmd(),
 		newDownCmd(),
@@ -53,6 +54,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 		newDockerEnvCmd(),
 		newDockerContextCmd(),
 		newHostagentCmd(),
+		newCompletionCmd(root),
 	)
 
 	return root
