@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
@@ -30,6 +32,7 @@ func newClusterCmd() *cobra.Command {
 		newClusterListCmd(),
 		newClusterUseCmd(),
 		newClusterMergeCmd(),
+		newClusterE2ETestNginxCmd(),
 	)
 	return cmd
 }
@@ -414,6 +417,85 @@ func mergeKubeconfigEntries(dst, src []map[string]interface{}) []map[string]inte
 		}
 	}
 	return dst
+}
+
+// ─── e2e-test-nginx ──────────────────────────────────────────────────────────
+
+const nginxImage = "nginx:1.27"
+
+func newClusterE2ETestNginxCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "e2e-test-nginx",
+		Short: "Deploy nginx and curl it via LoadBalancer to verify the cluster end-to-end",
+		Long: `Deploys nginx:1.27 in the default namespace using the current kubectl context,
+exposes it as a LoadBalancer service, waits for MetalLB to assign an IP, and curls it.
+
+Cleans up existing nginx pod/svc before starting so the test is idempotent.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runClusterE2ETestNginx(cmd.Context())
+		},
+	}
+}
+
+func runClusterE2ETestNginx(ctx context.Context) error {
+	kubectl := func(args ...string) error {
+		c := exec.CommandContext(ctx, "kubectl", args...)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		return c.Run()
+	}
+
+	// Clean up any previous test resources (idempotent).
+	_ = kubectl("delete", "pod", "nginx", "--ignore-not-found")
+	_ = kubectl("delete", "svc", "nginx", "--ignore-not-found")
+
+	fmt.Printf("--- Deploying %s ---\n", nginxImage)
+	if err := kubectl("run", "nginx", "--image", nginxImage); err != nil {
+		return fmt.Errorf("kubectl run: %w", err)
+	}
+
+	fmt.Println("--- Exposing as LoadBalancer ---")
+	if err := kubectl("expose", "pod", "nginx", "--port", "80", "--type", "LoadBalancer"); err != nil {
+		return fmt.Errorf("kubectl expose: %w", err)
+	}
+
+	if err := kubectl("get", "svc"); err != nil {
+		return fmt.Errorf("kubectl get svc: %w", err)
+	}
+
+	fmt.Println("--- Waiting for pod ready (60s) ---")
+	if err := kubectl("wait", "pod", "nginx", "--for=condition=Ready", "--timeout=60s"); err != nil {
+		return fmt.Errorf("pod did not become ready: %w", err)
+	}
+
+	fmt.Println("--- Waiting for LoadBalancer IP (up to 60s) ---")
+	var lbIP string
+	for range 30 {
+		c := exec.CommandContext(ctx, "kubectl", "get", "svc", "nginx",
+			"-o", `jsonpath={.status.loadBalancer.ingress[0].ip}`)
+		out, _ := c.Output()
+		if ip := strings.TrimSpace(string(out)); ip != "" {
+			lbIP = ip
+			break
+		}
+		time.Sleep(2 * time.Second)
+	}
+	if lbIP == "" {
+		return fmt.Errorf("timed out waiting for LoadBalancer IP")
+	}
+
+	fmt.Printf("--- Curling http://%s ---\n", lbIP)
+	c := exec.CommandContext(ctx, "curl", "--max-time", "11", "--connect-timeout", "10", "-I", "-v",
+		"http://"+lbIP)
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("curl failed: %w", err)
+	}
+
+	fmt.Println("--- e2e test passed ---")
+	return nil
 }
 
 // ─── shared helpers ──────────────────────────────────────────────────────────

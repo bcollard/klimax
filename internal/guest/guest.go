@@ -112,6 +112,29 @@ func (c *Client) RunScript(ctx context.Context, description, script string) erro
 	return nil
 }
 
+// RunScriptStream runs a multi-line shell script in the guest with root
+// privileges, streaming stdout and stderr directly to the caller's terminal.
+// Use this instead of RunScript when live output matters (e.g. e2e tests).
+func (c *Client) RunScriptStream(ctx context.Context, script string) error {
+	cl, err := c.dial()
+	if err != nil {
+		return err
+	}
+	defer cl.Close()
+
+	sess, err := cl.NewSession()
+	if err != nil {
+		return fmt.Errorf("new SSH session: %w", err)
+	}
+	defer sess.Close()
+
+	sess.Stdin = strings.NewReader(script)
+	sess.Stdout = os.Stdout
+	sess.Stderr = os.Stderr
+
+	return sess.Run("sudo bash -s")
+}
+
 // WriteFile writes content to path in the guest using sudo.
 // Removes any stale directory at the target path before writing.
 func (c *Client) WriteFile(ctx context.Context, path, content string) error {
@@ -120,6 +143,25 @@ func (c *Client) WriteFile(ctx context.Context, path, content string) error {
 	script := fmt.Sprintf("sudo rm -rf %q && sudo tee %q <<'__KLIMAX_EOF__' > /dev/null\n%s\n__KLIMAX_EOF__\n", path, path, content)
 	_, err := c.Run(ctx, script)
 	return err
+}
+
+// SSHArgs returns the arguments needed to exec the system ssh binary for an
+// interactive session into the given running Lima instance.
+func SSHArgs(inst *limatype.Instance) ([]string, error) {
+	keyPath, err := limaPrivateKeyPath()
+	if err != nil {
+		return nil, err
+	}
+	user := guestUser(inst)
+	args := []string{
+		"-i", keyPath,
+		"-p", fmt.Sprintf("%d", inst.SSHLocalPort),
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		fmt.Sprintf("%s@%s", user, inst.SSHAddress),
+	}
+	return args, nil
 }
 
 // dial opens a new SSH connection. Callers are responsible for closing it.
