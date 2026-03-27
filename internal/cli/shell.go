@@ -14,7 +14,8 @@ import (
 
 func newShellCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "shell",
+		Use:     "shell",
+		Aliases: []string{"ssh"},
 		Short: "Open an interactive SSH session in the klimax VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShell(cmd.Context())

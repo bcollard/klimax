@@ -286,7 +286,8 @@ func runPicker(items []pickerItem) ([]string, error) {
 func newClusterListCmd() *cobra.Command {
 	var outputFmt string
 	cmd := &cobra.Command{
-		Use:   "list",
+		Use:     "list",
+		Aliases: []string{"ls"},
 		Short: "List kind clusters running in the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterList(cmd.Context(), outputFmt)
