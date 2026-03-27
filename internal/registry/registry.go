@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
@@ -29,7 +31,7 @@ func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryC
 		}
 	}
 	for _, m := range cfg.Mirrors {
-		if err := ensureMirror(ctx, g, m); err != nil {
+		if err := ensureMirror(ctx, g, m, cfg.CacheStorage); err != nil {
 			return fmt.Errorf("mirror %q: %w", m.Name, err)
 		}
 	}
@@ -62,7 +64,7 @@ func ensureLocalRegistry(ctx context.Context, g *guest.Client, port int) error {
 }
 
 // ensureMirror starts a pull-through cache container for the given mirror config.
-func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror) error {
+func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror, cacheStorage string) error {
 	slog.Info("Ensuring registry mirror", "name", m.Name, "port", m.Port, "remote", m.RemoteURL)
 	running, err := isContainerRunning(ctx, g, m.Name)
 	if err != nil {
@@ -85,18 +87,37 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror)
 		return fmt.Errorf("writing mirror config: %w", err)
 	}
 
+	// Ensure the cache directory exists in the guest (for host mode, virtiofs makes
+	// the host path available at the same absolute path inside the VM).
+	cacheDir := mirrorCacheDir(m.Name, cacheStorage)
+	if _, err := g.Run(ctx, fmt.Sprintf("mkdir -p %q", cacheDir)); err != nil {
+		return fmt.Errorf("creating cache dir %q: %w", cacheDir, err)
+	}
+
 	cmd := fmt.Sprintf(
 		"docker run -d --restart=always"+
 			" -v %s:/etc/docker/registry/config.yml"+
+			" -v %s:/var/lib/registry"+
 			" -p %d:%d"+
 			" --name %s"+
 			" %s:%s",
-		configPath, m.Port, m.Port, m.Name, registryImage, registryTag,
+		configPath, cacheDir, m.Port, m.Port, m.Name, registryImage, registryTag,
 	)
 	if _, err := g.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("starting mirror %q: %w", m.Name, err)
 	}
 	return connectToKindNetwork(ctx, g, m.Name)
+}
+
+// mirrorCacheDir returns the cache directory path for a mirror (guest-side path for both strategies).
+// For "host": Lima mounts ~/.klimax/registry-cache at the same absolute path in the guest via virtiofs.
+// For "guest": a VM-local path under /var/lib/klimax/registry-cache.
+func mirrorCacheDir(mirrorName, cacheStorage string) string {
+	if cacheStorage == "guest" {
+		return "/var/lib/klimax/registry-cache/" + mirrorName
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".klimax", "registry-cache", mirrorName)
 }
 
 // buildMirrorConfig generates a distribution/registry v2 config YAML for a pull-through mirror.

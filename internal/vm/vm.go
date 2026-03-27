@@ -177,9 +177,12 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 	}
 
 	// instance.Create writes lima-version using Lima's internal version.Version,
-	// which is "<unknown>" when built without -ldflags. Overwrite it with the
+	// which is "<unknown>" when built without -ldflags. Replace it with the
 	// actual Lima module version so store.Inspect doesn't emit a warning on every run.
+	// os.Remove + os.WriteFile is used because the file is created 0o444 (read-only);
+	// removing a file only requires write permission on the parent directory.
 	limaVerFile := filepath.Join(inst.Dir, "lima-version")
+	_ = os.Remove(limaVerFile)
 	_ = os.WriteFile(limaVerFile, []byte(limaModuleVersion()), 0o444)
 
 	return inst, nil

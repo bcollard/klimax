@@ -59,6 +59,13 @@ kind:
 
 # ── Registries ───────────────────────────────────────────────────────────────
 registries:
+  # Where mirror registry cache data is persisted across container restarts.
+  # "host" (default): ~/.klimax/registry-cache/<name>/ on the macOS host,
+  #   virtiofs-mounted into the guest — cache survives 'klimax destroy'.
+  # "guest": /var/lib/klimax/registry-cache/<name>/ inside the VM only —
+  #   cache is wiped on 'klimax destroy'.
+  # cacheStorage: "host"
+
   # Local push registry available inside every cluster as kind-registry:5000.
   # Push with: docker push kind-registry:5000/myimage:tag
   localRegistry:

@@ -2,6 +2,8 @@ package limatemplate
 
 import (
 	"log/slog"
+	"os"
+	"path/filepath"
 	"runtime"
 
 	"github.com/bcollard/klimax/internal/config"
@@ -151,6 +153,17 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 				"host.docker.internal": "host.lima.internal",
 			},
 		},
+	}
+
+	// For host cache storage, mount ~/.klimax/registry-cache into the guest via virtiofs
+	// so Docker registry containers can bind-mount it at /var/lib/registry.
+	// Lima mounts at the same absolute path on both sides (virtiofs convention).
+	if cfg.Registries.CacheStorage == "host" {
+		home, _ := os.UserHomeDir()
+		cacheDir := filepath.Join(home, ".klimax", "registry-cache")
+		y.Mounts = []limatype.Mount{
+			{Location: cacheDir, Writable: ptr.Of(true)},
+		}
 	}
 
 	if cfg.VM.Rosetta {

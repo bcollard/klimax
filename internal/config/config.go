@@ -64,6 +64,10 @@ type ClusterConfig struct {
 type RegistryConfig struct {
 	LocalRegistry LocalRegistryConfig `yaml:"localRegistry"`
 	Mirrors       []RegistryMirror    `yaml:"mirrors"`
+	// CacheStorage controls where mirror registry data is persisted.
+	// "host" (default): bind-mounted from ~/.klimax/registry-cache on the macOS host via virtiofs.
+	// "guest": stored inside the VM at /var/lib/klimax/registry-cache (wiped on destroy).
+	CacheStorage string `yaml:"cacheStorage"`
 }
 
 type LocalRegistryConfig struct {
@@ -157,6 +161,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Registries.Mirrors == nil {
 		cfg.Registries.Mirrors = append([]RegistryMirror(nil), DefaultMirrors...)
 	}
+	if cfg.Registries.CacheStorage == "" {
+		cfg.Registries.CacheStorage = "host"
+	}
 }
 
 // WriteDefaultConfig writes a default config file to path with sensible defaults.
@@ -193,6 +200,10 @@ func Validate(cfg *Config) error {
 		if m.Name == "" || m.Port == 0 || m.RemoteURL == "" {
 			errs = append(errs, fmt.Errorf("registry mirror missing name/port/remoteURL: %+v", m))
 		}
+	}
+
+	if s := cfg.Registries.CacheStorage; s != "host" && s != "guest" {
+		errs = append(errs, fmt.Errorf("registries.cacheStorage must be \"host\" or \"guest\", got %q", s))
 	}
 
 	return errors.Join(errs...)
