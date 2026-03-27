@@ -462,7 +462,8 @@ type kubeconfigFile struct {
 }
 
 // removeFromKubeconfig removes the context, cluster, and user entries for the
-// given kind cluster name from ~/.kube/config. kind names all three "kind-<name>".
+// given cluster name from ~/.kube/config. klimax strips the "kind-" prefix
+// during exportKubeconfig, so entries are stored under the bare cluster name.
 func removeFromKubeconfig(clusterName string) error {
 	home, _ := os.UserHomeDir()
 	dstPath := filepath.Join(home, ".kube", "config")
@@ -479,7 +480,7 @@ func removeFromKubeconfig(clusterName string) error {
 		return fmt.Errorf("parsing ~/.kube/config: %w", err)
 	}
 
-	entryName := "kind-" + clusterName
+	entryName := clusterName
 	kc.Clusters = removeKubeconfigEntry(kc.Clusters, entryName)
 	kc.Contexts = removeKubeconfigEntry(kc.Contexts, entryName)
 	kc.Users = removeKubeconfigEntry(kc.Users, entryName)
@@ -541,13 +542,13 @@ func newClusterE2ETestNginxCmd() *cobra.Command {
 exposes it as a LoadBalancer service, waits for MetalLB to assign an IP, and curls it.
 
 Cleans up existing nginx pod/svc before starting so the test is idempotent.
-Use --cleanup to also remove the resources after the test completes.`,
+Use --cleanup to only remove the nginx pod and service without running the test.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterE2ETestNginx(cmd.Context(), cleanup)
 		},
 	}
-	cmd.Flags().BoolVar(&cleanup, "cleanup", false, "Delete the nginx pod and service after the test")
+	cmd.Flags().BoolVar(&cleanup, "cleanup", false, "Delete the nginx pod and service instead of running the test")
 	return cmd
 }
 
@@ -557,6 +558,13 @@ func runClusterE2ETestNginx(ctx context.Context, cleanup bool) error {
 		c.Stdout = os.Stdout
 		c.Stderr = os.Stderr
 		return c.Run()
+	}
+
+	if cleanup {
+		fmt.Println("--- Cleaning up nginx resources ---")
+		_ = kubectl("delete", "pod", "nginx", "--ignore-not-found")
+		_ = kubectl("delete", "svc", "nginx", "--ignore-not-found")
+		return nil
 	}
 
 	// Clean up any previous test resources (idempotent).
@@ -608,13 +616,6 @@ func runClusterE2ETestNginx(ctx context.Context, cleanup bool) error {
 	}
 
 	fmt.Println("--- e2e test passed ---")
-
-	if cleanup {
-		fmt.Println("--- Cleaning up ---")
-		_ = kubectl("delete", "pod", "nginx", "--ignore-not-found")
-		_ = kubectl("delete", "svc", "nginx", "--ignore-not-found")
-	}
-
 	return nil
 }
 
