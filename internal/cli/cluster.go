@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +17,7 @@ import (
 	"github.com/bcollard/klimax/internal/kind"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -121,7 +121,7 @@ func runClusterDelete(ctx context.Context, name string) error {
 	return nil
 }
 
-// runClusterDeleteInteractive shows a numbered list and lets the user pick.
+// runClusterDeleteInteractive shows a multi-select picker and deletes chosen clusters.
 func runClusterDeleteInteractive(ctx context.Context) error {
 	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
@@ -137,36 +137,145 @@ func runClusterDeleteInteractive(ctx context.Context) error {
 		return nil
 	}
 
-	fmt.Println("Select a cluster to delete:")
+	usedNums, _ := kind.DetectUsedNums(ctx, g) // best-effort; port 0 if unknown
+	numByName := make(map[string]int, len(usedNums))
+	for num, name := range usedNums {
+		numByName[name] = num
+	}
+
+	items := make([]pickerItem, len(names))
 	for i, n := range names {
-		fmt.Printf("  %d. %s\n", i+1, n)
-	}
-	fmt.Print("Enter number (or q to cancel): ")
-
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Scan()
-	line := strings.TrimSpace(scanner.Text())
-	if line == "q" || line == "" {
-		fmt.Println("Cancelled.")
-		return nil
+		items[i] = pickerItem{name: n, apiPort: 7000 + numByName[n]}
 	}
 
-	var idx int
-	if _, err := fmt.Sscanf(line, "%d", &idx); err != nil || idx < 1 || idx > len(names) {
-		return fmt.Errorf("invalid selection %q", line)
-	}
-
-	name := names[idx-1]
-	fmt.Printf("Deleting cluster %q...\n", name)
-	if err := kind.DeleteCluster(ctx, g, name); err != nil {
+	selected, err := runPicker(items)
+	if err != nil || len(selected) == 0 {
 		return err
 	}
-	if *cfg.Kind.AutoRemoveKubeconfig {
-		if err := removeFromKubeconfig(name); err != nil {
-			slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+
+	for _, name := range selected {
+		fmt.Printf("Deleting cluster %q...\n", name)
+		if err := kind.DeleteCluster(ctx, g, name); err != nil {
+			slog.Warn("Delete failed", "cluster", name, "err", err)
+			continue
+		}
+		if *cfg.Kind.AutoRemoveKubeconfig {
+			if err := removeFromKubeconfig(name); err != nil {
+				slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+			}
 		}
 	}
 	return nil
+}
+
+// pickerItem is a cluster entry shown in the interactive delete picker.
+type pickerItem struct {
+	name    string
+	apiPort int
+}
+
+// runPicker renders a keyboard-driven multi-select list in raw terminal mode.
+// Returns the names of selected items, or nil if cancelled.
+func runPicker(items []pickerItem) ([]string, error) {
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return nil, fmt.Errorf("enabling raw terminal mode: %w", err)
+	}
+	defer term.Restore(int(os.Stdin.Fd()), oldState) //nolint:errcheck
+
+	cursor := 0
+	sel := make([]bool, len(items))
+	firstDraw := true
+
+	draw := func() {
+		if !firstDraw {
+			// Move up to overwrite the previous render (header + blank + items + blank + footer).
+			fmt.Printf("\033[%dA", len(items)+4)
+		}
+		firstDraw = false
+
+		fmt.Print("\033[2KDelete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm · q quit)\r\n")
+		fmt.Print("\033[2K\r\n")
+		for i, item := range items {
+			check := "[ ]"
+			if sel[i] {
+				check = "[x]"
+			}
+			prefix := "  "
+			if i == cursor {
+				prefix = "> "
+			}
+			port := ""
+			if item.apiPort > 7000 {
+				port = fmt.Sprintf("  port %d", item.apiPort)
+			}
+			fmt.Printf("\033[2K  %s%s  %-30s%s\r\n", prefix, check, item.name, port)
+		}
+		fmt.Print("\033[2K\r\n")
+		n := 0
+		for _, v := range sel {
+			if v {
+				n++
+			}
+		}
+		if n == 0 {
+			fmt.Print("\033[2K  nothing selected\r\n")
+		} else {
+			fmt.Printf("\033[2K  %d cluster(s) selected — press Enter to delete\r\n", n)
+		}
+	}
+
+	buf := make([]byte, 4)
+	draw()
+	for {
+		nr, _ := os.Stdin.Read(buf)
+		if nr == 0 {
+			continue
+		}
+		switch {
+		case buf[0] == 'q':
+			fmt.Print("\r\nCancelled.\r\n")
+			return nil, nil
+		case buf[0] == 27 && nr == 1: // bare Escape
+			fmt.Print("\r\nCancelled.\r\n")
+			return nil, nil
+		case buf[0] == 13: // Enter
+			var result []string
+			for i, v := range sel {
+				if v {
+					result = append(result, items[i].name)
+				}
+			}
+			fmt.Print("\r\n")
+			return result, nil
+		case buf[0] == ' ':
+			sel[cursor] = !sel[cursor]
+		case buf[0] == 'a':
+			// Toggle all: select all if any are unselected, else deselect all.
+			anyUnset := false
+			for _, v := range sel {
+				if !v {
+					anyUnset = true
+					break
+				}
+			}
+			for i := range sel {
+				sel[i] = anyUnset
+			}
+		case nr >= 3 && buf[0] == 27 && buf[1] == '[':
+			switch buf[2] {
+			case 'A': // up
+				if cursor > 0 {
+					cursor--
+				}
+			case 'B': // down
+				if cursor < len(items)-1 {
+					cursor++
+				}
+			}
+		}
+		draw()
+	}
 }
 
 // ─── list ────────────────────────────────────────────────────────────────────
@@ -424,21 +533,25 @@ func mergeKubeconfigEntries(dst, src []map[string]interface{}) []map[string]inte
 const nginxImage = "nginx:1.27"
 
 func newClusterE2ETestNginxCmd() *cobra.Command {
-	return &cobra.Command{
+	var cleanup bool
+	cmd := &cobra.Command{
 		Use:   "e2e-test-nginx",
 		Short: "Deploy nginx and curl it via LoadBalancer to verify the cluster end-to-end",
 		Long: `Deploys nginx:1.27 in the default namespace using the current kubectl context,
 exposes it as a LoadBalancer service, waits for MetalLB to assign an IP, and curls it.
 
-Cleans up existing nginx pod/svc before starting so the test is idempotent.`,
+Cleans up existing nginx pod/svc before starting so the test is idempotent.
+Use --cleanup to also remove the resources after the test completes.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClusterE2ETestNginx(cmd.Context())
+			return runClusterE2ETestNginx(cmd.Context(), cleanup)
 		},
 	}
+	cmd.Flags().BoolVar(&cleanup, "cleanup", false, "Delete the nginx pod and service after the test")
+	return cmd
 }
 
-func runClusterE2ETestNginx(ctx context.Context) error {
+func runClusterE2ETestNginx(ctx context.Context, cleanup bool) error {
 	kubectl := func(args ...string) error {
 		c := exec.CommandContext(ctx, "kubectl", args...)
 		c.Stdout = os.Stdout
@@ -495,6 +608,13 @@ func runClusterE2ETestNginx(ctx context.Context) error {
 	}
 
 	fmt.Println("--- e2e test passed ---")
+
+	if cleanup {
+		fmt.Println("--- Cleaning up ---")
+		_ = kubectl("delete", "pod", "nginx", "--ignore-not-found")
+		_ = kubectl("delete", "svc", "nginx", "--ignore-not-found")
+	}
+
 	return nil
 }
 
