@@ -231,6 +231,9 @@ func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName string, 
 	// via the guest agent event stream — no static portForwards config needed.
 	// Using 127.0.0.1 works with any security software that blocks direct vzNAT IP access.
 	patched := strings.ReplaceAll(raw, "https://0.0.0.0:", "https://127.0.0.1:")
+	// Strip the "kind-" prefix kind adds to context/cluster/user names so the
+	// context name in ~/.kube/config matches the cluster name directly.
+	patched = strings.ReplaceAll(patched, "kind-"+clusterName, clusterName)
 
 	outPath := kindKubeconfigPath(clusterName)
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o750); err != nil {

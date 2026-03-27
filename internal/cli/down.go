@@ -11,25 +11,25 @@ import (
 )
 
 func newDownCmd() *cobra.Command {
-	var keepRoute bool
+	var removeRoute bool
 	cmd := &cobra.Command{
 		Use:   "down",
-		Short: "Stop the VM (optionally remove the macOS route)",
+		Short: "Stop the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDown(cmd.Context(), keepRoute)
+			return runDown(cmd.Context(), removeRoute)
 		},
 	}
-	cmd.Flags().BoolVar(&keepRoute, "keep-route", false, "Do not remove the macOS route on stop")
+	cmd.Flags().BoolVar(&removeRoute, "remove-route", false, "Also remove the macOS host route (requires sudo)")
 	return cmd
 }
 
-func runDown(ctx context.Context, keepRoute bool) error {
+func runDown(ctx context.Context, removeRoute bool) error {
 	cfg, err := loadAndValidate()
 	if err != nil {
 		return err
 	}
 
-	if !keepRoute {
+	if removeRoute {
 		if err := routing.DeleteRoute(cfg.Network.KindBridgeCIDR); err != nil {
 			slog.Warn("Failed to delete route (continuing)", "err", err)
 		}
