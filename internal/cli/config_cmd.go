@@ -30,9 +30,9 @@ func newConfigEditCmd() *cobra.Command {
 }
 
 func runConfigEdit() error {
-	editor := os.Getenv("EDITOR")
+	editor := os.Getenv("VISUAL")
 	if editor == "" {
-		editor = os.Getenv("VISUAL")
+		editor = os.Getenv("EDITOR")
 	}
 	if editor == "" {
 		for _, e := range []string{"nano", "vi"} {
