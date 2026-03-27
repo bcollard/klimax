@@ -25,6 +25,11 @@ install:
 	go install $(LDFLAGS) ./cmd/klimax/...
 
 dev-install: build
+	@if pgrep -qf '$(BINARY) hostagent'; then \
+		echo "ERROR: klimax hostagent is running. Run 'klimax down' first, or:"; \
+		echo "  kill \$$(pgrep -f '$(BINARY) hostagent')"; \
+		exit 1; \
+	fi
 	sudo cp $(BUILD_DIR)/$(BINARY) /usr/local/bin/$(BINARY)
 
 clean:

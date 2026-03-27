@@ -3,6 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/routing"
@@ -28,6 +32,9 @@ func runDoctor(ctx context.Context) error {
 	}
 
 	ok := true
+
+	// Check for stale hostagent process (binary replaced while hostagent was running).
+	checkHostagent(cfg.VM.Name)
 
 	// Check VM
 	mgr := vm.New(cfg.VM.Name, KlimaxHome())
@@ -97,4 +104,47 @@ func runDoctor(ctx context.Context) error {
 		fmt.Println("\nSome checks failed — see Fix suggestions above.")
 	}
 	return nil
+}
+
+// checkHostagent detects a running hostagent whose on-disk binary has been
+// replaced since it was launched — a common cause of "zsh: killed" when running
+// subsequent klimax commands.
+func checkHostagent(instanceName string) {
+	pidFile := filepath.Join(KlimaxHome(), instanceName, "ha.pid")
+	data, err := os.ReadFile(pidFile)
+	if err != nil {
+		// No pid file — hostagent not running (or already cleaned up).
+		return
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return
+	}
+
+	// Check the binary path the process is running from.
+	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if err != nil {
+		// /proc is Linux; on macOS use the pid file as a proxy.
+		// If the pid file exists the hostagent is probably still running.
+		if _, err := os.FindProcess(pid); err == nil {
+			fmt.Printf("[WARN] hostagent is running (pid %d)\n", pid)
+			fmt.Printf("  If klimax commands fail with 'killed', the binary may have been replaced while hostagent was running.\n")
+			fmt.Printf("  Fix: kill %d && rm -f %s %s\n", pid,
+				filepath.Join(KlimaxHome(), instanceName, "ha.pid"),
+				filepath.Join(KlimaxHome(), instanceName, "ha.sock"))
+		}
+		return
+	}
+
+	self, _ := os.Executable()
+	if exe != self {
+		fmt.Printf("[WARN] hostagent (pid %d) is running a different binary than the current klimax\n", pid)
+		fmt.Printf("  hostagent binary: %s\n", exe)
+		fmt.Printf("  current binary:   %s\n", self)
+		fmt.Printf("  Fix: klimax down  (or: kill %d && rm -f %s %s)\n", pid,
+			filepath.Join(KlimaxHome(), instanceName, "ha.pid"),
+			filepath.Join(KlimaxHome(), instanceName, "ha.sock"))
+	} else {
+		fmt.Printf("[OK]   hostagent is running (pid %d)\n", pid)
+	}
 }

@@ -112,12 +112,12 @@ func (c *Client) RunScript(ctx context.Context, description, script string) erro
 	return nil
 }
 
-// WriteFile writes content to path in the guest using a here-doc over SSH.
-// The parent directory must already exist.
+// WriteFile writes content to path in the guest using sudo.
+// Removes any stale directory at the target path before writing.
 func (c *Client) WriteFile(ctx context.Context, path, content string) error {
 	slog.Debug("guest write file", "path", path)
-	// Use tee to write the content; the script is sent via stdin.
-	script := fmt.Sprintf("tee %q <<'__KLIMAX_EOF__'\n%s\n__KLIMAX_EOF__\n", path, content)
+	// Remove stale directory if present (may be root-owned), then write via sudo tee.
+	script := fmt.Sprintf("sudo rm -rf %q && sudo tee %q <<'__KLIMAX_EOF__' > /dev/null\n%s\n__KLIMAX_EOF__\n", path, path, content)
 	_, err := c.Run(ctx, script)
 	return err
 }
