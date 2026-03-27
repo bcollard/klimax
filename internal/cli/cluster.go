@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
@@ -29,6 +30,7 @@ func newClusterCmd() *cobra.Command {
 		newClusterDeleteCmd(),
 		newClusterListCmd(),
 		newClusterUseCmd(),
+		newClusterMergeCmd(),
 	)
 	return cmd
 }
@@ -233,6 +235,119 @@ func newClusterUseCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// ─── merge ───────────────────────────────────────────────────────────────────
+
+func newClusterMergeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "merge <name>",
+		Short: "Merge cluster kubeconfig into ~/.kube/config",
+		Long: `Adds the cluster's context, cluster, and user entries into the default
+kubeconfig (~/.kube/config) so that kubectx/kubens can switch to it.
+
+A backup of the existing ~/.kube/config is written to ~/.kube/config.bak
+before any modifications are made.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runClusterMerge(args[0])
+		},
+	}
+}
+
+func runClusterMerge(name string) error {
+	srcPath := kind.KindKubeconfigPath(name)
+	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
+		return fmt.Errorf("kubeconfig not found at %s — run 'klimax cluster create %s' first", srcPath, name)
+	}
+
+	srcData, err := os.ReadFile(srcPath)
+	if err != nil {
+		return fmt.Errorf("reading cluster kubeconfig: %w", err)
+	}
+	var src kubeconfigFile
+	if err := yaml.Unmarshal(srcData, &src); err != nil {
+		return fmt.Errorf("parsing cluster kubeconfig: %w", err)
+	}
+
+	// Load or initialise the default kubeconfig.
+	home, _ := os.UserHomeDir()
+	dstPath := filepath.Join(home, ".kube", "config")
+	var dst kubeconfigFile
+	dstData, err := os.ReadFile(dstPath)
+	switch {
+	case err == nil:
+		if err := yaml.Unmarshal(dstData, &dst); err != nil {
+			return fmt.Errorf("parsing ~/.kube/config: %w", err)
+		}
+		// Backup before any modification.
+		bakPath := dstPath + ".bak"
+		if err := os.WriteFile(bakPath, dstData, 0o600); err != nil {
+			return fmt.Errorf("writing backup %s: %w", bakPath, err)
+		}
+		slog.Info("Backup written", "path", bakPath)
+	case os.IsNotExist(err):
+		dst = kubeconfigFile{APIVersion: "v1", Kind: "Config"}
+		if err := os.MkdirAll(filepath.Dir(dstPath), 0o750); err != nil {
+			return fmt.Errorf("creating ~/.kube: %w", err)
+		}
+	default:
+		return fmt.Errorf("reading ~/.kube/config: %w", err)
+	}
+
+	dst.Clusters = mergeKubeconfigEntries(dst.Clusters, src.Clusters)
+	dst.Contexts = mergeKubeconfigEntries(dst.Contexts, src.Contexts)
+	dst.Users = mergeKubeconfigEntries(dst.Users, src.Users)
+
+	out, err := yaml.Marshal(&dst)
+	if err != nil {
+		return fmt.Errorf("marshaling merged kubeconfig: %w", err)
+	}
+	if err := os.WriteFile(dstPath, out, 0o600); err != nil {
+		return fmt.Errorf("writing ~/.kube/config: %w", err)
+	}
+
+	// Report the context name(s) that were merged in.
+	contextName := "kind-" + name // kind's default naming convention
+	if len(src.Contexts) > 0 {
+		if n, ok := src.Contexts[0]["name"].(string); ok {
+			contextName = n
+		}
+	}
+	slog.Info("Kubeconfig merged", "context", contextName, "dst", dstPath)
+	fmt.Printf("Merged context %q into %s\n  kubectx %s\n", contextName, dstPath, contextName)
+	return nil
+}
+
+// kubeconfigFile is a minimal kubeconfig representation for faithful YAML round-trips.
+type kubeconfigFile struct {
+	APIVersion     string                   `yaml:"apiVersion"`
+	Kind           string                   `yaml:"kind"`
+	Clusters       []map[string]interface{} `yaml:"clusters"`
+	Contexts       []map[string]interface{} `yaml:"contexts"`
+	Users          []map[string]interface{} `yaml:"users"`
+	CurrentContext string                   `yaml:"current-context,omitempty"`
+	Preferences    interface{}              `yaml:"preferences,omitempty"`
+}
+
+// mergeKubeconfigEntries merges src into dst, overwriting entries with the same "name".
+func mergeKubeconfigEntries(dst, src []map[string]interface{}) []map[string]interface{} {
+	idx := make(map[string]int, len(dst))
+	for i, e := range dst {
+		if n, ok := e["name"].(string); ok {
+			idx[n] = i
+		}
+	}
+	for _, e := range src {
+		n, _ := e["name"].(string)
+		if i, exists := idx[n]; exists {
+			dst[i] = e
+		} else {
+			idx[n] = len(dst)
+			dst = append(dst, e)
+		}
+	}
+	return dst
 }
 
 // ─── shared helpers ──────────────────────────────────────────────────────────
