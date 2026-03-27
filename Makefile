@@ -7,10 +7,13 @@ BUILD_DIR  := ./dist
 # CGO_ENABLED=1 is required: Lima's instance/store packages link against macOS frameworks.
 export CGO_ENABLED=1
 
-.PHONY: build test lint install dev-install clean tidy snapshot release-check
+ENTITLEMENTS := entitlements.plist
+
+.PHONY: build sign test lint install dev-install clean tidy snapshot release-check
 
 build:
 	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/klimax/...
+	codesign --sign - --entitlements $(ENTITLEMENTS) --force $(BUILD_DIR)/$(BINARY)
 
 test:
 	go test ./...

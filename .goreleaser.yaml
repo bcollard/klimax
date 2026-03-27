@@ -25,6 +25,13 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
+    hooks:
+      post:
+        # Embed the com.apple.security.virtualization entitlement required to
+        # create VMs via Virtualization.framework.
+        # For production releases, replace "-" with your Developer ID certificate
+        # identity and add a notarize step; otherwise Gatekeeper will block the binary.
+        - cmd: codesign --sign - --entitlements entitlements.plist --force "{{ .Path }}"
 
 archives:
   - name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -33,6 +40,7 @@ archives:
       - LICENSE
       - README.md
       - config.example.yaml
+      - entitlements.plist
 
 checksum:
   name_template: checksums.txt
