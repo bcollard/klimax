@@ -10,9 +10,9 @@ jobs:
   build:
     runs-on: macos-latest  # CGO_ENABLED=1 required; lima/vz links against macOS frameworks
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5.3.0
         with:
           go-version-file: go.mod
           cache: true
@@ -33,7 +33,7 @@ jobs:
         run: go vet ./...
 
       - name: GoReleaser check
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v6.3.0
         with:
           version: latest
           args: check

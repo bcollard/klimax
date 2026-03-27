@@ -12,17 +12,17 @@ jobs:
   release:
     runs-on: macos-latest  # ARM64; macOS system clang cross-compiles to amd64 transparently
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0  # full history so goreleaser can generate the changelog
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5.3.0
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v6.3.0
         with:
           version: latest
           args: release --clean
