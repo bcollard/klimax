@@ -146,7 +146,7 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 1. Set inotify limits (`fs.inotify.max_user_watches=524288`, `max_user_instances=512`)
 2. Enable `net.ipv4.ip_forward=1`
 3. Install: `jq`, `iptables`, `curl`, `net-tools`, `python3`
-4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=` resolved via `getent passwd 1000`)
+4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=lima` — Lima's guest user is always `lima`)
 5. Install Docker via `get.docker.com`
 6. Install kind CLI `v0.27.0`
 7. Install kubectl (latest stable)

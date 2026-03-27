@@ -41,13 +41,12 @@ apt-get update -qq
 apt-get install -y -q jq iptables curl net-tools python3
 
 # Docker socket permissions (allows lima user to use Docker without sudo)
-# Detect the non-root user (UID 1000) rather than referencing LIMA_CIDATA_USER.
-LIMA_USER=$(getent passwd 1000 | cut -d: -f1)
+# Lima's guest user is always named "lima" — this is a Lima invariant.
 if [ ! -e /etc/systemd/system/docker.socket.d/override.conf ]; then
   mkdir -p /etc/systemd/system/docker.socket.d
   cat > /etc/systemd/system/docker.socket.d/override.conf <<EOF
 [Socket]
-SocketUser=${LIMA_USER}
+SocketUser=lima
 EOF
 fi
 
