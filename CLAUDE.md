@@ -36,10 +36,16 @@ Go CLI that wraps **Lima** to manage a macOS Virtualization.framework VM running
 
 ### Lima vzNAT topology
 ```
-macOS host  192.168.105.1  bridge100
-Lima VM     192.168.105.2  lima0
+macOS host  <host-side IP>   bridge1xx   (macOS-assigned, e.g. 192.168.64.1)
+Lima VM     <guest-side IP>  lima0       (macOS-assigned, e.g. 192.168.64.2)
 ```
-These are auto-assigned by Lima's vzNAT. The VM IP is reachable from the host.
+vzNAT uses Apple's `VZNATNetworkDeviceAttachment`. IPs are assigned by macOS and **cannot be specified**. Lima does not store the guest IP in its `Instance` struct — it must be discovered at runtime from inside the VM.
+
+klimax does this correctly: `routing.Lima0IP()` SSHs into the VM and reads `ip -o -4 addr show lima0`. No IP is hardcoded anywhere in klimax.
+
+**Multiple Lima VMs (limactl, colima, etc.) are safe:** each vzNAT VM gets a distinct IP from macOS on its own `bridge1xx` interface. klimax's macOS route always targets the specific IP of the klimax VM, so other VMs don't interfere.
+
+Note: the `192.168.105.x` subnet is Lima's **socket_vmnet** range (shared/bridged mode) — entirely different from vzNAT.
 
 ### kind network
 All kind clusters share a single Docker bridge network named `kind` with a user-specified subnet (default `172.30.0.0/16`). The bridge interface is `br-<id>` inside the VM.
@@ -209,7 +215,7 @@ Global flags (all commands): `-c config.yaml`, `--debug`
 - Docker rewrites iptables on restart → handled by `ExecStartPost` drop-in.
 - macOS VPN software can conflict with the host route → `klimax doctor` warns.
 - `podSubnet: 10.1<num>.0.0/16` overlaps with `serviceSubnet: 10.<num+10>.0.0/16` for num≥10. In practice keep num 1–9 per VM.
-- The vzNAT subnet `192.168.105.0/24` is fixed by Lima; do not use it for kind or pods.
+- The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).
 
 ---
 

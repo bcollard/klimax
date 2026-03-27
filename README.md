@@ -223,15 +223,17 @@ eval $(klimax cluster use dev)
 
 ```
 macOS host
-  bridge100 (192.168.105.1)
-      │  vzNAT link
+  bridge1xx (<host-IP>, macOS-assigned)
+      │  vzNAT — Apple VZNATNetworkDeviceAttachment
       ▼
 Lima VZ guest
-  lima0 (192.168.105.2)
+  lima0 (<guest-IP>, macOS-assigned)
   br-<id> (172.30.0.1/16)  ← Docker bridge "kind"
       │
   kind cluster nodes (172.30.N.x)
 ```
+
+> The vzNAT IPs are assigned by macOS and cannot be configured. klimax detects the VM's `lima0` IP at runtime by SSHing into the VM — nothing is hardcoded. Each Lima VM (klimax, limactl, colima…) gets a distinct IP on its own `bridge1xx`, so multiple VMs coexist without conflict.
 
 ### How pure L3 routing works
 
