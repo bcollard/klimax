@@ -14,8 +14,9 @@ import (
 
 func newStatusCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "status",
-		Short: "Show VM state, clusters, route, and iptables rule presence",
+		Use:     "status",
+		Aliases: []string{"st"},
+		Short:   "Show VM state, clusters, route, and iptables rule presence",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runStatus(cmd.Context())
 		},
