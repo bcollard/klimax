@@ -18,10 +18,11 @@ type Config struct {
 }
 
 type VMConfig struct {
-	Name   string `yaml:"name"`   // default: "klimax"
-	CPUs   int    `yaml:"cpus"`   // default: 4
-	Memory string `yaml:"memory"` // e.g. "10GiB"
-	Disk   string `yaml:"disk"`   // e.g. "40GiB"
+	Name    string `yaml:"name"`    // default: "klimax"
+	CPUs    int    `yaml:"cpus"`    // default: 4
+	Memory  string `yaml:"memory"`  // e.g. "10GiB"
+	Disk    string `yaml:"disk"`    // e.g. "40GiB"
+	Rosetta bool   `yaml:"rosetta"` // enable Rosetta 2 for amd64 containers (ARM64 only)
 }
 
 type NetworkConfig struct {
@@ -144,6 +145,19 @@ func applyDefaults(cfg *Config) {
 	if cfg.Registries.Mirrors == nil {
 		cfg.Registries.Mirrors = append([]RegistryMirror(nil), DefaultMirrors...)
 	}
+}
+
+// WriteDefaultConfig writes a default config file to path with sensible defaults.
+// The directory must already exist or be created by the caller.
+func WriteDefaultConfig(path string) error {
+	cfg := &Config{}
+	applyDefaults(cfg)
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("marshaling default config: %w", err)
+	}
+	header := []byte("# klimax configuration — edit to customise, then re-run 'klimax up'\n# See https://github.com/bcollard/klimax for full documentation.\n\n")
+	return os.WriteFile(path, append(header, data...), 0o600)
 }
 
 // Validate checks the config for correctness.

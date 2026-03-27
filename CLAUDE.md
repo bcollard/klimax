@@ -103,6 +103,7 @@ vm:
   cpus: 4
   memory: "10GiB"
   disk: "40GiB"
+  rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet

@@ -109,6 +109,7 @@ vm:
   cpus: 4
   memory: "10GiB"
   disk: "40GiB"
+  # rosetta: false       # enable Rosetta 2 for amd64 containers (ARM64 only)
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

@@ -8,6 +8,9 @@ vm:
   cpus: 4
   memory: "10GiB"
   disk: "40GiB"
+  # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
+  # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
+  # rosetta: false
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

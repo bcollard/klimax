@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/docker"
@@ -15,16 +17,22 @@ import (
 )
 
 func newUpCmd() *cobra.Command {
-	return &cobra.Command{
+	var showVMLogs bool
+	cmd := &cobra.Command{
 		Use:   "up",
 		Short: "Create/start the VM, provision Docker, create kind clusters, set up routing",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUp(cmd.Context())
+			return runUp(cmd.Context(), showVMLogs)
 		},
 	}
+	cmd.Flags().BoolVar(&showVMLogs, "show-vm-logs", false, "Stream Lima host-agent logs and cloud-init progress to stderr during startup")
+	return cmd
 }
 
-func runUp(ctx context.Context) error {
+func runUp(ctx context.Context, showVMLogs bool) error {
+	if err := ensureConfig(); err != nil {
+		return err
+	}
 	cfg, err := loadAndValidate()
 	if err != nil {
 		return err
@@ -32,7 +40,7 @@ func runUp(ctx context.Context) error {
 
 	// 1. Ensure VM is running.
 	mgr := vm.New(cfg.VM.Name)
-	inst, err := mgr.EnsureRunning(ctx, cfg)
+	inst, err := mgr.EnsureRunning(ctx, cfg, showVMLogs)
 	if err != nil {
 		return fmt.Errorf("vm: %w", err)
 	}
@@ -77,6 +85,22 @@ func runUp(ctx context.Context) error {
 		"dockerSocket", "~/."+cfg.VM.Name+".docker.sock",
 	)
 	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n\n")
+	return nil
+}
+
+// ensureConfig creates a default config file at configFile if it does not exist.
+func ensureConfig() error {
+	if _, err := os.Stat(configFile); err == nil {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(configFile), 0o750); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+	if err := config.WriteDefaultConfig(configFile); err != nil {
+		return fmt.Errorf("writing default config: %w", err)
+	}
+	fmt.Printf("No config found — created default config at %s\n", configFile)
+	fmt.Printf("Edit it to customise VM resources, then re-run 'klimax up'.\n\n")
 	return nil
 }
 

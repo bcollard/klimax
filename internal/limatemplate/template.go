@@ -1,6 +1,9 @@
 package limatemplate
 
 import (
+	"log/slog"
+	"runtime"
+
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/lima-vm/lima/v2/pkg/ptr"
@@ -147,6 +150,22 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 				"host.docker.internal": "host.lima.internal",
 			},
 		},
+	}
+
+	if cfg.VM.Rosetta {
+		if runtime.GOARCH != "arm64" {
+			slog.Warn("vm.rosetta is set but host is not ARM64 — skipping Rosetta")
+		} else {
+			rosettaTrue := true
+			y.VMOpts = limatype.VMOpts{
+				limatype.VZ: limatype.VZOpts{
+					Rosetta: limatype.Rosetta{
+						Enabled: &rosettaTrue,
+						BinFmt:  &rosettaTrue,
+					},
+				},
+			}
+		}
 	}
 
 	return y

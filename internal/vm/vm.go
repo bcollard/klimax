@@ -1,11 +1,14 @@
 package vm
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/limatemplate"
@@ -27,7 +30,9 @@ func New(name string) *Manager {
 
 // EnsureRunning is idempotent: creates the instance if it doesn't exist,
 // starts it if it's stopped, and returns the running instance.
-func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config) (*limatype.Instance, error) {
+// When showLogs is true, Lima's host-agent logs are streamed to stderr in
+// real time and Lima's built-in cloud-init progress display is enabled.
+func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config, showLogs bool) (*limatype.Instance, error) {
 	inst, err := store.Inspect(ctx, m.name)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("inspecting instance %q: %w", m.name, err)
@@ -47,9 +52,18 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config) (*limat
 	}
 
 	slog.Info("Starting Lima instance", "name", m.name, "status", inst.Status)
-	if err := instance.Start(ctx, inst, false, true); err != nil {
+
+	logCtx, cancelLogs := context.WithCancel(ctx)
+	defer cancelLogs()
+	if showLogs {
+		go tailLimaLog(logCtx, filepath.Join(inst.Dir, "ha.stdout.log"), "lima")
+		go tailLimaLog(logCtx, filepath.Join(inst.Dir, "ha.stderr.log"), "lima-err")
+	}
+
+	if err := instance.Start(ctx, inst, false, showLogs); err != nil {
 		return nil, fmt.Errorf("starting instance %q: %w", m.name, err)
 	}
+	cancelLogs()
 
 	// Re-inspect to get updated SSH port and address.
 	inst, err = store.Inspect(ctx, m.name)
@@ -57,6 +71,37 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config) (*limat
 		return nil, fmt.Errorf("re-inspecting instance after start: %w", err)
 	}
 	return inst, nil
+}
+
+// tailLimaLog waits for path to appear then streams each new line to stderr
+// with the given prefix until ctx is cancelled.
+func tailLimaLog(ctx context.Context, path, prefix string) {
+	var f *os.File
+	for f == nil {
+		var err error
+		f, err = os.Open(path)
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(200 * time.Millisecond):
+			}
+			continue
+		}
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for {
+		for scanner.Scan() {
+			fmt.Fprintf(os.Stderr, "[%s] %s\n", prefix, scanner.Text())
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
 }
 
 // Stop gracefully shuts down the VM.
