@@ -32,6 +32,13 @@ kind:
     - "runlocal.dev"
     - "local.test"
 
+  # Automatically merge the new cluster's context into ~/.kube/config after creation.
+  # Set to false to manage kubeconfig manually via 'klimax cluster merge <name>'.
+  # autoMergeKubeconfig: true
+
+  # Automatically remove the cluster's context/cluster/user from ~/.kube/config on deletion.
+  # autoRemoveKubeconfig: true
+
   # Clusters to create/ensure during `klimax up`.
   # Each cluster gets:
   #   • API port   : 70<num>   (e.g. 7001 for num=1)

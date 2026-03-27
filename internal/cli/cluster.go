@@ -74,7 +74,16 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone}
 
-	return kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR)
+	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR); err != nil {
+		return err
+	}
+
+	if *cfg.Kind.AutoMergeKubeconfig {
+		if err := runClusterMerge(name); err != nil {
+			slog.Warn("Auto-merge kubeconfig failed", "cluster", name, "err", err)
+		}
+	}
+	return nil
 }
 
 // ─── delete ──────────────────────────────────────────────────────────────────
@@ -94,16 +103,24 @@ func newClusterDeleteCmd() *cobra.Command {
 }
 
 func runClusterDelete(ctx context.Context, name string) error {
-	_, g, err := connectToRunningVM(ctx)
+	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
 	}
-	return kind.DeleteCluster(ctx, g, name)
+	if err := kind.DeleteCluster(ctx, g, name); err != nil {
+		return err
+	}
+	if *cfg.Kind.AutoRemoveKubeconfig {
+		if err := removeFromKubeconfig(name); err != nil {
+			slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+		}
+	}
+	return nil
 }
 
 // runClusterDeleteInteractive shows a numbered list and lets the user pick.
 func runClusterDeleteInteractive(ctx context.Context) error {
-	_, g, err := connectToRunningVM(ctx)
+	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
 	}
@@ -138,7 +155,15 @@ func runClusterDeleteInteractive(ctx context.Context) error {
 
 	name := names[idx-1]
 	fmt.Printf("Deleting cluster %q...\n", name)
-	return kind.DeleteCluster(ctx, g, name)
+	if err := kind.DeleteCluster(ctx, g, name); err != nil {
+		return err
+	}
+	if *cfg.Kind.AutoRemoveKubeconfig {
+		if err := removeFromKubeconfig(name); err != nil {
+			slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+		}
+	}
+	return nil
 }
 
 // ─── list ────────────────────────────────────────────────────────────────────
@@ -322,6 +347,53 @@ type kubeconfigFile struct {
 	Users          []map[string]interface{} `yaml:"users"`
 	CurrentContext string                   `yaml:"current-context,omitempty"`
 	Preferences    interface{}              `yaml:"preferences,omitempty"`
+}
+
+// removeFromKubeconfig removes the context, cluster, and user entries for the
+// given kind cluster name from ~/.kube/config. kind names all three "kind-<name>".
+func removeFromKubeconfig(clusterName string) error {
+	home, _ := os.UserHomeDir()
+	dstPath := filepath.Join(home, ".kube", "config")
+	data, err := os.ReadFile(dstPath)
+	if os.IsNotExist(err) {
+		return nil // nothing to do
+	}
+	if err != nil {
+		return fmt.Errorf("reading ~/.kube/config: %w", err)
+	}
+
+	var kc kubeconfigFile
+	if err := yaml.Unmarshal(data, &kc); err != nil {
+		return fmt.Errorf("parsing ~/.kube/config: %w", err)
+	}
+
+	entryName := "kind-" + clusterName
+	kc.Clusters = removeKubeconfigEntry(kc.Clusters, entryName)
+	kc.Contexts = removeKubeconfigEntry(kc.Contexts, entryName)
+	kc.Users = removeKubeconfigEntry(kc.Users, entryName)
+	if kc.CurrentContext == entryName {
+		kc.CurrentContext = ""
+	}
+
+	out, err := yaml.Marshal(&kc)
+	if err != nil {
+		return fmt.Errorf("marshaling kubeconfig: %w", err)
+	}
+	if err := os.WriteFile(dstPath, out, 0o600); err != nil {
+		return fmt.Errorf("writing ~/.kube/config: %w", err)
+	}
+	slog.Info("Kubeconfig entries removed", "context", entryName, "dst", dstPath)
+	return nil
+}
+
+func removeKubeconfigEntry(entries []map[string]interface{}, name string) []map[string]interface{} {
+	out := entries[:0:0]
+	for _, e := range entries {
+		if n, _ := e["name"].(string); n != name {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // mergeKubeconfigEntries merges src into dst, overwriting entries with the same "name".

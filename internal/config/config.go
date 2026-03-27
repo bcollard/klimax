@@ -41,6 +41,12 @@ type KindConfig struct {
 	// CoreDNSDomains are extra DNS zones forwarded to 8.8.8.8/8.8.4.4 by CoreDNS.
 	// Applied to every cluster at creation time. Default: ["runlocal.dev"]
 	CoreDNSDomains []string `yaml:"coreDNSDomains"`
+	// AutoMergeKubeconfig merges the new cluster's context into ~/.kube/config
+	// automatically after creation. Default: true.
+	AutoMergeKubeconfig *bool `yaml:"autoMergeKubeconfig"`
+	// AutoRemoveKubeconfig removes the cluster's context/cluster/user entries
+	// from ~/.kube/config automatically on deletion. Default: true.
+	AutoRemoveKubeconfig *bool `yaml:"autoRemoveKubeconfig"`
 }
 
 // ClusterConfig is an internal type used by the `kind` package and `cluster` CLI.
@@ -134,6 +140,12 @@ func applyDefaults(cfg *Config) {
 	if len(cfg.Kind.CoreDNSDomains) == 0 {
 		cfg.Kind.CoreDNSDomains = []string{"runlocal.dev"}
 	}
+	if cfg.Kind.AutoMergeKubeconfig == nil {
+		cfg.Kind.AutoMergeKubeconfig = boolPtr(true)
+	}
+	if cfg.Kind.AutoRemoveKubeconfig == nil {
+		cfg.Kind.AutoRemoveKubeconfig = boolPtr(true)
+	}
 	// Registry defaults: local registry enabled by default.
 	if !cfg.Registries.LocalRegistry.Enabled && cfg.Registries.LocalRegistry.Port == 0 {
 		cfg.Registries.LocalRegistry.Enabled = true
@@ -159,6 +171,8 @@ func WriteDefaultConfig(path string) error {
 	header := []byte("# klimax configuration — edit to customise, then re-run 'klimax up'\n# See https://github.com/bcollard/klimax for full documentation.\n\n")
 	return os.WriteFile(path, append(header, data...), 0o600)
 }
+
+func boolPtr(b bool) *bool { return &b }
 
 // Validate checks the config for correctness.
 func Validate(cfg *Config) error {

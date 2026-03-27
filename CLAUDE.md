@@ -117,6 +117,8 @@ kind:
   metalLBVersion: "v0.14.9"          # MetalLB manifest version (default)
   coreDNSDomains:                    # forwarded to 8.8.8.8/8.8.4.4 (default: [runlocal.dev])
     - "runlocal.dev"
+  autoMergeKubeconfig: true          # merge context into ~/.kube/config after cluster create (default: true)
+  autoRemoveKubeconfig: true         # remove context from ~/.kube/config after cluster delete (default: true)
 
 registries:
   localRegistry:
