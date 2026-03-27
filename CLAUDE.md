@@ -73,9 +73,9 @@ cmd/klimax/main.go                   entry point
 internal/config/config.go            Config struct, LoadConfig, Validate, defaults
 internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 25.04, portForwards, provision script)
 internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspect
-internal/guest/guest.go              SSH Client: Run, RunScript, WriteFile
+internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
-internal/registry/registry.go        EnsureRegistries, ContainerdPatches (local reg + mirrors)
+internal/registry/registry.go        EnsureRegistries, ContainerdPatches (local reg + mirrors + cache volumes)
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
@@ -84,12 +84,16 @@ internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lim
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
-internal/cli/down.go                 `klimax down`
+internal/cli/down.go                 `klimax down` [--remove-route]
 internal/cli/destroy.go              `klimax destroy`
 internal/cli/status.go               `klimax status`
 internal/cli/doctor.go               `klimax doctor`
 internal/cli/version.go              `klimax version`
-internal/cli/cluster.go              `klimax cluster` subcommands
+internal/cli/shell.go                `klimax shell` — interactive SSH session into the VM
+internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
+internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/e2e-test-nginx)
+internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
 internal/cli/docker_env.go           `klimax docker-env` — prints DOCKER_HOST export (current shell only)
 internal/cli/docker_context.go       `klimax docker-context` — creates/switches Docker context (persistent)
 internal/cli/hostagent.go            `klimax hostagent` — hidden; Lima spawns this as a detached daemon
@@ -121,6 +125,8 @@ kind:
   autoRemoveKubeconfig: true         # remove context from ~/.kube/config after cluster delete (default: true)
 
 registries:
+  cacheStorage: "host"               # "host" (default): ~/.klimax/registry-cache/ via virtiofs, survives destroy
+                                     # "guest": inside VM, wiped on destroy
   localRegistry:
     enabled: true
     port: 5000                       # kind-registry push registry
@@ -167,6 +173,10 @@ Lima requires a small Linux binary (`lima-guestagent`) uploaded into the VM at s
 
 The downloaded version is matched to the Lima Go module version at runtime via `runtime/debug.ReadBuildInfo()`. The release asset uses `uname -m` naming: `Darwin-arm64` / `Darwin-x86_64` (not `Darwin-amd64`).
 
+### lima-version file
+
+Lima writes a `lima-version` file (mode `0o444`) into the instance dir during `instance.Create()` with version `"<unknown>"` when no ldflags are set. klimax fixes this in `vm.create()` by calling `os.Remove()` then `os.WriteFile()` with the actual Lima module version read via `runtime/debug.ReadBuildInfo()`. `os.WriteFile` alone silently fails on a read-only file — the Remove step is required.
+
 ### hostagent subprocess
 
 Lima's `instance.StartWithPaths()` spawns `os.Executable() hostagent INSTANCE --socket ... --guestagent ...` as a detached daemon. `internal/cli/hostagent.go` implements this hidden subcommand (ports Lima's `cmd/limactl/hostagent.go`). It must configure **logrus JSON formatter** — Lima's event watcher parses JSON log lines to detect VM readiness. `runtime.LockOSThread()` is required when `--run-gui` is set (VZ on macOS).
@@ -181,7 +191,7 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 
 1. **Auto-assign num** — inspect live `<name>-control-plane` containers' port bindings (70N → num=N); find lowest free slot 1–99.
 2. **Build kind cluster config** with:
-   - API port `70<num>` on `0.0.0.0` (reachable from host via lima0)
+   - API port `70<num>` on `0.0.0.0` (reachable from host via Lima port forwarding to `127.0.0.1:700N`)
    - `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`
    - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels
    - `containerdConfigPatches`: mirror all registries through local containers
@@ -190,7 +200,11 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 5. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
 6. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
 7. **Patch CoreDNS** ConfigMap to forward configured domains to `8.8.8.8`
-8. **Export kubeconfig** → `~/.kube/kind/<name>.kubeconfig` with server patched from `127.0.0.1` to `lima0 IP`
+8. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (Lima hostagent forwards this port to the host)
+
+### kubeconfig naming
+
+`exportKubeconfig` strips the `kind-` prefix from context/cluster/user names — contexts are stored as bare `<name>` in `~/.kube/config`, not `kind-<name>`. `removeFromKubeconfig` must use the bare name accordingly.
 
 ---
 
@@ -198,11 +212,14 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 
 ```
 klimax up                              Start VM + infra (idempotent)
-klimax down                            Stop VM
+klimax down                            Stop VM (no sudo required)
+klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
 klimax status                          Show VM state, clusters, route, iptables
 klimax doctor                          Diagnose common issues
 klimax version                         Print version
+klimax shell                           Open interactive SSH session in the VM
+klimax config edit                     Open config in $VISUAL / $EDITOR / nano / vi
 
 klimax docker-env                      Print: export DOCKER_HOST=unix://~/.<name>.docker.sock
 klimax docker-env --unset              Print: unset DOCKER_HOST
@@ -214,12 +231,30 @@ klimax cluster create <name>           Create a kind cluster (num auto-assigned)
   --num N                              Override cluster num (1-99)
   --region europe-west1                Override topology region label
   --zone   europe-west1-b              Override topology zone label
-klimax cluster delete [name]           Delete a cluster (interactive picker if no name)
+klimax cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
 klimax cluster list [-o text|json|yaml] List clusters with num, API port, kubeconfig path
-klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/kind/<name>.kubeconfig
+klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
+klimax cluster merge <name>            Merge cluster context into ~/.kube/config
+klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses current kubectl context on host
+  --cleanup                            Only remove nginx pod/svc (does NOT run the test)
+
+klimax registry clean-cache            Stop mirror containers + delete cache dirs; run 'klimax up' to restart
+
+klimax completion bash|zsh|fish|powershell   Print shell completion script
 ```
 
 Global flags (all commands): `-c config.yaml`, `--debug`
+
+---
+
+## Registry cache persistence
+
+Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gcrio`) are started with `-v <cacheDir>:/var/lib/registry`. The cache dir location depends on `registries.cacheStorage`:
+
+- **`host`** (default): `~/.klimax/registry-cache/<name>/` on the macOS host, virtiofs-mounted into the VM at the same absolute path. Survives `klimax destroy`. Lima mount is added to the instance at creation time in `limatemplate.Build()`.
+- **`guest`**: `/var/lib/klimax/registry-cache/<name>/` inside the VM. Persists across `klimax down`/`up`, wiped on `klimax destroy`.
+
+> Changing `cacheStorage` after instance creation requires `klimax destroy && klimax up`.
 
 ---
 
@@ -242,6 +277,7 @@ Global flags (all commands): `-c config.yaml`, `--debug`
 - The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).
 - `DOCKER_HOST` env var overrides the active Docker context — use one mechanism or the other, not both.
 - Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
+- `klimax down` does **not** remove the macOS host route by default (stale route is harmless; `klimax up` refreshes it). Use `--remove-route` to remove it explicitly.
 
 ---
 

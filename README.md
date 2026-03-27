@@ -11,11 +11,11 @@
 | VM | Creates/starts/stops/deletes a Lima VZ instance |
 | Docker | Installs Docker in the VM; forwards the socket to `~/.<vmname>.docker.sock` |
 | kind | Creates/deletes multiple kind clusters; each gets its own subnet slice and API port |
-| Registries | Runs a local push registry (`kind-registry:5000`) + pull-through mirrors for docker.io, quay.io, gcr.io |
+| Registries | Runs a local push registry (`kind-registry:5000`) + pull-through mirrors for docker.io, quay.io, gcr.io; mirror data cached persistently |
 | Networking | Routes `kindBridgeCIDR` from macOS → VM via `lima0`; no SNAT so source IPs are preserved |
 | MetalLB | Installed in every cluster with a dedicated IP pool slice |
 | CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
-| kubeconfig | Exports per-cluster kubeconfig to `~/.kube/kind/<name>.kubeconfig` |
+| kubeconfig | Exports per-cluster kubeconfig to `~/.kube/klimax/<name>.kubeconfig`; auto-merges into `~/.kube/config` |
 
 ---
 
@@ -24,14 +24,12 @@
 ### On your Mac (host)
 
 - **macOS 13 Ventura or later** — Apple Virtualization.framework is required (`vmType: vz`)
-- **`sudo` access** — klimax calls `sudo /sbin/route` to add/remove the kind CIDR route; `/sbin/route` is built into macOS, nothing to install
+- **`sudo` access** — needed only for `klimax up` (adds macOS route) and `klimax destroy`; `klimax down` does not require sudo
 - **Go 1.22+** — only if building from source; not needed for the pre-built binary
 
-> klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary (a small Linux binary that Lima uploads into the VM at startup to handle port forwarding and file sharing). No separate Lima installation required.
+> klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary. No separate Lima installation required.
 
 ### Inside the VM (auto-provisioned by `klimax up`)
-
-klimax's provision script installs everything the VM needs on first boot — you don't install any of these yourself:
 
 | Tool | Version | Purpose |
 |---|---|---|
@@ -46,8 +44,6 @@ klimax's provision script installs everything the VM needs on first boot — you
 
 ### Homebrew (recommended)
 
-klimax is distributed as a pre-built binary via a Homebrew Cask:
-
 ```sh
 brew tap bcollard/klimax
 brew install --cask klimax
@@ -55,7 +51,7 @@ brew install --cask klimax
 
 ### Build from source
 
-CGO is required because Lima's VM management packages link against macOS frameworks at build time:
+CGO is required because Lima's VM management packages link against macOS frameworks:
 
 ```sh
 git clone https://github.com/bcollard/klimax
@@ -64,28 +60,38 @@ CGO_ENABLED=1 go build -o klimax ./cmd/klimax
 sudo mv klimax /usr/local/bin/
 ```
 
+### Shell completion
+
+```sh
+# zsh (add to ~/.zshrc for persistence)
+source <(klimax completion zsh)
+
+# bash
+source <(klimax completion bash)
+
+# fish
+klimax completion fish > ~/.config/fish/completions/klimax.fish
+```
+
 ---
 
 ## Quick start
 
 ```sh
-# 1. Create a config file
-cp config.example.yaml config.yaml
-# Edit config.yaml to taste (or leave defaults)
+# 1. Edit config (or accept defaults)
+klimax config edit
 
-# 2. Bring up the VM + Docker + networking
+# 2. Bring up the VM + Docker + networking + registries
 klimax up
 
-# 3. Point your shell at the VM's Docker daemon (pick one)
-eval $(klimax docker-env)   # env var — current shell only
-# or: klimax docker-context  # Docker context — persistent across shells
-docker ps   # runs inside the VM
+# 3. Point your shell at the VM's Docker daemon
+eval $(klimax docker-env)        # current shell only
+# or: klimax docker-context      # persistent Docker context
 
 # 4. Create a kind cluster
 klimax cluster create dev
 
-# 5. Use the cluster
-eval $(klimax cluster use dev)
+# 5. Use the cluster (kubeconfig auto-merged into ~/.kube/config)
 kubectl get nodes
 
 # 6. Create a second cluster
@@ -101,7 +107,7 @@ After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the 
 
 ## Configuration reference
 
-Copy `config.example.yaml` to `config.yaml` (the default path). All fields have sensible defaults.
+The default config path is `~/.klimax/config.yaml`. Use `klimax config edit` to open it in your `$EDITOR`, or copy `config.example.yaml` to get started.
 
 ```yaml
 # ── VM ──────────────────────────────────────────────────────────────────────
@@ -114,19 +120,23 @@ vm:
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
-  # Subnet for the Docker bridge network named "kind".
-  # macOS routes this CIDR to the VM's lima0 IP for pure L3 access (no SNAT).
-  kindBridgeCIDR: "172.30.0.0/16"
+  kindBridgeCIDR: "172.30.0.0/16"   # routed from macOS → VM; no SNAT
 
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
-  nodeVersion: "v1.32.0"       # kindest/node image tag
-  metalLBVersion: "v0.14.9"    # MetalLB manifest version
+  nodeVersion: "v1.32.0"
+  metalLBVersion: "v0.14.9"
   coreDNSDomains:
-    - "runlocal.dev"            # custom zones forwarded to 8.8.8.8/8.8.4.4
+    - "runlocal.dev"        # custom zones forwarded to 8.8.8.8/8.8.4.4
+  autoMergeKubeconfig: true   # merge context into ~/.kube/config after create
+  autoRemoveKubeconfig: true  # remove context from ~/.kube/config after delete
 
 # ── Registries ───────────────────────────────────────────────────────────────
 registries:
+  # "host" (default): cache at ~/.klimax/registry-cache/ — survives klimax destroy
+  # "guest": cache inside the VM — wiped on klimax destroy
+  cacheStorage: "host"
+
   localRegistry:
     enabled: true
     port: 5000
@@ -135,8 +145,7 @@ registries:
     - name: "registry-dockerio"
       port: 5030
       remoteURL: "https://registry-1.docker.io"
-      # username: "your-dockerhub-username"   # optional, avoids rate limits
-      # password: "your-dockerhub-password"
+      # username/password: optional, avoids Docker Hub rate limits
 
     - name: "registry-quayio"
       port: 5010
@@ -154,34 +163,24 @@ registries:
 ## CLI reference
 
 ```
-klimax [--config config.yaml] [--debug] <command>
-```
-
-Global flags apply to every command: `-c / --config` (default: `config.yaml`) and `--debug`.
-
-### Help
-
-```sh
-klimax help                  # list all commands
-klimax help cluster          # describe the cluster subcommand group
-klimax help cluster create   # describe a specific subcommand
-klimax <command> --help      # same, inline
+klimax [--config ~/.klimax/config.yaml] [--debug] <command>
 ```
 
 ### VM lifecycle
 
 | Command | Description |
 |---|---|
-| `klimax up` | Create/start the VM, provision Docker, set up networking and registries |
-| `klimax down` | Stop the VM (preserves clusters and data) |
-| `klimax destroy` | Delete clusters, delete VM, remove routes |
-| `klimax status` | Show VM and cluster status |
-| `klimax doctor` | Diagnose common issues (routes, Docker socket, etc.) |
+| `klimax up` | Create/start the VM, provision Docker, set up networking and registries (idempotent) |
+| `klimax down` | Stop the VM — preserves all clusters and registry cache data |
+| `klimax down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
+| `klimax destroy` | Stop + delete VM, delete all clusters, remove host route |
+| `klimax status` | Show VM state, clusters, route, and iptables rule presence |
+| `klimax doctor` | Diagnose common issues |
 | `klimax version` | Print the klimax version |
+| `klimax shell` | Open an interactive SSH session in the VM |
+| `klimax config edit` | Open the config file in `$VISUAL` / `$EDITOR` |
 
 ### Docker
-
-Two ways to point your shell at the klimax VM's Docker daemon:
 
 **Option A — environment variable (current shell only)**
 
@@ -193,32 +192,48 @@ eval $(klimax docker-env --unset)  # unset DOCKER_HOST
 **Option B — Docker context (persistent across shells)**
 
 ```sh
-klimax docker-context              # create/update "klimax" context + docker context use klimax
+klimax docker-context              # create/update "klimax" context
 klimax docker-context --unset      # docker context use default
 ```
 
-> The two options conflict: if `DOCKER_HOST` is set, Docker ignores the active context. Use one or the other. `klimax docker-context` will warn you if `DOCKER_HOST` is still set in your shell.
+> If `DOCKER_HOST` is set it overrides the active Docker context — use one or the other. `klimax docker-context` warns when both are active.
 
 ### Clusters
 
 ```sh
-# Create a cluster (num auto-assigned; drives API port and subnet slice)
+# Create
 klimax cluster create <name>
-klimax cluster create <name> --num 3          # pin to num 3
+klimax cluster create <name> --num 3             # pin to slot 3
 klimax cluster create <name> --region us-east1 --zone us-east1-a
 
-# Delete a cluster (interactive picker when no name given)
+# Delete — interactive multi-select picker when no name given
 klimax cluster delete <name>
 klimax cluster delete
 
-# List clusters
-klimax cluster list                 # text table (default)
+# List
+klimax cluster list
 klimax cluster list -o json
 klimax cluster list -o yaml
 
-# Print export command to set KUBECONFIG
-klimax cluster use <name>
-eval $(klimax cluster use dev)
+# Kubeconfig
+eval $(klimax cluster use <name>)    # print + eval KUBECONFIG export
+klimax cluster merge <name>          # merge into ~/.kube/config manually
+
+# E2E smoke test (uses current kubectl context)
+klimax cluster e2e-test-nginx
+klimax cluster e2e-test-nginx --cleanup   # remove nginx pod/svc only
+```
+
+The interactive delete picker supports multi-select:
+
+```
+Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm · q quit)
+
+  [ ] dev       port 7001
+  [x] staging   port 7002
+  [x] prod      port 7003
+
+  2 cluster(s) selected — press Enter to delete
 ```
 
 ### Per-cluster resources (auto-assigned from `--num N`)
@@ -228,9 +243,17 @@ eval $(klimax cluster use dev)
 | API server host port | `700N` (e.g. `7001` for num 1) |
 | Service subnet | `10.N.0.0/16` |
 | Pod subnet | `10.1N.0.0/16` |
-| MetalLB pool | `<kindPrefix>.N.1–7`, `<kindPrefix>.N.16–254` |
-| kubeconfig | `~/.kube/kind/<name>.kubeconfig` |
+| MetalLB pool | `<kindPrefix>.N.1–7` and `<kindPrefix>.N.16–254` |
+| kubeconfig | `~/.kube/klimax/<name>.kubeconfig` |
 | topology labels | `topology.kubernetes.io/region=europe-westN`, `zone=europe-westN-b` |
+
+### Registries
+
+```sh
+klimax registry clean-cache   # remove all mirror cache dirs + containers; run 'klimax up' to restart
+```
+
+Mirror cache data is stored at `~/.klimax/registry-cache/<mirror-name>/` by default (`cacheStorage: "host"`), virtiofs-mounted into the VM and bind-mounted into each registry container. Blobs survive `klimax down`/`up` cycles and even `klimax destroy`.
 
 ---
 
@@ -248,23 +271,27 @@ Lima VZ guest
   kind cluster nodes (172.30.N.x)
 ```
 
-> The vzNAT IPs are assigned by macOS and cannot be configured. klimax detects the VM's `lima0` IP at runtime by SSHing into the VM — nothing is hardcoded. Each Lima VM (klimax, limactl, colima…) gets a distinct IP on its own `bridge1xx`, so multiple VMs coexist without conflict.
+> vzNAT IPs are assigned by macOS and cannot be configured. klimax detects the VM's `lima0` IP at runtime — nothing is hardcoded. Multiple Lima VMs (klimax, limactl, colima…) each get a distinct IP on their own `bridge1xx`, so they coexist without conflict.
 
 ### How pure L3 routing works
 
-1. `klimax up` adds a macOS route: `172.30.0.0/16 → 192.168.105.2` (via `route -n add`).
+1. `klimax up` adds a macOS route: `172.30.0.0/16 → <lima0-IP>` (via `sudo /sbin/route`).
 2. Inside the VM, `ip_forward=1` and a systemd oneshot apply iptables rules idempotently:
-   - **nat exemption** (inserted before Docker's MASQUERADE): traffic from the kind CIDR destined for the host exits `lima0` without SNAT — so reply packets carry the pod/LB IP as source, not the VM IP.
+   - **nat exemption** (before Docker's MASQUERADE): kind→host traffic exits `lima0` without SNAT.
    - **DOCKER-USER forward rules**: host→kind and established returns are explicitly allowed.
-3. A `docker.service.d` drop-in reruns the script after every Docker restart (Docker rewrites iptables on start).
+3. A `docker.service.d` drop-in reruns the rules after every Docker restart.
 
-The result: `curl http://172.30.1.200/` on your Mac reaches the MetalLB VIP directly, and the TCP reply comes back from `172.30.1.200`, not from `192.168.105.2`.
+The result: `curl http://172.30.1.200/` on your Mac reaches the MetalLB VIP directly.
 
-### Local registry and mirrors
+### kubeconfig and API server access
 
-Every kind cluster is configured (via containerd patches) to:
-- Push/pull to `kind-registry:5000` — the local registry container in the VM.
-- Transparently cache pulls from docker.io, quay.io, and gcr.io through pull-through mirror containers, avoiding rate limits and speeding up cluster creation.
+Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent automatically forwards these ports to `127.0.0.1:700N` on the host. Exported kubeconfigs point at `https://127.0.0.1:700N` — no VPN or direct vzNAT IP access required, which also avoids conflicts with host-based security software (e.g. endpoint agents that block non-system process TCP to vzNAT IPs).
+
+### Registry mirrors
+
+Every kind cluster is configured via containerd patches to:
+- Push/pull from `kind-registry:5000` — the local push registry in the VM.
+- Cache pulls from docker.io, quay.io, gcr.io transparently through pull-through mirrors, avoiding rate limits and accelerating cluster creation.
 
 All registry containers are attached to the `kind` Docker network so cluster nodes resolve them by hostname.
 
@@ -276,23 +303,17 @@ All registry containers are attached to the `kind` Docker network so cluster nod
 klimax/
 ├── cmd/klimax/              # main entrypoint
 ├── internal/
-│   ├── cli/                 # Cobra commands (up, down, destroy, status, doctor, cluster, docker-env, docker-context)
+│   ├── cli/                 # Cobra commands
 │   ├── config/              # YAML schema, defaults, validation
-│   ├── vm/                  # Lima instance manager (create/start/stop/delete/inspect)
-│   ├── limatemplate/        # Builds limatype.LimaYAML (VZ, portForwards, provision scripts)
+│   ├── vm/                  # Lima instance manager + guest agent download
+│   ├── limatemplate/        # Builds limatype.LimaYAML (VZ, mounts, provision script)
 │   ├── guest/               # SSH client for running commands/scripts in the VM
 │   ├── docker/              # Docker network management in guest
 │   ├── registry/            # Local registry + pull-through mirror lifecycle
 │   ├── kind/                # kind cluster create/delete/list; MetalLB, CoreDNS, kubeconfig
-│   └── routing/             # iptables no-NAT rules in guest; macOS route management
-├── .github/
-│   └── workflows/
-│       ├── ci.yml           # build + test + vet + goreleaser check on push/PR
-│       └── release.yml      # goreleaser release triggered on v*.*.* tags
-├── .goreleaser.yaml         # GoReleaser config: darwin/amd64+arm64, CGO=1, Homebrew Cask tap
-├── .gitignore
+│   └── routing/             # iptables no-NAT rules; macOS route management
 ├── config.example.yaml
-├── LICENSE
+├── .goreleaser.yaml
 └── Makefile
 ```
 

@@ -45,7 +45,7 @@ everything — `limactl start`, `limactl stop`, `limactl delete`, `limactl list 
 | user-v2 (always on in Colima) | Yes | No |
 | Host-reachable VM IP | Via Colima daemon + vmnet | Via vzNAT (macOS-assigned), detected at runtime |
 | Host→pod routing | SNAT (standard) | No SNAT — custom iptables nat exemption + macOS route |
-| Port range forwarding | 1–65535 (TCP/UDP) | Docker socket only |
+| Port range forwarding | 1–65535 (TCP/UDP) | Docker socket + cluster API ports (700N) |
 
 Colima runs a **host-side daemon** (`go-daemon` fork) to manage `socket_vmnet` for
 bridged/shared networking. Klimax has no daemon — it's a pure CLI that applies
@@ -81,9 +81,17 @@ iptables rules in the guest and a `route add` on the host.
 | Pure L3 routing | iptables nat exemption + systemd oneshot + docker.service.d drop-in |
 | macOS route management | `sudo route add/delete` for `kindBridgeCIDR` → VM IP |
 | CoreDNS custom domains | Configurable zones forwarded to 8.8.8.8 at cluster creation |
-| Kubeconfig export | Patched from `127.0.0.1` to `lima0` IP, written to `~/.kube/kind/<name>.kubeconfig` |
-| Kubeconfig merge | `cluster merge` merges into `~/.kube/config` for kubectx |
+| Kubeconfig export | Written to `~/.kube/klimax/<name>.kubeconfig`; server points to `127.0.0.1:700N` via Lima port forwarding |
+| Kubeconfig auto-merge | `autoMergeKubeconfig` / `autoRemoveKubeconfig` config flags; `cluster merge` for manual merge |
 | Topology labels | `topology.kubernetes.io/region/zone` on kind nodes |
+| Persistent registry cache | Mirror blobs bind-mounted from `~/.klimax/registry-cache/` (host, survives destroy) or inside VM (`guest` mode) |
+| Interactive cluster picker | `klimax cluster delete` — raw-terminal multi-select TUI with arrow keys, space toggle, `a`=all |
+| E2E smoke test | `klimax cluster e2e-test-nginx [--cleanup]` — deploys nginx, exposes service, curls it using host kubectl |
+| Docker context | `klimax docker-context` creates/updates a named Docker context; `docker-env` for per-shell env var |
+| SSH shell | `klimax shell` — interactive SSH session into the VM |
+| Config editor | `klimax config edit` — opens config in `$VISUAL` / `$EDITOR` |
+| Shell completion | `klimax completion bash|zsh|fish|powershell` |
+| Registry cache cleanup | `klimax registry clean-cache` — stops mirror containers and removes cache dirs |
 
 ---
 
@@ -98,7 +106,6 @@ iptables rules in the guest and a `route add` on the host.
 | Full port forwarding | All ports 1–65535 forwarded from guest |
 | Disk resize | Online disk expansion |
 | Multiple profiles | `colima start myprofile` — multiple isolated VMs |
-| Docker context | Registers a Docker context on the host |
 | Mount management | Configurable host→guest mounts with inotify sync |
 | Rosetta 2 | ARM64 VMs can run x86 binaries |
 | Nested virtualisation | For running VMs inside the Lima VM |
