@@ -124,11 +124,29 @@
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-27" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="kubectl commands" vertex="1">
           <mxGeometry height="60" width="120" x="140" y="450" as="geometry" />
         </mxCell>
-        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-28" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;strokeColor=#3399FF;dashed=1;" value="context:&lt;br&gt;server: http://127.0.0.1:7003/&lt;br&gt;http://192.168.0.3:7003/" vertex="1">
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-28" parent="1" style="text;html=1;whiteSpace=wrap;align=center;verticalAlign=middle;rounded=0;strokeColor=#3399FF;dashed=1;" value="context:&lt;br&gt;server: http://127.0.0.1:7003/" vertex="1">
           <mxGeometry height="60" width="230" x="270" y="430" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-29" parent="1" style="image;sketch=0;aspect=fixed;html=1;points=[];align=center;fontSize=12;image=img/lib/mscae/Docker.svg;" value="" vertex="1">
           <mxGeometry height="82" width="100" x="810" y="188" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-31" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="172.30.0.6:6443" vertex="1">
+          <mxGeometry height="30" width="100" x="810" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-36" edge="1" parent="1" source="5DPmX9oJc5qDk6TJ1Cz1-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="5DPmX9oJc5qDk6TJ1Cz1-34" value="slirp">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="127.0.0.1:7002" vertex="1">
+          <mxGeometry height="30" width="110" x="414" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-35" edge="1" parent="1" source="5DPmX9oJc5qDk6TJ1Cz1-34" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="5DPmX9oJc5qDk6TJ1Cz1-31" value="iptables NAT">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-34" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="127.0.0.1:7002" vertex="1">
+          <mxGeometry height="30" width="110" x="580" y="910" as="geometry" />
+        </mxCell>
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-37" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="~/.kube/config:" vertex="1">
+          <mxGeometry height="30" width="110" x="390" y="870" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
