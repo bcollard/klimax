@@ -1,0 +1,58 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" version="29.6.6">
+  <diagram name="Page-1" id="qE8ldUq_0-i2vijEnz67">
+    <mxGraphModel dx="2126" dy="836" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="92t16OMWXQpwF3pe2jE0-7" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#f5f5f5;fontColor=#333333;strokeColor=#666666;" value="MACOS laptop" vertex="1">
+          <mxGeometry height="870" width="1610" x="170" y="30" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-2" parent="1" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" value="Klimax CLI" vertex="1">
+          <mxGeometry height="100" width="200" x="250" y="200" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-4" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="VM - Apple Virtualization Frramework (VZ)" vertex="1">
+          <mxGeometry height="720" width="860" x="570" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-5" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Docker Daemon" vertex="1">
+          <mxGeometry height="60" width="120" x="640" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-6" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Lima&lt;br&gt;Guest Agent" vertex="1">
+          <mxGeometry height="60" width="120" x="640" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Lima&lt;br&gt;Host Agent" vertex="1">
+          <mxGeometry height="60" width="120" x="270" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-11" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;sketch=1;curveFitting=1;jiggle=2;" value="Docker containers" vertex="1">
+          <mxGeometry height="600" width="550" x="840" y="180" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-12" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="KinD - cluster 1" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="230" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-13" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="KinD - cluster 2" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="300" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-14" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="..." vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="370" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-16" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Docker Registry" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="470" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-17" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Docker Mirror - Dockerhub" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="540" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-18" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Docker Mirror - Github Registry" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-19" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Docker Mirror Quay-io" vertex="1">
+          <mxGeometry height="60" width="380" x="920" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-21" edge="1" parent="1" source="92t16OMWXQpwF3pe2jE0-20" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;curved=1;" target="92t16OMWXQpwF3pe2jE0-2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="92t16OMWXQpwF3pe2jE0-20" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;sketch=1;curveFitting=1;jiggle=2;align=left;verticalAlign=top;spacing=10;" value="Klimax CLI manages:&lt;div&gt;- VM lifecycle&lt;br&gt;- Network setup&amp;nbsp;&lt;br&gt;- Docker registry and Mirrors&lt;br&gt;- End-to-End routing&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="250" x="-170" y="140" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
