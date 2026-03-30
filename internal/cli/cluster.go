@@ -24,7 +24,7 @@ import (
 func newClusterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "cluster",
-		Aliases: []string{"cl"},
+		Aliases: []string{"cl", "c"},
 		Short:   "Manage kind clusters inside the klimax VM",
 	}
 	cmd.AddCommand(
@@ -45,7 +45,7 @@ func newClusterCreateCmd() *cobra.Command {
 	var region, zone string
 	cmd := &cobra.Command{
 		Use:     "create <name>",
-		Aliases: []string{"cr"},
+		Aliases: []string{"cr", "c"},
 		Short:   "Create a new kind cluster in the running VM",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -96,7 +96,7 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 func newClusterDeleteCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "delete [name]",
-		Aliases: []string{"de"},
+		Aliases: []string{"de", "d"},
 		Short:   "Delete a kind cluster (interactive picker when no name is given)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -287,7 +287,7 @@ func newClusterListCmd() *cobra.Command {
 	var outputFmt string
 	cmd := &cobra.Command{
 		Use:     "list",
-		Aliases: []string{"ls"},
+		Aliases: []string{"ls", "l"},
 		Short: "List kind clusters running in the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterList(cmd.Context(), outputFmt)
