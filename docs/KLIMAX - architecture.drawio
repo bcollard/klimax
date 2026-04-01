@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36" version="29.6.6">
   <diagram name="Page-1" id="qE8ldUq_0-i2vijEnz67">
-    <mxGraphModel dx="1776" dy="611" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1855" dy="662" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -20,7 +20,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="92t16OMWXQpwF3pe2jE0-8" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="Lima&lt;br&gt;Host Agent" vertex="1">
-          <mxGeometry height="60" width="120" x="270" y="690" as="geometry" />
+          <mxGeometry height="60" width="120" x="294" y="690" as="geometry" />
         </mxCell>
         <mxCell id="92t16OMWXQpwF3pe2jE0-11" parent="1" style="rounded=0;whiteSpace=wrap;html=1;verticalAlign=top;fillColor=#d5e8d4;strokeColor=#82b366;sketch=1;curveFitting=1;jiggle=2;" value="Docker containers" vertex="1">
           <mxGeometry height="600" width="610" x="940" y="180" as="geometry" />
@@ -62,7 +62,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-4" parent="1" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;rotation=90;verticalAlign=middle;horizontal=0;" value="kind bridge&lt;br&gt;(managed by Docker)" vertex="1">
-          <mxGeometry height="170" width="40" x="960" y="275" as="geometry" />
+          <mxGeometry height="170" width="40" x="940" y="275" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-6" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="watch for listen sockets" vertex="1">
           <mxGeometry height="40" width="110" x="770" y="700" as="geometry" />
@@ -77,7 +77,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-11" parent="1" style="rounded=1;whiteSpace=wrap;html=1;" value="curl 172.30.2.1" vertex="1">
-          <mxGeometry height="60" width="120" x="140" y="362.5" as="geometry" />
+          <mxGeometry height="60" width="120" x="140" y="360" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-12" edge="1" parent="1" source="5DPmX9oJc5qDk6TJ1Cz1-11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.5;entryY=1;entryDx=0;entryDy=0;entryPerimeter=0;" target="5DPmX9oJc5qDk6TJ1Cz1-1">
           <mxGeometry relative="1" as="geometry" />
@@ -133,8 +133,11 @@
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-31" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="172.30.0.6:6443" vertex="1">
           <mxGeometry height="30" width="100" x="827" y="910" as="geometry" />
         </mxCell>
-        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-36" edge="1" parent="1" source="5DPmX9oJc5qDk6TJ1Cz1-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="5DPmX9oJc5qDk6TJ1Cz1-34" value="lima portfwd">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-36" edge="1" parent="1" source="5DPmX9oJc5qDk6TJ1Cz1-33" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="5DPmX9oJc5qDk6TJ1Cz1-34" value="lima portfwd pkg&lt;br&gt;(over grpc)">
+          <mxGeometry relative="1" x="0.0101" as="geometry">
+            <mxPoint as="offset" />
+            <mxPoint x="610" y="925" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-33" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="127.0.0.1:7002" vertex="1">
           <mxGeometry height="30" width="110" x="390" y="910" as="geometry" />
@@ -143,7 +146,7 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-34" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="127.0.0.1:7002" vertex="1">
-          <mxGeometry height="30" width="110" x="610" y="910" as="geometry" />
+          <mxGeometry height="30" width="100" x="620" y="910" as="geometry" />
         </mxCell>
         <mxCell id="5DPmX9oJc5qDk6TJ1Cz1-37" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="~/.kube/config:" vertex="1">
           <mxGeometry height="30" width="110" x="260" y="560" as="geometry" />
