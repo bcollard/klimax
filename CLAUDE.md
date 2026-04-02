@@ -123,8 +123,8 @@ network:
 kind:
   nodeVersion: "v1.32.0"             # kindest/node image tag (default)
   metalLBVersion: "v0.14.9"          # MetalLB manifest version (default)
-  coreDNSDomains:                    # forwarded to 8.8.8.8/8.8.4.4 (default: [runlocal.dev])
-    - "runlocal.dev"
+  customDnsResolvers:                # per-zone upstream resolvers; resolvers default to 8.8.8.8/8.8.4.4 if omitted
+    # - domain: "runlocal.dev"       # example; empty by default in code
   autoMergeKubeconfig: true          # merge context into ~/.kube/config after cluster create (default: true)
   autoRemoveKubeconfig: true         # remove context from ~/.kube/config after cluster delete (default: true)
 
@@ -204,7 +204,7 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 5. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
 6. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
 7. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
-8. **Patch CoreDNS** ConfigMap to forward configured domains to `8.8.8.8`
+8. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
 9. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (default) or `https://<lima0IP>:700N` (when `disablePortMirroring: true`)
 
 ### kubeconfig naming

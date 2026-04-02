@@ -45,11 +45,21 @@ kind:
   # MetalLB manifest version installed in every cluster.
   metalLBVersion: "v0.14.9"
 
-  # Custom DNS domains forwarded to 8.8.8.8/8.8.4.4 by CoreDNS.
-  # Add any internal or development domains you need resolved inside clusters.
-  coreDNSDomains:
-    - "runlocal.dev"
-    - "local.test"
+  # Custom DNS zones forwarded to specific upstream resolvers by CoreDNS.
+  # Each entry takes a domain and an optional list of resolvers.
+  # Resolvers default to [8.8.8.8, 8.8.4.4] when omitted.
+  # Applied to every cluster at creation time.
+  customDnsResolvers:
+    - domain: "runlocal.dev"
+      # resolvers: ["8.8.8.8", "8.8.4.4"]  # default; omit to use Google DNS
+
+    # Forward an internal zone to a private resolver (e.g. your corporate DNS):
+    # - domain: "corp.internal"
+    #   resolvers: ["10.0.0.53"]
+
+    # Multiple resolvers for redundancy:
+    # - domain: "local.test"
+    #   resolvers: ["1.1.1.1", "1.0.0.1"]
 
   # Automatically merge the new cluster's context into ~/.kube/config after creation.
   # Set to false to manage kubeconfig manually via 'klimax cluster merge <name>'.

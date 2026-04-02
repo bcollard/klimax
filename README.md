@@ -133,8 +133,10 @@ network:
 kind:
   nodeVersion: "v1.32.0"
   metalLBVersion: "v0.14.9"
-  coreDNSDomains:
-    - "runlocal.dev"        # custom zones forwarded to 8.8.8.8/8.8.4.4
+  customDnsResolvers:
+    - domain: "runlocal.dev"          # forward to 8.8.8.8/8.8.4.4 (default resolvers)
+    # - domain: "corp.internal"
+    #   resolvers: ["10.0.0.53"]      # private resolver for internal zones
   autoMergeKubeconfig: true   # merge context into ~/.kube/config after create
   autoRemoveKubeconfig: true  # remove context from ~/.kube/config after delete
 

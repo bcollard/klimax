@@ -39,6 +39,15 @@ type NetworkConfig struct {
 	DisablePortMirroring bool `yaml:"disablePortMirroring"`
 }
 
+// CustomDNSResolver forwards a DNS zone to one or more upstream resolvers via CoreDNS.
+type CustomDNSResolver struct {
+	// Domain is the DNS zone to forward (e.g. "runlocal.dev", "corp.internal").
+	Domain string `yaml:"domain"`
+	// Resolvers is the list of upstream nameservers for this zone.
+	// Defaults to ["8.8.8.8", "8.8.4.4"] when omitted.
+	Resolvers []string `yaml:"resolvers,omitempty"`
+}
+
 // KindConfig holds global defaults used by every `klimax cluster create` invocation.
 // Cluster lifecycle is managed exclusively via `klimax cluster` subcommands — there
 // is no cluster list here.
@@ -47,9 +56,10 @@ type KindConfig struct {
 	NodeVersion string `yaml:"nodeVersion"` // e.g. "v1.32.0"
 	// MetalLBVersion is the MetalLB manifest version installed in each cluster.
 	MetalLBVersion string `yaml:"metalLBVersion"` // e.g. "v0.14.9"
-	// CoreDNSDomains are extra DNS zones forwarded to 8.8.8.8/8.8.4.4 by CoreDNS.
-	// Applied to every cluster at creation time. Default: ["runlocal.dev"]
-	CoreDNSDomains []string `yaml:"coreDNSDomains"`
+	// CustomDNSResolvers are extra DNS zones forwarded to custom upstream resolvers
+	// by CoreDNS. Resolvers default to ["8.8.8.8", "8.8.4.4"] when omitted per entry.
+	// Applied to every cluster at creation time. Empty by default (no extra zones).
+	CustomDNSResolvers []CustomDNSResolver `yaml:"customDnsResolvers"`
 	// AutoMergeKubeconfig merges the new cluster's context into ~/.kube/config
 	// automatically after creation. Default: true.
 	AutoMergeKubeconfig *bool `yaml:"autoMergeKubeconfig"`
@@ -150,8 +160,11 @@ func applyDefaults(cfg *Config) {
 	if cfg.Kind.MetalLBVersion == "" {
 		cfg.Kind.MetalLBVersion = DefaultMetalLBVersion
 	}
-	if len(cfg.Kind.CoreDNSDomains) == 0 {
-		cfg.Kind.CoreDNSDomains = []string{"runlocal.dev"}
+	// Fill default resolvers for any entry that omits them.
+	for i := range cfg.Kind.CustomDNSResolvers {
+		if len(cfg.Kind.CustomDNSResolvers[i].Resolvers) == 0 {
+			cfg.Kind.CustomDNSResolvers[i].Resolvers = []string{"8.8.8.8", "8.8.4.4"}
+		}
 	}
 	if cfg.Kind.AutoMergeKubeconfig == nil {
 		cfg.Kind.AutoMergeKubeconfig = boolPtr(true)
