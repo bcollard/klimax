@@ -21,6 +21,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Collect third-party licenses
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses save ./cmd/klimax \
+            --save_path=.third_party_licenses \
+            --force
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6.3.0
         with:

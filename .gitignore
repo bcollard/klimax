@@ -1,4 +1,5 @@
 dist/
+.third_party_licenses/
 config.yaml
 *.docker.sock
 .claude/

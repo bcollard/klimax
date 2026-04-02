@@ -32,6 +32,12 @@ jobs:
           CGO_ENABLED: "1"
         run: go vet ./...
 
+      - name: License check
+        run: |
+          go install github.com/google/go-licenses@latest
+          go-licenses check ./... \
+            --allowed_licenses=MIT,ISC,BSD-2-Clause,BSD-3-Clause,Apache-2.0,MPL-2.0
+
       - name: GoReleaser check
         uses: goreleaser/goreleaser-action@v6.3.0
         with:

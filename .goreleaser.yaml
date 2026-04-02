@@ -41,6 +41,9 @@ archives:
       - README.md
       - config.example.yaml
       - entitlements.plist
+      - src: .third_party_licenses/**/*
+        dst: third_party_licenses
+        strip_parent: true
 
 checksum:
   name_template: checksums.txt
