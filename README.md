@@ -318,6 +318,42 @@ All registry containers are attached to the `kind` Docker network so cluster nod
 
 ---
 
+## Running alongside Rancher Desktop, Colima, or kind-on-lima
+
+klimax is designed to coexist with other Lima-based tools on the same Mac. Each Lima VM gets
+its own vzNAT interface (`bridge1xx`) and a distinct macOS-assigned IP, so there is no
+IP-level conflict between VMs.
+
+The one friction point is **Lima's TCP port mirroring**: by default, Lima's hostagent
+forwards every TCP port that a process in the VM listens on to `127.0.0.1` on the host. When
+two VMs independently manage kind clusters, both hostagents try to mirror the same API-server
+ports (e.g. `7001`) to `127.0.0.1` simultaneously, breaking connectivity for both.
+
+**klimax bypasses this entirely** with a single config flag:
+
+```yaml
+# ~/.klimax/config.yaml
+network:
+  disablePortMirroring: true
+```
+
+With this flag:
+- Lima stops forwarding any TCP port from the klimax VM to `127.0.0.1`.
+- Cluster kubeconfigs use the VM's direct `lima0` IP (e.g. `https://192.168.64.3:7001`) — reachable from the host over vzNAT without any routing or VPN.
+- The API server cert automatically includes the `lima0` IP as a SAN, so TLS verification works out of the box.
+- Every other Lima VM (Rancher Desktop, Colima, kind-on-lima) keeps forwarding its own ports to `127.0.0.1` completely unaffected.
+
+This is a VM-level setting — recreate the VM once to apply it (`klimax destroy && klimax up`),
+then forget about it.
+
+> The `lima0` IP is assigned dynamically by macOS and may change on VM restart.
+> Run `klimax cluster merge <name>` after a restart to refresh kubeconfigs.
+
+See [docs/klimax-vs-other-lima-based-tools.md](docs/klimax-vs-other-lima-based-tools.md) for
+a detailed comparison with Rancher Desktop, Colima, and kind-on-lima.
+
+---
+
 ## Project layout
 
 ```
