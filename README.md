@@ -122,6 +122,13 @@ vm:
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # routed from macOS → VM; no SNAT
 
+  # Set to true when running alongside other Lima VMs (kind-on-lima, Rancher Desktop)
+  # that also manage kind clusters. Lima mirrors every guest TCP port to 127.0.0.1 by
+  # default; when two VMs both try to mirror port 7001 the connections conflict.
+  # With disablePortMirroring: true, kubeconfigs use the VM's direct lima0 IP instead
+  # of 127.0.0.1. ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
+  # disablePortMirroring: false
+
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
   nodeVersion: "v1.32.0"
@@ -139,7 +146,7 @@ registries:
 
   localRegistry:
     enabled: true
-    port: 5000
+    port: 5000            # push with: docker push kind-registry:5000/myimage:tag
 
   mirrors:
     - name: "registry-dockerio"
