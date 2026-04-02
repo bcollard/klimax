@@ -285,7 +285,21 @@ The result: `curl http://172.30.1.200/` on your Mac reaches the MetalLB VIP dire
 
 ### kubeconfig and API server access
 
-Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent automatically forwards these ports to `127.0.0.1:700N` on the host. Exported kubeconfigs point at `https://127.0.0.1:700N` — no VPN or direct vzNAT IP access required, which also avoids conflicts with host-based security software (e.g. endpoint agents that block non-system process TCP to vzNAT IPs).
+klimax supports two modes for kubeconfig API server addresses:
+
+**Default (loopback mode — `network.disablePortMirroring: false`)**
+
+Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent automatically forwards these ports to `127.0.0.1:700N` on the host. Exported kubeconfigs point at `https://127.0.0.1:700N` — no VPN or direct vzNAT IP access required. This mode also avoids conflicts with host-based security software (e.g. endpoint agents that block direct VM IP access).
+
+**Direct IP mode (`network.disablePortMirroring: true`)**
+
+Use this when running klimax alongside other Lima-based VMs (kind-on-lima, Rancher Desktop) that also manage kind clusters. By default, Lima mirrors every guest TCP port to `127.0.0.1` — when two VMs both try to mirror port `7001`, they conflict.
+
+Setting `disablePortMirroring: true` disables all Lima TCP port mirroring for the klimax VM. Kubeconfigs then use the VM's direct `lima0` IP (e.g. `192.168.64.3:700N`), which is L2-reachable from the host via vzNAT. The API server cert automatically includes the lima0 IP as a SAN.
+
+> Note: the lima0 IP is assigned dynamically by macOS and may change on VM restart. Run `klimax cluster merge <name>` after a restart to refresh the address in `~/.kube/config`.
+
+This is a VM-level setting — it only takes effect on new VMs (`klimax destroy && klimax up`).
 
 ### Registry mirrors
 

@@ -79,7 +79,7 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone}
 
-	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR); err != nil {
+	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, cfg.Network.DisablePortMirroring); err != nil {
 		return err
 	}
 
@@ -611,7 +611,13 @@ func runClusterE2ETestNginx(ctx context.Context, cleanup bool) error {
 	}
 
 	fmt.Printf("--- Curling http://%s ---\n", lbIP)
-	c := exec.CommandContext(ctx, "curl", "--max-time", "11", "--connect-timeout", "10", "-I", "-v",
+	// Retry with --retry-connrefused: MetalLB may not have sent its gratuitous
+	// ARP and kube-proxy may not have written the DNAT rule yet, causing an
+	// immediate RST from the kind node. Allow up to ~30s for both to converge.
+	c := exec.CommandContext(ctx, "curl",
+		"--max-time", "11", "--connect-timeout", "10",
+		"--retry", "6", "--retry-delay", "5", "--retry-connrefused",
+		"-I", "-v",
 		"http://"+lbIP)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr

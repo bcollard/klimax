@@ -14,6 +14,7 @@ import (
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/registry"
+	"github.com/bcollard/klimax/internal/routing"
 )
 
 // CreateCluster creates a kind cluster with the given config.
@@ -22,9 +23,10 @@ import (
 //  2. Creates the cluster using the configured node image version.
 //  3. Installs MetalLB and configures an IP address pool.
 //  4. Creates the local-registry-hosting ConfigMap in kube-public.
-//  5. Exports the kubeconfig to ~/.kube/kind/<name>.kubeconfig on the host,
-//     patching the API server address from 127.0.0.1 to the VM's lima0 IP.
-func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR string) error {
+//  5. Exports the kubeconfig to ~/.kube/klimax/<name>.kubeconfig on the host,
+//     with the API server address set to 127.0.0.1 (loopback mode, default) or
+//     the VM's lima0 IP (direct mode, kind.useLoopbackAddress: false).
+func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR string, useDirectIP bool) error {
 	// Apply locality defaults based on num.
 	if cl.Region == "" {
 		cl.Region = fmt.Sprintf("europe-west%d", cl.Num)
@@ -33,11 +35,36 @@ func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig
 		cl.Zone = fmt.Sprintf("europe-west%d-b", cl.Num)
 	}
 
-	slog.Info("Creating kind cluster", "cluster", cl.Name, "num", cl.Num, "nodeVersion", kindCfg.NodeVersion, "region", cl.Region, "zone", cl.Zone)
+	// In direct IP mode, resolve lima0IP early — it must be embedded in the
+	// API server cert SANs (kubeadm ClusterConfiguration) before kind creates
+	// the cluster, and reused later when writing the kubeconfig.
+	apiServerAddr := "127.0.0.1"
+	if useDirectIP {
+		lima0IP, err := routing.Lima0IP(ctx, g)
+		if err != nil {
+			return fmt.Errorf("resolving VM IP: %w", err)
+		}
+		apiServerAddr = lima0IP
+	}
+
+	slog.Info("Creating kind cluster", "cluster", cl.Name, "num", cl.Num, "nodeVersion", kindCfg.NodeVersion, "region", cl.Region, "zone", cl.Zone, "apiServerAddr", apiServerAddr)
 
 	containerdPatches := registry.ContainerdPatches(regCfg)
 	subnetPrefix := kindSubnetPrefix(kindCIDR)
 	apiPort := 7000 + cl.Num
+
+	// In direct IP mode, add the VM's lima0 IP to the API server cert SANs so
+	// that TLS verification succeeds when kubectl connects via the VM IP.
+	certSANsPatch := ""
+	if useDirectIP {
+		certSANsPatch = fmt.Sprintf(`- |
+  kind: ClusterConfiguration
+  apiServer:
+    certSANs:
+    - %q
+    - "127.0.0.1"
+`, apiServerAddr)
+	}
 
 	clusterConfig := fmt.Sprintf(`kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
@@ -57,10 +84,10 @@ kubeadmConfigPatches:
   nodeRegistration:
     kubeletExtraArgs:
       node-labels: "ingress-ready=true,topology.kubernetes.io/region=%s,topology.kubernetes.io/zone=%s"
-containerdConfigPatches:
+%scontainerdConfigPatches:
 - |-
 %s
-`, cl.Name, apiPort, cl.Num, cl.Num, cl.Region, cl.Zone, containerdPatches)
+`, cl.Name, apiPort, cl.Num, cl.Num, cl.Region, cl.Zone, certSANsPatch, containerdPatches)
 
 	configPath := fmt.Sprintf("/tmp/klimax-kind-%s.yaml", cl.Name)
 
@@ -101,7 +128,7 @@ echo "kind cluster %s created"
 		}
 	}
 
-	if err := exportKubeconfig(ctx, g, cl.Name, apiPort); err != nil {
+	if err := exportKubeconfig(ctx, g, cl.Name, apiPort, apiServerAddr); err != nil {
 		return fmt.Errorf("exporting kubeconfig for cluster %q: %w", cl.Name, err)
 	}
 
@@ -217,20 +244,17 @@ EOF
 }
 
 // exportKubeconfig fetches the kubeconfig from the VM, patches the server address
-// from 127.0.0.1/0.0.0.0 to the VM's lima0 IP, and writes it to
-// ~/.kube/kind/<name>.kubeconfig on the macOS host.
-func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName string, apiPort int) error {
-	slog.Info("Exporting kubeconfig to host", "cluster", clusterName, "apiPort", apiPort)
+// to apiServerAddr (127.0.0.1 in loopback mode, lima0 IP in direct mode), and
+// writes it to ~/.kube/klimax/<name>.kubeconfig on the macOS host.
+func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName string, apiPort int, apiServerAddr string) error {
+	slog.Info("Exporting kubeconfig to host", "cluster", clusterName, "apiPort", apiPort, "apiServerAddr", apiServerAddr)
 
 	raw, err := g.Run(ctx, fmt.Sprintf("kind get kubeconfig --name %s", clusterName))
 	if err != nil {
 		return fmt.Errorf("getting kubeconfig: %w", err)
 	}
 
-	// Lima's hostagent automatically forwards guest TCP ports to 127.0.0.1 on the host
-	// via the guest agent event stream — no static portForwards config needed.
-	// Using 127.0.0.1 works with any security software that blocks direct vzNAT IP access.
-	patched := strings.ReplaceAll(raw, "https://0.0.0.0:", "https://127.0.0.1:")
+	patched := strings.ReplaceAll(raw, "https://0.0.0.0:", "https://"+apiServerAddr+":")
 	// Strip the "kind-" prefix kind adds to context/cluster/user names so the
 	// context name in ~/.kube/config matches the cluster name directly.
 	patched = strings.ReplaceAll(patched, "kind-"+clusterName, clusterName)

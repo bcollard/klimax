@@ -18,6 +18,25 @@ network:
   # macOS routes this CIDR → VM's lima0 IP for pure L3 access (no SNAT).
   kindBridgeCIDR: "172.30.0.0/16"
 
+  # Disable Lima's automatic TCP port mirroring from the VM to 127.0.0.1 on the host.
+  # Default: false — Lima mirrors every guest TCP port to 127.0.0.1 (e.g. 7001 → 127.0.0.1:7001).
+  #
+  # Set to true when running klimax alongside other Lima-based VMs (kind-on-lima,
+  # Rancher Desktop) that also manage kind clusters. Without this, both VMs race to
+  # mirror the same API-server port (e.g. 7001) to 127.0.0.1, corrupting each
+  # other's kubeconfig connectivity.
+  #
+  # When true:
+  #   - Lima TCP auto-mirroring is disabled for all ports in the klimax VM.
+  #   - Kubeconfigs use the VM's direct lima0 IP (e.g. 192.168.64.3:700N) instead
+  #     of 127.0.0.1:700N. The lima0 IP is L2-reachable from the host via vzNAT.
+  #   - The API server cert includes the lima0 IP as a SAN (added automatically).
+  #   - Re-run 'klimax cluster merge <name>' after each VM restart to refresh the
+  #     address if the lima0 IP changes (vzNAT assigns IPs dynamically).
+  #
+  # ⚠ VM-level setting: only takes effect on new VMs (klimax destroy && klimax up).
+  # disablePortMirroring: false
+
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:
   # kindest/node image tag used when creating clusters.
@@ -38,24 +57,6 @@ kind:
 
   # Automatically remove the cluster's context/cluster/user from ~/.kube/config on deletion.
   # autoRemoveKubeconfig: true
-
-  # Clusters to create/ensure during `klimax up`.
-  # Each cluster gets:
-  #   • API port   : 70<num>   (e.g. 7001 for num=1)
-  #   • Service CIDR: 10.<num>.0.0/16
-  #   • Pod CIDR   : 10.1<num>.0.0/16
-  #   • MetalLB pool: 172.30.<num>.1-7  and  172.30.<num>.16-254
-  #
-  # `num` is auto-assigned (lowest free slot) when not specified.
-  clusters:
-    - name: "dev"
-      num: 1
-      region: "europe-west1"   # optional; default: europe-west<N>
-      zone: "europe-west1-b"   # optional; default: europe-west<N>-b
-
-    - name: "staging"
-      num: 2
-      # region/zone use defaults: europe-west2 / europe-west2-b
 
 # ── Registries ───────────────────────────────────────────────────────────────
 registries:

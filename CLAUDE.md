@@ -115,6 +115,10 @@ vm:
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet
+  disablePortMirroring: false        # true: disable Lima TCP port mirroring; kubeconfigs use VM's lima0 IP directly
+                                     # Use when coexisting with other Lima VMs (kind-on-lima, Rancher Desktop)
+                                     # that manage kind clusters — prevents API-server port conflicts on 127.0.0.1.
+                                     # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
 
 kind:
   nodeVersion: "v1.32.0"             # kindest/node image tag (default)
@@ -190,17 +194,18 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 ## Cluster creation flow (`klimax cluster create <name>`)
 
 1. **Auto-assign num** — inspect live `<name>-control-plane` containers' port bindings (70N → num=N); find lowest free slot 1–99.
-2. **Build kind cluster config** with:
-   - API port `70<num>` on `0.0.0.0` (reachable from host via Lima port forwarding to `127.0.0.1:700N`)
+2. **Resolve API server address** — `127.0.0.1` by default; when `network.disablePortMirroring: true`, resolves the VM's live `lima0` IP via SSH (`routing.Lima0IP`) to embed in the cert SANs.
+3. **Build kind cluster config** with:
+   - API port `70<num>` on `0.0.0.0`
    - `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`
-   - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels
+   - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels; when `disablePortMirroring`, also a `ClusterConfiguration` patch adding the lima0 IP to `apiServer.certSANs` (plus `127.0.0.1` for intra-VM kubectl calls)
    - `containerdConfigPatches`: mirror all registries through local containers
-3. **`kind create cluster`** with `--image kindest/node:<nodeVersion>`
-4. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
-5. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
-6. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
-7. **Patch CoreDNS** ConfigMap to forward configured domains to `8.8.8.8`
-8. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (Lima hostagent forwards this port to the host)
+4. **`kind create cluster`** with `--image kindest/node:<nodeVersion>`
+5. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
+6. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
+7. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
+8. **Patch CoreDNS** ConfigMap to forward configured domains to `8.8.8.8`
+9. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (default) or `https://<lima0IP>:700N` (when `disablePortMirroring: true`)
 
 ### kubeconfig naming
 
@@ -278,6 +283,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 - `DOCKER_HOST` env var overrides the active Docker context — use one mechanism or the other, not both.
 - Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
 - `klimax down` does **not** remove the macOS host route by default (stale route is harmless; `klimax up` refreshes it). Use `--remove-route` to remove it explicitly.
+- `network.disablePortMirroring: true` — the lima0 IP is assigned dynamically by macOS and may change on VM restart; re-run `klimax cluster merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may also block TCP connections to vzNAT IPs — use the default loopback mode in that case.
 
 ---
 

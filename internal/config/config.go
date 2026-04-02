@@ -28,6 +28,15 @@ type VMConfig struct {
 type NetworkConfig struct {
 	// KindBridgeCIDR is the subnet for the Docker bridge network named "kind".
 	KindBridgeCIDR string `yaml:"kindBridgeCIDR"` // e.g. "172.30.0.0/16"
+	// DisablePortMirroring prevents Lima from auto-mirroring guest TCP ports to
+	// 127.0.0.1 on the host. Required when running klimax alongside other Lima-based
+	// VMs (kind-on-lima, Rancher Desktop) that manage kind clusters with overlapping
+	// port numbers — without this, both VMs race to mirror the same port (e.g. 7001)
+	// to 127.0.0.1 and confuse each other's tooling.
+	// When true, kubeconfigs use the VM's direct lima0 IP instead of 127.0.0.1,
+	// and the API server cert includes the lima0 IP as a SAN.
+	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
+	DisablePortMirroring bool `yaml:"disablePortMirroring"`
 }
 
 // KindConfig holds global defaults used by every `klimax cluster create` invocation.

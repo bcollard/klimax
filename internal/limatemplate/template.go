@@ -2,6 +2,7 @@ package limatemplate
 
 import (
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -107,6 +108,34 @@ if ! command -v kind >/dev/null 2>&1; then
 fi
 `
 
+// buildPortForwards returns the Lima portForwards rules for the given config.
+// The Docker socket forward is always included. When DisablePortMirroring is
+// true, a catch-all TCP ignore rule is prepended so Lima's hostagent does not
+// auto-mirror any guest TCP port to 127.0.0.1 on the host — required when
+// running alongside other Lima VMs that manage kind clusters with the same
+// port numbers.
+//
+// Rule ordering is critical: Lima scans PortForwards from the top to detect
+// the global ignoreTCP flag and stops at the first non-ignore rule.
+// GuestIP must be net.IPv4zero (not nil) so Lima's ignore check also matches
+// ports bound to all interfaces (0.0.0.0) inside the VM.
+func buildPortForwards(cfg *config.Config) []limatype.PortForward {
+	var fwds []limatype.PortForward
+	if cfg.Network.DisablePortMirroring {
+		fwds = append(fwds, limatype.PortForward{
+			GuestIP:        net.IPv4zero,
+			GuestPortRange: [2]int{1, 65535},
+			Proto:          limatype.ProtoTCP,
+			Ignore:         true,
+		})
+	}
+	fwds = append(fwds, limatype.PortForward{
+		GuestSocket: "/run/docker.sock",
+		HostSocket:  "{{.Home}}/." + cfg.VM.Name + ".docker.sock",
+	})
+	return fwds
+}
+
 // Build constructs a limatype.LimaYAML from a klimax config.
 // The result can be marshaled to YAML and passed to instance.Create().
 func Build(cfg *config.Config) *limatype.LimaYAML {
@@ -134,12 +163,7 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 
 		// Forward the Docker socket to the host so macOS tools (docker CLI, kind) can use it.
 		// Socket lands at ~/.<vmName>.docker.sock; set DOCKER_HOST=unix://$HOME/.<name>.docker.sock.
-		PortForwards: []limatype.PortForward{
-			{
-				GuestSocket: "/run/docker.sock",
-				HostSocket:  "{{.Home}}/." + cfg.VM.Name + ".docker.sock",
-			},
-		},
+		PortForwards: buildPortForwards(cfg),
 
 		// Disable containerd; we use Docker
 		Containerd: limatype.Containerd{

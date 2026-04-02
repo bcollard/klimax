@@ -37,6 +37,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	if err != nil {
 		return err
 	}
+	slog.Info("Using config", "path", configFile)
 
 	// 1. Ensure VM is running.
 	mgr := vm.New(cfg.VM.Name, KlimaxHome())
