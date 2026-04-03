@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/klimax-logo-02-300.png" alt="klimax logo" width="200">
+  <img src="docs/klimax-logo-02-300.png" alt="klimax logo" width="300">
 </p>
 
-~_Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._~
+_Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._
 
 **klimax** is an dependency-free CLI that manages a macOS Virtualization.framework (VZ) Lima VM, installs Docker inside it, creates and manages multiple [kind](https://kind.sigs.k8s.io/) clusters, and wires up pure L3 routing from your Mac into the kind bridge subnet — no SNAT, no VPN, direct IP access to pods and LoadBalancer services.
 
