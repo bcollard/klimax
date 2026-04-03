@@ -1,13 +1,6 @@
-```
-  ██╗  ██╗██╗     ██╗███╗   ███╗  █████╗ ██╗  ██╗
-  ██║ ██╔╝██║     ██║████╗ ████║ ██╔══██╗╚██╗██╔╝
-  █████╔╝ ██║     ██║██╔████╔██║ ███████║ ╚███╔╝
-  ██╔═██╗ ██║     ██║██║╚██╔╝██║ ██╔══██║ ██╔██╗
-  ██║  ██╗███████╗██║██║ ╚═╝ ██║ ██║  ██║██╔╝ ██╗
-  ╚═╝  ╚═╝╚══════╝╚═╝╚═╝     ╚═╝ ╚═╝  ╚═╝╚═╝  ╚═╝
-
-  [ K ]ind  ·  [ L · I · M · A ]  ·  e[ X ]tended
-```
+<p align="center">
+  <img src="docs/klimax-logo-02-300.png" alt="klimax logo" width="200">
+</p>
 
 ~_Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._~
 
