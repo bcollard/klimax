@@ -19,6 +19,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick start](#quick-start)
+- [What it does](#what-it-does)
 - [Configuration reference](#configuration-reference)
 - [CLI reference](#cli-reference)
 - [Networking deep-dive](#networking-deep-dive)
@@ -26,18 +27,11 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 - [Project layout](#project-layout)
 
 
-
 ---
 
 ## Demo
 
-Script:
-
-<script src="https://asciinema.org/a/oNo5GJ5uj96JE0G2.js" id="asciicast-oNo5GJ5uj96JE0G2" async="true"></script>
-
-Mardown: 
-
-[![asciicast](https://asciinema.org/a/oNo5GJ5uj96JE0G2.svg)](https://asciinema.org/a/oNo5GJ5uj96JE0G2)
+[![asciicast](https://asciinema.org/a/oNo5GJ5uj96JE0G2.svg)](https://asciinema.org/a/oNo5GJ5uj96JE0G2?speed=1.5&autoplay=1)
 
 ---
 
