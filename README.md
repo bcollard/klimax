@@ -15,7 +15,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 ---
 
 ## Table of contents
-- [What it does](#what-it-does)
+- [Demo](#demo)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Quick start](#quick-start)
@@ -25,21 +25,19 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 - [Running alongside Rancher Desktop, Colima, or kind-on-lima](#running-alongside-rancher-desktop-colima-or-kind-on-lima)
 - [Project layout](#project-layout)
 
+
+
 ---
 
-## What it does
+## Demo
 
-| Concern | What klimax does |
-|---|---|
-| VM | Creates/starts/stops/deletes a Lima VZ instance |
-| Docker | Installs Docker in the VM; forwards the socket to `~/.<vmname>.docker.sock` |
-| kind | Creates/deletes multiple kind clusters; each gets its own subnet slice and API port |
-| Registries | Runs a local push registry (`kind-registry:5000`) + pull-through mirrors for docker.io, quay.io, gcr.io; mirror data cached persistently |
-| Networking | Routes `kindBridgeCIDR` from macOS → VM via `lima0`; no SNAT so source IPs are preserved |
-| MetalLB | Installed in every cluster with a dedicated IP pool slice |
-| CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
-| kubeconfig | Exports per-cluster kubeconfig to `~/.kube/klimax/<name>.kubeconfig`; auto-merges into `~/.kube/config` |
+Script:
 
+<script src="https://asciinema.org/a/oNo5GJ5uj96JE0G2.js" id="asciicast-oNo5GJ5uj96JE0G2" async="true"></script>
+
+Mardown: 
+
+[![asciicast](https://asciinema.org/a/oNo5GJ5uj96JE0G2.svg)](https://asciinema.org/a/oNo5GJ5uj96JE0G2)
 
 ---
 
@@ -136,6 +134,23 @@ klimax destroy # this also removes the macOS route, so sudo is required
 ```
 
 After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the VM. You can reach any pod IP, Service ClusterIP, or MetalLB LoadBalancer IP without port-forwarding.
+
+
+---
+
+## What it does
+
+| Concern | What klimax does |
+|---|---|
+| VM | Creates/starts/stops/deletes a Lima VZ instance |
+| Docker | Installs Docker in the VM; forwards the socket to `~/.<vmname>.docker.sock` |
+| kind | Creates/deletes multiple kind clusters; each gets its own subnet slice and API port |
+| Registries | Runs a local push registry (`kind-registry:5000`) + pull-through mirrors for docker.io, quay.io, gcr.io; mirror data cached persistently |
+| Networking | Routes `kindBridgeCIDR` from macOS → VM via `lima0`; no SNAT so source IPs are preserved |
+| MetalLB | Installed in every cluster with a dedicated IP pool slice |
+| CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
+| kubeconfig | Exports per-cluster kubeconfig to `~/.kube/klimax/<name>.kubeconfig`; auto-merges into `~/.kube/config` |
+
 
 ---
 
