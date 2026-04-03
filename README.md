@@ -1,4 +1,13 @@
-# klimax
+```
+  ██╗  ██╗██╗     ██╗███╗   ███╗  █████╗ ██╗  ██╗
+  ██║ ██╔╝██║     ██║████╗ ████║ ██╔══██╗╚██╗██╔╝
+  █████╔╝ ██║     ██║██╔████╔██║ ███████║ ╚███╔╝
+  ██╔═██╗ ██║     ██║██║╚██╔╝██║ ██╔══██║ ██╔██╗
+  ██║  ██╗███████╗██║██║ ╚═╝ ██║ ██║  ██║██╔╝ ██╗
+  ╚═╝  ╚═╝╚══════╝╚═╝╚═╝     ╚═╝ ╚═╝  ╚═╝╚═╝  ╚═╝
+
+  [ K ]ind  ·  [ L · I · M · A ]  ·  e[ X ]tended
+```
 
 **klimax** manages a macOS Virtualization.framework (VZ) Lima VM, installs Docker inside it, creates and manages multiple [kind](https://kind.sigs.k8s.io/) clusters, and wires up pure L3 routing from your Mac into the kind bridge subnet — no SNAT, no VPN, direct IP access to pods and LoadBalancer services.
 
