@@ -9,9 +9,28 @@
   [ K ]ind  ·  [ L · I · M · A ]  ·  e[ X ]tended
 ```
 
+~_Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._~
+
 **klimax** is an dependency-free CLI that manages a macOS Virtualization.framework (VZ) Lima VM, installs Docker inside it, creates and manages multiple [kind](https://kind.sigs.k8s.io/) clusters, and wires up pure L3 routing from your Mac into the kind bridge subnet — no SNAT, no VPN, direct IP access to pods and LoadBalancer services.
 
-Klimax is self-contained, clean, and can work alongside your current Docker setup without conflict. More details below.
+Klimax is self-contained, clean, and can work alongside your current Docker setup without conflict (Orbstack, Colima, Rancher Desktop, etc.). More details below.
+
+![klimax high-level architecture](docs/KLIMAX-HLD-architecture.png)
+
+For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-architecture.png).
+
+---
+
+## Table of contents
+- [What it does](#what-it-does)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Configuration reference](#configuration-reference)
+- [CLI reference](#cli-reference)
+- [Networking deep-dive](#networking-deep-dive)
+- [Running alongside Rancher Desktop, Colima, or kind-on-lima](#running-alongside-rancher-desktop-colima-or-kind-on-lima)
+- [Project layout](#project-layout)
 
 ---
 
@@ -28,6 +47,7 @@ Klimax is self-contained, clean, and can work alongside your current Docker setu
 | CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
 | kubeconfig | Exports per-cluster kubeconfig to `~/.kube/klimax/<name>.kubeconfig`; auto-merges into `~/.kube/config` |
 
+
 ---
 
 ## Prerequisites
@@ -37,6 +57,7 @@ Klimax is self-contained, clean, and can work alongside your current Docker setu
 - **macOS 13 Ventura or later** — Apple Virtualization.framework is required (`vmType: vz`)
 - **`sudo` access** — needed only for `klimax up` (adds macOS route) and `klimax destroy`; `klimax down` does not require sudo
 - **Go 1.22+** — only if building from source; not needed for the pre-built binary
+- **kubectx** (optional) — for easier kubeconfig context switching, or use `klimax cluster use <name>`
 
 > klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary. No separate Lima installation required.
 
@@ -89,27 +110,36 @@ klimax completion fish > ~/.config/fish/completions/klimax.fish
 ## Quick start
 
 ```sh
-# 1. Edit config (or accept defaults)
-klimax config edit
+# 1. Bring up the VM + Docker + networking + registries
+klimax up # this will prompt for sudo to add the macOS route, but it only needs to be done once; 
 
-# 2. Bring up the VM + Docker + networking + registries
-klimax up
-
-# 3. Point your shell at the VM's Docker daemon
-eval $(klimax docker-env)        # current shell only
-# or: klimax docker-context      # persistent Docker context
-
-# 4. Create a kind cluster
+# 2. Create a kind cluster
 klimax cluster create dev
 
-# 5. Use the cluster (kubeconfig auto-merged into ~/.kube/config)
-kubectl get nodes
+# 3. Use the cluster (kubeconfig auto-merged into ~/.kube/config)
+kubectl config use-context dev
+# or: kubectx dev
 
-# 6. Create a second cluster
+# 4. Test cluster connectivity by deploying nginx and exposing it with a LoadBalancer service (MetalLB will assign a VIP in the kind bridge subnet)
+klimax cluster e2e-test-nginx
+# additionally, you can run a curl command from your Mac directly to the MetalLB VIP without port-forwarding:
+# kubectl get svc nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' # get VIP; by default in the 172.30.0.0/16 subnet
+# curl http://<VIP>/ # should return the nginx welcome page
+
+# 5. Create a second cluster
 klimax cluster create staging
 
-# 7. List all clusters
+# 6. List all clusters
 klimax cluster list
+
+# 7. Delete one or more clusters
+klimax cluster delete # with interactive picker (space to select)
+
+# 8. Stop the VM when you're done (preserves clusters and registry cache)
+klimax down
+
+# 9. Destroy the VM and all clusters when you no longer need them
+klimax destroy # this also removes the macOS route, so sudo is required
 ```
 
 After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the VM. You can reach any pod IP, Service ClusterIP, or MetalLB LoadBalancer IP without port-forwarding.
@@ -331,7 +361,7 @@ All registry containers are attached to the `kind` Docker network so cluster nod
 
 ---
 
-## Running alongside Rancher Desktop, Colima, or kind-on-lima
+## Running alongside Orbstack, Rancher Desktop, or Colima
 
 klimax is designed to coexist with other Lima-based tools on the same Mac. Each Lima VM gets
 its own vzNAT interface (`bridge1xx`) and a distinct macOS-assigned IP, so there is no
