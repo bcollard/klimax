@@ -56,7 +56,7 @@ fi
 # sshd: evict idle sessions after 30s (10 probes × 3s) so interrupted
 # klimax commands don't leave zombie sshd-session processes that exhaust
 # vsock connection slots and cause "handshake failed: EOF" on new dials.
-if ! grep -q 'ClientAliveInterval' /etc/ssh/sshd_config; then
+if ! grep -q '^ClientAliveInterval' /etc/ssh/sshd_config; then
   cat >> /etc/ssh/sshd_config <<EOF
 
 # Added by klimax provisioner
