@@ -1,13 +1,13 @@
 module github.com/bcollard/klimax
 
-go 1.25.0
+go 1.25.7
 
 require (
-	github.com/lima-vm/lima/v2 v2.1.0
+	github.com/lima-vm/lima/v2 v2.1.1
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.49.0
-	golang.org/x/term v0.41.0
+	golang.org/x/crypto v0.52.0
+	golang.org/x/term v0.43.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -30,7 +30,7 @@ require (
 	github.com/coreos/go-semver v0.3.1 // indirect
 	github.com/coreos/go-systemd/v22 v22.7.0 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
-	github.com/diskfs/go-diskfs v1.7.0 // indirect
+	github.com/diskfs/go-diskfs v1.9.1 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/elliotchance/orderedmap v1.8.0 // indirect
@@ -60,7 +60,7 @@ require (
 	github.com/mdlayher/socket v0.5.1 // indirect
 	github.com/mdlayher/vsock v1.2.1 // indirect
 	github.com/miekg/dns v1.1.72 // indirect
-	github.com/mikefarah/yq/v4 v4.52.4 // indirect
+	github.com/mikefarah/yq/v4 v4.52.5 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/nxadm/tail v1.4.11 // indirect
@@ -77,17 +77,17 @@ require (
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
-	github.com/zclconf/go-cty v1.17.0 // indirect
+	github.com/zclconf/go-cty v1.18.0 // indirect
 	go.yaml.in/yaml/v4 v4.0.0-rc.3 // indirect
-	golang.org/x/mod v0.33.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/mod v0.35.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	golang.org/x/tools v0.42.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/grpc v1.79.2 // indirect
+	golang.org/x/tools v0.44.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260120221211-b8f7ae30c516 // indirect
+	google.golang.org/grpc v1.80.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
