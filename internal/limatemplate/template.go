@@ -44,7 +44,7 @@ apt-get update -qq
 apt-get install -y -q jq iptables curl net-tools python3
 
 # Docker socket permissions (allows lima user to use Docker without sudo)
-# Lima's guest user is always named "lima" — this is a Lima invariant.
+# The guest user is pinned to "lima" via user.name in the Lima YAML (see Build()).
 if [ ! -e /etc/systemd/system/docker.socket.d/override.conf ]; then
   mkdir -p /etc/systemd/system/docker.socket.d
   cat > /etc/systemd/system/docker.socket.d/override.conf <<EOF
@@ -147,6 +147,13 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 		CPUs:   ptr.Of(cfg.VM.CPUs),
 		Memory: ptr.Of(cfg.VM.Memory),
 		Disk:   ptr.Of(cfg.VM.Disk),
+
+		// Force the guest username to "lima". By default Lima derives the guest
+		// user from the macOS host username (osutil.LimaUser), only falling back
+		// to "lima" when the host name is an invalid Linux username. Pinning it
+		// here makes the name deterministic so the SocketUser=lima drop-in below
+		// (and any other "lima" assumptions) hold on every host.
+		User: limatype.User{Name: ptr.Of("lima")},
 
 		Images: []limatype.Image{
 			{File: limatype.File{Location: ubuntuAMD64, Arch: limatype.X8664}},
