@@ -290,4 +290,6 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 ## Release
 
 - `goreleaser` for cross-compilation and GitHub releases
-- Homebrew tap: `bcollard/homebrew-klimax`
+- Triggered by pushing a `vX.Y.Z` tag (`.github/workflows/release.yml`); default bump is a patch on the latest tag.
+- **Tags must be annotated** — `git tag -a vX.Y.Z -m "..."`. A lightweight `git tag vX.Y.Z` fails with `fatal: no tag message?` (repo is configured to require annotated tags).
+- Homebrew distribution is a **Cask**, not a Formula: `bcollard/homebrew-klimax` → `Casks/klimax.rb`. goreleaser bumps it automatically on release. Users install/upgrade with `brew upgrade --cask klimax` (or `brew reinstall --cask klimax`).
