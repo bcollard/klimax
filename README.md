@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://klimax.runlocal.dev"><strong>🌐 klimax.runlocal.dev</strong></a>
+  <a href="https://klimax.dev"><strong>🌐 klimax.dev</strong></a>
 </p>
 
 _Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._
