@@ -29,13 +29,18 @@ brew install --cask klimax
 ```bash
 klimax up                              # Start VM + Docker + network + registries + routing. Idempotent.
 klimax cluster create <name>           # Create a kind cluster. Auto-assigns num (1-99), MetalLB, CoreDNS patches.
-klimax cluster delete <name>           # Delete a cluster (interactive picker if name omitted).
+klimax cluster delete <name>           # Delete a cluster. ALWAYS pass <name> in scripts — omitting it opens an interactive picker that will hang a non-interactive agent.
 klimax cluster list                    # List clusters with num, API port, kubeconfig path.
+klimax cluster e2e-test-nginx          # Built-in smoke test: deploy nginx, expose via LoadBalancer, curl it. Uses your current kubectl context.
 klimax down                            # Stop VM. Cluster state is preserved on the VM disk.
 klimax destroy                         # Delete all clusters + VM + macOS host route.
 ```
 
 `klimax up` is **infrastructure only** — it does NOT create clusters. Cluster lifecycle is CLI-only (not in the config file).
+
+**Timing & synchrony (important for agents):**
+- `klimax up` on a fresh machine downloads an Ubuntu image and provisions Docker + kind — this takes **several minutes** the first time. Do not treat a slow first run as a hang. Subsequent runs are fast.
+- `klimax cluster create` is **synchronous**: it blocks until the cluster is up, MetalLB is ready, and the kubeconfig is written. `kubectl` against the new context works immediately after it returns — no extra `sleep`/wait loops needed.
 
 ## Standard recipe pattern
 
@@ -54,6 +59,46 @@ kubectl --context cluster1 get nodes
 ```
 
 Cluster context names are stored bare in `~/.kube/config` (no `kind-` prefix). `kubectl --context <name>` works directly. Kubeconfigs are also written to `~/.kube/klimax/<name>.kubeconfig`.
+
+## Ephemeral cluster for testing (agent recipe)
+
+The intended pattern for running a script, scenario, or e2e test against a throwaway cluster: **create → test → always tear down.** Give the cluster a unique name and delete it in a `trap` so a failed test never leaks a cluster.
+
+```bash
+set -euo pipefail
+
+klimax up                               # idempotent; no-op if the VM is already running
+
+CLUSTER="test-$$"                        # unique per run
+klimax cluster create "$CLUSTER"         # synchronous — ready when it returns
+trap 'klimax cluster delete "$CLUSTER"' EXIT   # tear down on success OR failure
+
+# ...run your test against the cluster...
+kubectl --context "$CLUSTER" apply -f ./manifests/
+kubectl --context "$CLUSTER" wait --for=condition=Available deploy/myapp --timeout=120s
+kubectl --context "$CLUSTER" get svc          # LoadBalancer Services get a real 172.30.<num>.x IP (MetalLB)
+
+# Optional quick sanity check of networking + LoadBalancer end to end:
+KUBECONFIG=~/.kube/klimax/"$CLUSTER".kubeconfig klimax cluster e2e-test-nginx
+```
+
+Prefer one fresh cluster per test run for isolation; clusters are cheap and creation is fast after the first `klimax up`. Only reuse a long-lived cluster when a test explicitly needs persisted state.
+
+## Getting a test image into the cluster
+
+Point your host Docker at the klimax VM, then push to the built-in local registry (`localhost:5000`) and reference it by that name — containerd in every cluster is pre-patched to pull from it:
+
+```bash
+eval "$(klimax docker-env)"                       # DOCKER_HOST → the klimax VM's Docker
+
+docker build -t localhost:5000/myapp:test .
+docker push localhost:5000/myapp:test
+
+# In manifests, use the same reference:
+#   image: localhost:5000/myapp:test
+```
+
+The local registry is shared across all clusters and lives inside the VM (survives `down`/`up`). This is more reliable for agents than `kind load`, which would additionally require the kind CLI on the host.
 
 ## What klimax sets up for you on each cluster
 

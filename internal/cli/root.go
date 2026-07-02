@@ -56,6 +56,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 		newDockerEnvCmd(),
 		newDockerContextCmd(),
 		newHostagentCmd(),
+		newSkillCmd(),
 		newCompletionCmd(root),
 	)
 

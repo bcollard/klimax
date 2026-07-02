@@ -312,6 +312,19 @@ klimax registry clean-cache   # remove all mirror cache dirs + containers; run '
 
 Mirror cache data is stored at `~/.klimax/registry-cache/<mirror-name>/` by default (`cacheStorage: "host"`), virtiofs-mounted into the VM and bind-mounted into each registry container. Blobs survive `klimax down`/`up` cycles and even `klimax destroy`.
 
+### AI coding tools (Agent Skill)
+
+klimax ships an [Agent Skill](https://code.claude.com/docs/en/skills) that teaches AI coding tools how to drive klimax — spinning up ephemeral kind clusters for scripts, demos, and e2e tests. Install it once and every future agent session knows how to use klimax without you explaining it each time:
+
+```sh
+klimax skill install          # → ~/.claude/skills/klimax/SKILL.md
+klimax skill install --force  # overwrite an existing copy (e.g. after upgrading klimax)
+klimax skill path             # print the install path
+klimax skill install --print  # emit the skill to stdout (pipe it anywhere)
+```
+
+The skill is embedded in the binary, so no download is needed. Start a new agent session after installing to pick it up.
+
 ---
 
 ## Networking deep-dive

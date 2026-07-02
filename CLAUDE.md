@@ -69,6 +69,8 @@ These rules are persisted via:
 
 ```
 cmd/klimax/main.go                   entry point
+skill.go                             root package `klimax`; go:embed SKILL.md into var SkillMD (shipped by `klimax skill install`)
+SKILL.md                             canonical Agent Skill (single source of truth; embedded into the binary)
 
 internal/config/config.go            Config struct, LoadConfig, Validate, defaults
 internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 25.04, portForwards, provision script)
@@ -93,6 +95,7 @@ internal/cli/shell.go                `klimax shell` — interactive SSH session 
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/e2e-test-nginx)
 internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
 internal/cli/docker_env.go           `klimax docker-env` — prints DOCKER_HOST export (current shell only)
 internal/cli/docker_context.go       `klimax docker-context` — creates/switches Docker context (persistent)
@@ -244,6 +247,12 @@ klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses curre
   --cleanup                            Only remove nginx pod/svc (does NOT run the test)
 
 klimax registry clean-cache            Stop mirror containers + delete cache dirs; run 'klimax up' to restart
+
+klimax skill install                   Install the embedded Agent Skill into ~/.claude/skills/klimax/SKILL.md
+  --claude                             Target Claude Code's user skills dir (default true)
+  --print                              Write the skill to stdout instead of installing
+  --force, -f                          Overwrite an existing installed skill
+klimax skill path                      Print the Claude Code install path for the skill
 
 klimax completion bash|zsh|fish|powershell   Print shell completion script
 ```
