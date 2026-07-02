@@ -2,6 +2,10 @@
   <img src="docs/klimax-logo-02-300.png" alt="klimax logo" width="300">
 </p>
 
+<p align="center">
+  <a href="https://klimax.runlocal.dev"><strong>🌐 klimax.runlocal.dev</strong></a>
+</p>
+
 _Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._
 
 **klimax** is an dependency-free CLI that manages a macOS Virtualization.framework (VZ) Lima VM, installs Docker inside it, creates and manages multiple [kind](https://kind.sigs.k8s.io/) clusters, and wires up pure L3 routing from your Mac into the kind bridge subnet — no SNAT, no VPN, direct IP access to pods and LoadBalancer services.
@@ -63,6 +67,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 
 ```sh
 brew tap bcollard/klimax
+brew trust --tap bcollard/klimax
 brew install --cask klimax
 ```
 
