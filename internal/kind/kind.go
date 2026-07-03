@@ -49,7 +49,6 @@ func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig
 
 	slog.Info("Creating kind cluster", "cluster", cl.Name, "num", cl.Num, "nodeVersion", kindCfg.NodeVersion, "region", cl.Region, "zone", cl.Zone, "apiServerAddr", apiServerAddr)
 
-	containerdPatches := registry.ContainerdPatches(regCfg)
 	subnetPrefix := kindSubnetPrefix(kindCIDR)
 	apiPort := 7000 + cl.Num
 
@@ -84,10 +83,7 @@ kubeadmConfigPatches:
   nodeRegistration:
     kubeletExtraArgs:
       node-labels: "ingress-ready=true,topology.kubernetes.io/region=%s,topology.kubernetes.io/zone=%s"
-%scontainerdConfigPatches:
-- |-
-%s
-`, cl.Name, apiPort, cl.Num, cl.Num, cl.Region, cl.Zone, certSANsPatch, containerdPatches)
+%s`, cl.Name, apiPort, cl.Num, cl.Num, cl.Region, cl.Zone, certSANsPatch)
 
 	configPath := fmt.Sprintf("/tmp/klimax-kind-%s.yaml", cl.Name)
 
@@ -110,6 +106,10 @@ echo "kind cluster %s created"
 
 	if err := g.RunScript(ctx, fmt.Sprintf("create kind cluster %q", cl.Name), createScript); err != nil {
 		return fmt.Errorf("creating kind cluster %q: %w", cl.Name, err)
+	}
+
+	if err := configureRegistryMirrors(ctx, g, cl.Name, regCfg); err != nil {
+		return fmt.Errorf("configuring registry mirrors for cluster %q: %w", cl.Name, err)
 	}
 
 	if err := installMetalLB(ctx, g, cl, kindCfg.MetalLBVersion, subnetPrefix); err != nil {
@@ -160,6 +160,34 @@ func ListClusters(ctx context.Context, g *guest.Client) ([]string, error) {
 		return nil, nil
 	}
 	return strings.Split(out, "\n"), nil
+}
+
+// configureRegistryMirrors writes containerd certs.d hosts.toml files onto every
+// node so image pulls resolve through the local mirror / registry containers.
+//
+// Modern kind node images ship containerd 2.x, which defaults
+// config_path = "/etc/containerd/certs.d" and rejects the legacy
+// registry.mirrors config.toml block. containerd reads certs.d dynamically at
+// pull time, so no containerd restart is required.
+func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName string, regCfg config.RegistryConfig) error {
+	hosts := registry.RegistryHosts(regCfg)
+	if len(hosts) == 0 {
+		return nil
+	}
+	slog.Info("Configuring registry mirrors", "cluster", clusterName, "registries", len(hosts))
+
+	var sb strings.Builder
+	sb.WriteString("#!/bin/bash\nset -euo pipefail\n")
+	fmt.Fprintf(&sb, "for node in $(kind get nodes --name %s); do\n", clusterName)
+	for _, h := range hosts {
+		dir := "/etc/containerd/certs.d/" + h.Host
+		fmt.Fprintf(&sb, "  docker exec \"$node\" mkdir -p %q\n", dir)
+		fmt.Fprintf(&sb, "  docker exec -i \"$node\" tee %q >/dev/null <<'HOSTS_EOF'\n%sHOSTS_EOF\n",
+			dir+"/hosts.toml", h.HostsTOML())
+	}
+	sb.WriteString("done\n")
+
+	return g.RunScript(ctx, fmt.Sprintf("configure registry mirrors on cluster %q", clusterName), sb.String())
 }
 
 // installMetalLB applies the MetalLB manifests and configures an IPAddressPool

@@ -18,9 +18,11 @@ const (
 	ubuntuARM64 = "https://cloud-images.ubuntu.com/releases/25.04/release/ubuntu-25.04-server-cloudimg-arm64.img"
 )
 
-// kindCLIVersion is the kind binary version installed in the VM.
+// KindCLIVersion is the kind binary version installed in the VM.
 // Separate from the kind node image version (specified per-cluster in config).
-const kindCLIVersion = "v0.27.0"
+// Its default/validated kindest/node image tag is config.DefaultKindNodeVersion —
+// keep the two in sync when bumping kind.
+const KindCLIVersion = "v0.31.0"
 
 // provisionScript runs inside the VM as root (mode: system) on first boot.
 // It installs Docker, sets socket permissions, enables IP forwarding, and
@@ -75,7 +77,7 @@ fi
 ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
 
 # Install kind CLI if not present
-KIND_VERSION="` + kindCLIVersion + `"
+KIND_VERSION="` + KindCLIVersion + `"
 if ! command -v kind >/dev/null 2>&1; then
   curl -fsSLo /usr/local/bin/kind \
     "https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-${ARCH}"

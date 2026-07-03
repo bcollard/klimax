@@ -151,58 +151,58 @@ storage:
 	return sb.String()
 }
 
-// ContainerdPatches returns the containerd TOML patches for all configured registries.
-// These are embedded in the kind cluster config so every kind node uses the mirrors.
-func ContainerdPatches(cfg config.RegistryConfig) string {
-	var sb strings.Builder
+// RegistryHost maps an upstream registry hostname (as referenced in image names,
+// e.g. "docker.io") to the local mirror endpoint URL that serves it.
+type RegistryHost struct {
+	// Host is the registry as it appears in image references, and the directory
+	// name under /etc/containerd/certs.d/ (e.g. "docker.io", "kind-registry:5000").
+	Host string
+	// Endpoint is the local mirror URL containerd pulls from (e.g.
+	// "http://registry-dockerio:5030").
+	Endpoint string
+}
 
-	// Local registry
+// RegistryHosts returns the containerd certs.d host→mirror mappings for all
+// configured registries.
+//
+// Modern kind node images ship containerd 2.x, which defaults
+// config_path = "/etc/containerd/certs.d" and refuses the legacy
+// `registry.mirrors` config.toml block ("`mirrors` cannot be set when
+// `config_path` is provided"). We therefore write one hosts.toml per registry
+// under certs.d on each node (see WriteHostsTOML / kind.configureRegistryMirrors)
+// instead of patching containerd's config.toml.
+func RegistryHosts(cfg config.RegistryConfig) []RegistryHost {
+	var hosts []RegistryHost
+
+	// Local registry: reachable as both "kind-registry:<port>" and "localhost:<port>".
 	if cfg.LocalRegistry.Enabled {
 		host := fmt.Sprintf("%s:%d", localRegName, cfg.LocalRegistry.Port)
-		sb.WriteString(containerdMirrorEntry(host, host, cfg.LocalRegistry.Port, false, "", ""))
-		// Also mirror "localhost:<port>" alias used by some tools
-		sb.WriteString(containerdMirrorEntry(
-			fmt.Sprintf("localhost:%d", cfg.LocalRegistry.Port),
-			host, cfg.LocalRegistry.Port, false, "", ""))
+		endpoint := fmt.Sprintf("http://%s", host)
+		hosts = append(hosts,
+			RegistryHost{Host: host, Endpoint: endpoint},
+			RegistryHost{Host: fmt.Sprintf("localhost:%d", cfg.LocalRegistry.Port), Endpoint: endpoint},
+		)
 	}
 
-	// Pull-through mirrors
+	// Pull-through mirrors.
 	for _, m := range cfg.Mirrors {
-		remoteHost := remoteHostname(m.RemoteURL)
-		endpoint := fmt.Sprintf("%s:%d", m.Name, m.Port)
-		sb.WriteString(containerdMirrorEntry(remoteHost, endpoint, m.Port, false, m.Username, m.Password))
-		// docker.io needs extra alias for "index.docker.io"
+		endpoint := fmt.Sprintf("http://%s:%d", m.Name, m.Port)
+		hosts = append(hosts, RegistryHost{Host: remoteHostname(m.RemoteURL), Endpoint: endpoint})
+		// Images reference Docker Hub as "docker.io"; the mirror's remoteURL is
+		// "registry-1.docker.io", so add the "docker.io" alias too.
 		if strings.Contains(m.RemoteURL, "docker.io") {
-			sb.WriteString(containerdMirrorEntry("docker.io", endpoint, m.Port, false, m.Username, m.Password))
+			hosts = append(hosts, RegistryHost{Host: "docker.io", Endpoint: endpoint})
 		}
 	}
 
-	return sb.String()
+	return hosts
 }
 
-// containerdMirrorEntry builds a single containerd TOML mirror stanza.
-func containerdMirrorEntry(mirrorHost, endpoint string, port int, tls bool, user, pass string) string {
-	_ = port // port is embedded in endpoint string
-	var sb strings.Builder
-	scheme := "http"
-	if tls {
-		scheme = "https"
-	}
-	sb.WriteString(fmt.Sprintf(
-		"  [plugins.\"io.containerd.grpc.v1.cri\".registry.mirrors.\"%s\"]\n    endpoint = [\"%s://%s\"]\n",
-		mirrorHost, scheme, endpoint,
-	))
-	sb.WriteString(fmt.Sprintf(
-		"  [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"%s\".tls]\n    insecure_skip_verify = true\n",
-		mirrorHost,
-	))
-	if user != "" {
-		sb.WriteString(fmt.Sprintf(
-			"  [plugins.\"io.containerd.grpc.v1.cri\".registry.configs.\"%s\".auth]\n    username = %q\n    password = %q\n",
-			mirrorHost, user, pass,
-		))
-	}
-	return sb.String()
+// HostsTOML renders the containerd certs.d hosts.toml body for a single mirror.
+func (h RegistryHost) HostsTOML() string {
+	// skip_verify is a no-op for http endpoints but keeps the mirror usable if a
+	// future endpoint uses https with a self-signed cert.
+	return fmt.Sprintf("[host.%q]\n  capabilities = [\"pull\", \"resolve\"]\n  skip_verify = true\n", h.Endpoint)
 }
 
 // remoteHostname extracts the hostname from a remote URL (e.g. "https://quay.io" → "quay.io").

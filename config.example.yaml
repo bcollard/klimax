@@ -40,10 +40,10 @@ network:
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:
   # kindest/node image tag used when creating clusters.
-  nodeVersion: "v1.32.0"
+  nodeVersion: "v1.35.0"
 
   # MetalLB manifest version installed in every cluster.
-  metalLBVersion: "v0.14.9"
+  metalLBVersion: "v0.15.2"
 
   # Custom DNS zones forwarded to specific upstream resolvers by CoreDNS.
   # Each entry takes a domain and an optional list of resolvers.
