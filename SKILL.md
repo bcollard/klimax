@@ -29,7 +29,7 @@ brew install --cask klimax
 ```bash
 klimax up                              # Start VM + Docker + network + registries + routing. Idempotent.
 klimax cluster create <name>           # Create a kind cluster. Auto-assigns num (1-99), MetalLB, CoreDNS patches.
-klimax cluster apply -f fleet.yaml     # Create several clusters at once from a Fleet manifest (see below).
+klimax fleet create -f fleet.yaml      # Create several clusters at once from a Fleet manifest (see below).
 klimax cluster delete <name>           # Delete a cluster. ALWAYS pass <name> in scripts — omitting it opens an interactive picker that will hang a non-interactive agent.
 klimax cluster list                    # List clusters with num, API port, kubeconfig path.
 klimax cluster e2e-test-nginx          # Built-in smoke test: deploy nginx, expose via LoadBalancer, curl it. Uses your current kubectl context.
@@ -77,12 +77,17 @@ spec:
 ```
 
 ```bash
-klimax cluster apply -f fleet.yaml             # create the missing clusters (existing ones are skipped)
-klimax cluster apply -f fleet.yaml --dry-run   # preview the plan (nums, order, options); creates nothing
-klimax cluster delete -f fleet.yaml --yes      # tear the whole fleet down; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
+klimax fleet create -f fleet.yaml             # create the missing clusters (existing ones are skipped)
+klimax fleet create -f fleet.yaml --dry-run   # preview the plan (nums, order, options); creates nothing
+klimax fleet list                             # fleets and their member clusters
+klimax fleet label dev-fleet -l tier=gold     # label every cluster in the fleet (key- to remove)
+klimax fleet delete dev-fleet --yes           # delete every cluster in the fleet; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
+klimax fleet delete -f fleet.yaml --yes       # ...or delete exactly what the manifest lists
 ```
 
-`apply` is additive and synchronous — each cluster is fully ready when it returns. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors / toggle the local registry), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
+`create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors / toggle the local registry), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
+
+You can also filter/select clusters by label: `klimax cluster list -l klimax.dev/fleet=dev-fleet` and `klimax cluster delete -l env=test --yes`. (`klimax cluster apply -f` / `cluster delete -f` remain as lower-level equivalents of `fleet create` / `fleet delete -f`.)
 
 ## Ephemeral cluster for testing (agent recipe)
 

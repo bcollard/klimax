@@ -103,29 +103,93 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 // ─── delete ──────────────────────────────────────────────────────────────────
 
 func newClusterDeleteCmd() *cobra.Command {
-	var filename string
+	var filename, selector string
 	var yes bool
 	cmd := &cobra.Command{
 		Use:     "delete [name]",
 		Aliases: []string{"de", "d"},
-		Short:   "Delete a kind cluster (by name, from a Fleet manifest, or via an interactive picker)",
+		Short:   "Delete a kind cluster (by name, label selector, Fleet manifest, or interactive picker)",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if filename != "" {
-				if len(args) > 0 {
-					return errors.New("cannot combine a cluster name with -f")
+			switch {
+			case filename != "":
+				if len(args) > 0 || selector != "" {
+					return errors.New("cannot combine -f with a cluster name or -l")
 				}
 				return runClusterDeleteFromManifest(cmd.Context(), filename, yes)
-			}
-			if len(args) == 1 {
+			case selector != "":
+				if len(args) > 0 {
+					return errors.New("cannot combine -l with a cluster name")
+				}
+				return runClusterDeleteBySelector(cmd.Context(), selector, yes)
+			case len(args) == 1:
 				return runClusterDelete(cmd.Context(), args[0])
+			default:
+				return runClusterDeleteInteractive(cmd.Context())
 			}
-			return runClusterDeleteInteractive(cmd.Context())
 		},
 	}
 	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a Fleet manifest (- for stdin)")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Delete clusters whose nodes match this label selector (e.g. klimax.dev/fleet=f1)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
 	return cmd
+}
+
+// runClusterDeleteBySelector deletes all clusters whose nodes match the selector.
+func runClusterDeleteBySelector(ctx context.Context, selector string, yes bool) error {
+	cfg, g, err := connectToRunningVM(ctx)
+	if err != nil {
+		return err
+	}
+	targets, err := kind.ClustersMatchingSelector(ctx, g, selector)
+	if err != nil {
+		return err
+	}
+	if len(targets) == 0 {
+		fmt.Printf("No clusters match selector %q\n", selector)
+		return nil
+	}
+	return confirmAndDeleteClusters(ctx, g, cfg, targets, yes)
+}
+
+// confirmAndDeleteClusters deletes the given clusters (with kubeconfig cleanup),
+// prompting for confirmation first unless yes is set.
+func confirmAndDeleteClusters(ctx context.Context, g *guest.Client, cfg *config.Config, targets []string, yes bool) error {
+	if len(targets) == 0 {
+		fmt.Println("Nothing to delete.")
+		return nil
+	}
+	fmt.Printf("The following clusters will be deleted:\n  %s\n", strings.Join(targets, "\n  "))
+	if !yes {
+		fmt.Print("Proceed? [y/N] ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	autoRemove := cfg.Kind.AutoRemoveKubeconfig != nil && *cfg.Kind.AutoRemoveKubeconfig
+	var failed []string
+	for _, name := range targets {
+		fmt.Printf("→ deleting cluster %q\n", name)
+		if err := kind.DeleteCluster(ctx, g, name); err != nil {
+			slog.Error("Delete failed", "cluster", name, "err", err)
+			failed = append(failed, name)
+			continue
+		}
+		if autoRemove {
+			if err := removeFromKubeconfig(name); err != nil {
+				slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+			}
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%d cluster(s) failed to delete: %s", len(failed), strings.Join(failed, ", "))
+	}
+	fmt.Printf("\ndeleted %d cluster(s)\n", len(targets))
+	return nil
 }
 
 func runClusterDelete(ctx context.Context, name string) error {
@@ -304,16 +368,17 @@ func runPicker(items []pickerItem) ([]string, error) {
 // ─── list ────────────────────────────────────────────────────────────────────
 
 func newClusterListCmd() *cobra.Command {
-	var outputFmt string
+	var outputFmt, selector string
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls", "l"},
 		Short:   "List kind clusters running in the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClusterList(cmd.Context(), outputFmt)
+			return runClusterList(cmd.Context(), outputFmt, selector)
 		},
 	}
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "text", "Output format: text, json, yaml")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Filter by node label selector (e.g. klimax.dev/fleet=f1)")
 	return cmd
 }
 
@@ -324,13 +389,18 @@ type clusterInfo struct {
 	KubeconfigPath string `json:"kubeconfigPath" yaml:"kubeconfigPath"`
 }
 
-func runClusterList(ctx context.Context, outputFmt string) error {
+func runClusterList(ctx context.Context, outputFmt, selector string) error {
 	_, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
 	}
 
-	names, err := kind.ListClusters(ctx, g)
+	var names []string
+	if selector != "" {
+		names, err = kind.ClustersMatchingSelector(ctx, g, selector)
+	} else {
+		names, err = kind.ListClusters(ctx, g)
+	}
 	if err != nil {
 		return err
 	}
@@ -573,29 +643,8 @@ nodes --all --overwrite). Use -l key=value to set/overwrite a label and
 }
 
 func runClusterLabel(ctx context.Context, name string, specs []string) error {
-	if len(specs) == 0 {
-		return errors.New("at least one -l key=value (or key- to remove) is required")
-	}
-
-	// Split into kubectl label operands, validating keys/values.
-	setMap := map[string]string{}
-	kubeArgs := make([]string, 0, len(specs))
-	for _, s := range specs {
-		if key, ok := strings.CutSuffix(s, "-"); ok && !strings.Contains(s, "=") {
-			if err := config.ValidateLabels(map[string]string{key: ""}); err != nil {
-				return fmt.Errorf("invalid label key %q: %w", key, err)
-			}
-			kubeArgs = append(kubeArgs, key+"-")
-			continue
-		}
-		k, v, ok := strings.Cut(s, "=")
-		if !ok {
-			return fmt.Errorf("invalid label %q: expected key=value or key-", s)
-		}
-		setMap[k] = v
-		kubeArgs = append(kubeArgs, k+"="+v)
-	}
-	if err := config.ValidateLabels(setMap); err != nil {
+	kubeArgs, err := parseLabelSpecs(specs)
+	if err != nil {
 		return err
 	}
 
@@ -617,6 +666,35 @@ func runClusterLabel(ctx context.Context, name string, specs []string) error {
 	}
 	fmt.Printf("Labeled nodes on cluster %q\n", name)
 	return nil
+}
+
+// parseLabelSpecs turns "key=value" / "key-" specs (from a repeatable -l flag)
+// into validated kubectl label operands. Shared by `cluster label` and `fleet label`.
+func parseLabelSpecs(specs []string) ([]string, error) {
+	if len(specs) == 0 {
+		return nil, errors.New("at least one -l key=value (or key- to remove) is required")
+	}
+	setMap := map[string]string{}
+	args := make([]string, 0, len(specs))
+	for _, s := range specs {
+		if key, ok := strings.CutSuffix(s, "-"); ok && !strings.Contains(s, "=") {
+			if err := config.ValidateLabels(map[string]string{key: ""}); err != nil {
+				return nil, fmt.Errorf("invalid label key %q: %w", key, err)
+			}
+			args = append(args, key+"-")
+			continue
+		}
+		k, v, ok := strings.Cut(s, "=")
+		if !ok {
+			return nil, fmt.Errorf("invalid label %q: expected key=value or key-", s)
+		}
+		setMap[k] = v
+		args = append(args, k+"="+v)
+	}
+	if err := config.ValidateLabels(setMap); err != nil {
+		return nil, err
+	}
+	return args, nil
 }
 
 // ─── e2e-test-nginx ──────────────────────────────────────────────────────────

@@ -289,12 +289,13 @@ klimax cluster apply -f fleet.yaml --max-parallel 3
 # Delete — interactive multi-select picker when no name given
 klimax cluster delete <name>
 klimax cluster delete
-klimax cluster delete -f fleet.yaml --yes   # tear down a whole fleet
+klimax cluster delete -f fleet.yaml --yes            # tear down a whole fleet
+klimax cluster delete -l env=test --yes              # delete by label selector
 
 # List
 klimax cluster list
 klimax cluster list -o json
-klimax cluster list -o yaml
+klimax cluster list -l klimax.dev/fleet=dev-fleet    # filter by label selector
 
 # Label an existing cluster's nodes
 klimax cluster label <name> -l team=platform -l env=prod   # set/overwrite
@@ -321,15 +322,17 @@ Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm
   2 cluster(s) selected — press Enter to delete
 ```
 
-### Fleets — `klimax cluster apply -f`
+### Fleets — `klimax fleet`
 
-Create several clusters at once from a declarative **Fleet** manifest. The
-minimal manifest lists only names — everything else defaults:
+Create and manage several clusters at once from a declarative **Fleet** manifest.
+The minimal manifest lists only names — everything else defaults:
 
 ```yaml
 # fleet.yaml
 apiVersion: klimax.dev/v1alpha1
 kind: Fleet
+metadata:
+  name: dev-fleet
 spec:
   clusters:
     - dev
@@ -337,22 +340,25 @@ spec:
 ```
 
 ```sh
-klimax cluster apply -f fleet.yaml
+klimax fleet create -f fleet.yaml         # create the clusters (--dry-run to preview, --max-parallel N)
+klimax fleet list                         # show fleets and their member clusters
+klimax fleet label dev-fleet -l tier=gold # label every cluster in the fleet (key- to remove)
+klimax fleet delete dev-fleet --yes       # delete every cluster in the fleet
+klimax fleet delete -f fleet.yaml --yes   # ...or tear down exactly what the manifest lists
 ```
 
-`apply` is **additive**: clusters that already exist are skipped. Each entry can
+Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so
+`fleet list/label/delete` work on the live clusters regardless of the manifest.
+
+`create` is **additive**: clusters that already exist are skipped. Each entry can
 optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 `registries` (cherry-pick mirrors / toggle the local registry),
 `addons.metricsServer`, and `labels`. Independent clusters build in parallel up to
-`spec.maxParallel`; `dependsOn` is always respected. Use `--dry-run` to preview
-the plan (assigned nums, ordering, per-cluster options). See
+`spec.maxParallel`; `dependsOn` is always respected. See
 [`examples/fleet.yaml`](examples/fleet.yaml) for the full reference.
 
-Tear the fleet back down with the same manifest (reverse-dependency order):
-
-```sh
-klimax cluster delete -f fleet.yaml --yes
-```
+> `klimax cluster apply -f` / `cluster delete -f` remain as lower-level equivalents
+> of `fleet create` / `fleet delete -f`.
 
 ### Per-cluster resources (auto-assigned from `--num N`)
 

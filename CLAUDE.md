@@ -78,7 +78,8 @@ internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspe
 internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
 internal/registry/registry.go        EnsureRegistries, RegistryHosts (local reg + mirrors → containerd certs.d hosts.toml + cache volumes)
-internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum
+internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
+internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/fleet/fleet.go              Fleet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
 internal/fleet/plan.go               Resolve → Plan (num pre-assignment, defaults merge, existence marking), DeletionOrder
@@ -98,6 +99,7 @@ internal/cli/shell.go                `klimax shell` — interactive SSH session 
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/label/e2e-test-nginx)
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
+internal/cli/fleet.go                `klimax fleet` subcommands (list/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest
 internal/cli/registry.go             `klimax registry clean-cache`
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
@@ -238,6 +240,7 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
 - **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
 - **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every klimax cluster always gets `managed-by=klimax`; fleets add `klimax.dev/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `klimax cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
+- **`fleet` command & selectors**: fleet membership is derived from the live `klimax.dev/fleet` node label (not the manifest), so `klimax fleet list/delete/label <name>` operate on whatever clusters currently carry the label. `fleet delete <name>` and `fleet label <name>` resolve members via `kind.ClustersMatchingSelector(g, "klimax.dev/fleet=<name>")`; `fleet list` groups via `kind.ClustersByFleet`. `cluster list -l` / `cluster delete -l` take an arbitrary kubectl label selector (matched in-guest by kubectl, one call per cluster). `fleet create -f`/`delete -f` delegate to the same code as `cluster apply -f`/`delete -f`. Selectors are charset-validated (`selectorRE`) before shell interpolation.
 
 ---
 
@@ -270,8 +273,11 @@ klimax cluster apply -f <file>         Create a fleet from a Fleet manifest (- f
   --max-parallel N                     Override spec.maxParallel (concurrent creations)
 klimax cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
   -f <file>                            Delete the clusters listed in a Fleet manifest (reverse-dependency order)
+  -l, --selector <sel>                 Delete clusters whose nodes match a label selector
   -y, --yes                            Skip the confirmation prompt
-klimax cluster list [-o text|json|yaml] List clusters with num, API port, kubeconfig path
+klimax cluster list                    List clusters with num, API port, kubeconfig path
+  -o text|json|yaml                    Output format
+  -l, --selector <sel>                 Filter by node label selector (e.g. klimax.dev/fleet=f1)
 klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
 klimax cluster merge <name>            Merge cluster context into ~/.kube/config
 klimax cluster label <name>            Label an existing cluster's nodes
@@ -279,6 +285,12 @@ klimax cluster label <name>            Label an existing cluster's nodes
   -l, --label key-                    Remove a node label
 klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses current kubectl context on host
   --cleanup                            Only remove nginx pod/svc (does NOT run the test)
+
+klimax fleet create -f <file>          Create clusters from a Fleet manifest (alias of 'cluster apply -f'; --dry-run, --max-parallel)
+klimax fleet list [-o text|json|yaml]  List fleets (grouped by klimax.dev/fleet) and their member clusters
+klimax fleet delete <name>             Delete all clusters in the named fleet (-y to skip prompt)
+klimax fleet delete -f <file>          Delete the clusters listed in a Fleet manifest
+klimax fleet label <name> -l key=value Apply node labels to every cluster in the fleet (key- to remove)
 
 klimax registry clean-cache            Stop mirror containers + delete cache dirs; run 'klimax up' to restart
 
