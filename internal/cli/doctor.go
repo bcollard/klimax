@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -64,6 +65,11 @@ func runDoctor(ctx context.Context) error {
 		ok = false
 	}
 
+	// Check Rosetta 2 on the host (Apple Silicon only; required only if vm.rosetta: true)
+	if !checkRosettaHost(cfg.VM.Rosetta) {
+		ok = false
+	}
+
 	// Guest checks only if VM is running
 	if inst != nil && inst.Status == limatype.StatusRunning {
 		g, err := guest.NewClient(inst)
@@ -95,6 +101,24 @@ func runDoctor(ctx context.Context) error {
 				fmt.Println("  Fix: sudo sysctl -w net.ipv4.ip_forward=1  (inside the VM)")
 				ok = false
 			}
+
+			// Check whether Rosetta is active in the VM (binfmt_misc registration).
+			rosettaActive := false
+			if out, rerr := g.Run(ctx, "test -e /proc/sys/fs/binfmt_misc/rosetta && echo yes || echo no"); rerr == nil {
+				rosettaActive = strings.TrimSpace(out) == "yes"
+			}
+			switch {
+			case cfg.VM.Rosetta && rosettaActive:
+				fmt.Println("[OK]   Rosetta is enabled in the VM (amd64 containers supported)")
+			case cfg.VM.Rosetta && !rosettaActive:
+				fmt.Println("[FAIL] vm.rosetta is set but Rosetta is not active in the VM")
+				fmt.Println("  Fix: install Rosetta on the host, then: klimax destroy -c " + configFile + " && klimax up -c " + configFile)
+				ok = false
+			case rosettaActive:
+				fmt.Println("[OK]   Rosetta is active in the VM (vm.rosetta not set in config)")
+			default:
+				fmt.Println("[OK]   Rosetta is not enabled in the VM (vm.rosetta: false)")
+			}
 		}
 	}
 
@@ -104,6 +128,29 @@ func runDoctor(ctx context.Context) error {
 		fmt.Println("\nSome checks failed — see Fix suggestions above.")
 	}
 	return nil
+}
+
+// checkRosettaHost reports whether Rosetta 2 is installed on the macOS host.
+// Rosetta exists only on Apple Silicon and is required only when vm.rosetta: true
+// (transparent amd64 container support). Returns false only when it is a genuine
+// problem — i.e. Rosetta is requested in config but not installed.
+func checkRosettaHost(wanted bool) bool {
+	if runtime.GOARCH != "arm64" {
+		fmt.Println("[OK]   Rosetta N/A — host is not Apple Silicon")
+		return true
+	}
+	// The runtime file is present once `softwareupdate --install-rosetta` has run.
+	if _, err := os.Stat("/Library/Apple/usr/libexec/oah/libRosettaRuntime"); err == nil {
+		fmt.Println("[OK]   Rosetta 2 is installed on the host")
+		return true
+	}
+	if wanted {
+		fmt.Println("[FAIL] vm.rosetta is enabled but Rosetta 2 is not installed on the host")
+		fmt.Println("  Fix: softwareupdate --install-rosetta --agree-to-license")
+		return false
+	}
+	fmt.Println("[OK]   Rosetta 2 not installed on host (only needed for vm.rosetta: true)")
+	return true
 }
 
 // checkHostagent detects a running hostagent whose on-disk binary has been
