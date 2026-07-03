@@ -280,6 +280,11 @@ klimax cluster create <name>
 klimax cluster create <name> --num 3             # pin to slot 3
 klimax cluster create <name> --region us-east1 --zone us-east1-a
 
+# Apply a fleet from a ClusterSet manifest (see below)
+klimax cluster apply -f clusterset.yaml
+klimax cluster apply -f clusterset.yaml --dry-run
+klimax cluster apply -f clusterset.yaml --max-parallel 3
+
 # Delete — interactive multi-select picker when no name given
 klimax cluster delete <name>
 klimax cluster delete
@@ -309,6 +314,33 @@ Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm
 
   2 cluster(s) selected — press Enter to delete
 ```
+
+### Fleets — `klimax cluster apply -f`
+
+Create several clusters at once from a declarative **ClusterSet** manifest. The
+minimal manifest lists only names — everything else defaults:
+
+```yaml
+# clusterset.yaml
+apiVersion: klimax.dev/v1alpha1
+kind: ClusterSet
+spec:
+  clusters:
+    - dev
+    - staging
+```
+
+```sh
+klimax cluster apply -f clusterset.yaml
+```
+
+`apply` is **additive**: clusters that already exist are skipped. Each entry can
+optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
+`registries` (cherry-pick mirrors / toggle the local registry), and
+`addons.metricsServer`. Independent clusters build in parallel up to
+`spec.maxParallel`; `dependsOn` is always respected. Use `--dry-run` to preview
+the plan (assigned nums, ordering, per-cluster options). See
+[`examples/clusterset.yaml`](examples/clusterset.yaml) for the full reference.
 
 ### Per-cluster resources (auto-assigned from `--num N`)
 

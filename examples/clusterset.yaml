@@ -1,0 +1,58 @@
+# klimax ClusterSet — declarative fleet of kind clusters.
+# Apply with:  klimax cluster apply -f clusterset.yaml
+#
+# ─── The minimal manifest ─────────────────────────────────────────────────────
+# Only cluster names are required; everything else defaults. This is a complete,
+# valid manifest:
+#
+#   apiVersion: klimax.dev/v1alpha1
+#   kind: ClusterSet
+#   spec:
+#     clusters:
+#       - dev
+#       - staging
+#
+# ─── Full reference (every field is optional except spec.clusters) ────────────
+apiVersion: klimax.dev/v1alpha1
+kind: ClusterSet
+metadata:
+  name: dev-fleet
+spec:
+  # Concurrent cluster creations. 0/1 = sequential (default). Independent
+  # clusters run in parallel up to this cap; dependsOn ordering is always honoured.
+  maxParallel: 2
+
+  # FailFast (default): stop scheduling new clusters after the first failure.
+  # ContinueOnError: keep creating independent clusters and report failures at the end.
+  strategy: FailFast
+
+  # Applied to every cluster below that does not set the field itself.
+  defaults:
+    registries:
+      localRegistry: true
+      mirrors: ["*"]        # all mirrors from ~/.klimax/config.yaml
+
+  clusters:
+    # A bare string is shorthand for "just create a cluster with this name".
+    - hub
+
+    # An object entry can override any per-cluster option.
+    - name: spoke-a
+      dependsOn: [hub]      # created only after "hub" is ready
+      # num: 7              # pin the cluster num (1-99); omit to auto-assign a free slot
+      # nodeVersion: v1.35.0  # ⚠ overriding is unsupported; see 'klimax cluster create' warning
+      region: europe-west4
+      zone: europe-west4-b
+      registries:
+        mirrors: ["registry-dockerio", "registry-quayio"]   # cherry-pick by name
+      addons:
+        metricsServer:
+          enabled: true
+          # version: v0.7.2          # omit for the latest release
+          # kubeletInsecureTLS: true # default true (required on kind)
+
+    - name: spoke-b
+      dependsOn: [hub]
+      registries:
+        mirrors: []          # no pull-through mirrors (pull straight from upstream)
+        localRegistry: false # no kind-registry push registry

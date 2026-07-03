@@ -29,6 +29,7 @@ func newClusterCmd() *cobra.Command {
 	}
 	cmd.AddCommand(
 		newClusterCreateCmd(),
+		newClusterApplyCmd(),
 		newClusterDeleteCmd(),
 		newClusterListCmd(),
 		newClusterUseCmd(),
