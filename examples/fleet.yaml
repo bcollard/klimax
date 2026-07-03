@@ -1,12 +1,12 @@
-# klimax ClusterSet — declarative fleet of kind clusters.
-# Apply with:  klimax cluster apply -f clusterset.yaml
+# klimax Fleet — declarative fleet of kind clusters.
+# Apply with:  klimax cluster apply -f fleet.yaml
 #
 # ─── The minimal manifest ─────────────────────────────────────────────────────
 # Only cluster names are required; everything else defaults. This is a complete,
 # valid manifest:
 #
 #   apiVersion: klimax.dev/v1alpha1
-#   kind: ClusterSet
+#   kind: Fleet
 #   spec:
 #     clusters:
 #       - dev
@@ -14,7 +14,7 @@
 #
 # ─── Full reference (every field is optional except spec.clusters) ────────────
 apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 metadata:
   name: dev-fleet
 spec:

@@ -1,11 +1,11 @@
-package clusterset
+package fleet
 
 import "testing"
 
 // minimal manifest: only cluster names, everything else defaulted.
 func TestParseMinimalNamesOnly(t *testing.T) {
 	data := []byte(`apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - dev
@@ -29,7 +29,7 @@ spec:
 // entries may mix bare strings and full objects.
 func TestParseMixedEntries(t *testing.T) {
 	data := []byte(`apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - hub
@@ -64,25 +64,25 @@ spec:
 func TestValidateErrors(t *testing.T) {
 	cases := map[string]string{
 		"bad apiVersion": `apiVersion: v1
-kind: ClusterSet
+kind: Fleet
 spec: {clusters: [a]}`,
 		"bad kind": `apiVersion: klimax.dev/v1alpha1
 kind: Pod
 spec: {clusters: [a]}`,
 		"no clusters": `apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec: {clusters: []}`,
 		"dup name": `apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec: {clusters: [a, a]}`,
 		"unknown dep": `apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - name: a
       dependsOn: [ghost]`,
 		"cycle": `apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - name: a
@@ -90,7 +90,7 @@ spec:
     - name: b
       dependsOn: [a]`,
 		"dup num": `apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - name: a
@@ -111,7 +111,7 @@ spec:
 
 func TestResolveNumAssignment(t *testing.T) {
 	data := []byte(`apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - name: keep       # already exists at num 2
@@ -159,7 +159,7 @@ spec:
 
 func TestResolvePinnedNumConflictsWithLive(t *testing.T) {
 	data := []byte(`apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - name: newone

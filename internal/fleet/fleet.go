@@ -1,4 +1,4 @@
-// Package clusterset parses and validates the klimax ClusterSet manifest — a
+// Package fleet parses and validates the klimax Fleet manifest — a
 // declarative description of a fleet of kind clusters applied via
 // `klimax cluster apply -f`. It is deliberately separate from the infrastructure
 // config (~/.klimax/config.yaml): the manifest is an ephemeral input, like a
@@ -7,7 +7,7 @@
 // The minimal manifest a user must write only lists cluster names:
 //
 //	apiVersion: klimax.dev/v1alpha1
-//	kind: ClusterSet
+//	kind: Fleet
 //	spec:
 //	  clusters:
 //	    - dev
@@ -15,7 +15,7 @@
 //
 // Every other field (dependsOn, num, nodeVersion, registries, addons, defaults,
 // maxParallel, strategy) is optional and falls back to sensible defaults.
-package clusterset
+package fleet
 
 import (
 	"bytes"
@@ -30,7 +30,7 @@ const (
 	// APIVersion is the manifest apiVersion accepted by `klimax cluster apply`.
 	APIVersion = "klimax.dev/v1alpha1"
 	// Kind is the only manifest kind supported today.
-	Kind = "ClusterSet"
+	Kind = "Fleet"
 
 	// StrategyFailFast stops scheduling new clusters after the first failure.
 	StrategyFailFast = "FailFast"
@@ -44,8 +44,8 @@ const (
 // clusterNameRE is a light sanity check; kind enforces the strict rules.
 var clusterNameRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$`)
 
-// ClusterSet is the top-level manifest.
-type ClusterSet struct {
+// Fleet is the top-level manifest.
+type Fleet struct {
 	APIVersion string   `yaml:"apiVersion"`
 	Kind       string   `yaml:"kind"`
 	Metadata   Metadata `yaml:"metadata"`
@@ -128,19 +128,19 @@ type MetricsServer struct {
 	KubeletInsecureTLS *bool `yaml:"kubeletInsecureTLS"`
 }
 
-// Parse decodes a ClusterSet manifest from YAML bytes (strict: unknown fields error).
-func Parse(data []byte) (*ClusterSet, error) {
-	var cs ClusterSet
+// Parse decodes a Fleet manifest from YAML bytes (strict: unknown fields error).
+func Parse(data []byte) (*Fleet, error) {
+	var cs Fleet
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 	if err := dec.Decode(&cs); err != nil {
-		return nil, fmt.Errorf("parsing ClusterSet manifest: %w", err)
+		return nil, fmt.Errorf("parsing Fleet manifest: %w", err)
 	}
 	return &cs, nil
 }
 
 // Validate checks the manifest for structural and referential errors.
-func (cs *ClusterSet) Validate() error {
+func (cs *Fleet) Validate() error {
 	if cs.APIVersion != APIVersion {
 		return fmt.Errorf("unsupported apiVersion %q (want %q)", cs.APIVersion, APIVersion)
 	}
@@ -203,7 +203,7 @@ func (cs *ClusterSet) Validate() error {
 }
 
 // detectCycle returns a human-readable cycle path, or "" if the DAG is acyclic.
-func (cs *ClusterSet) detectCycle() string {
+func (cs *Fleet) detectCycle() string {
 	deps := make(map[string][]string, len(cs.Spec.Clusters))
 	for _, c := range cs.Spec.Clusters {
 		deps[c.Name] = c.DependsOn

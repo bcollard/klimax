@@ -100,7 +100,7 @@ func newClusterDeleteCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "delete [name]",
 		Aliases: []string{"de", "d"},
-		Short:   "Delete a kind cluster (by name, from a ClusterSet manifest, or via an interactive picker)",
+		Short:   "Delete a kind cluster (by name, from a Fleet manifest, or via an interactive picker)",
 		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if filename != "" {
@@ -115,7 +115,7 @@ func newClusterDeleteCmd() *cobra.Command {
 			return runClusterDeleteInteractive(cmd.Context())
 		},
 	}
-	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a ClusterSet manifest (- for stdin)")
+	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a Fleet manifest (- for stdin)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
 	return cmd
 }

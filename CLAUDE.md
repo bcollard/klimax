@@ -16,7 +16,7 @@ Go CLI that wraps **Lima** to manage a macOS Virtualization.framework VM running
 - **Lima Go packages** (`github.com/lima-vm/lima/v2`) — never shell out to `limactl`.
 - **`vmType: vz` only** — macOS Virtualization.framework; no QEMU.
 - **`up` is infrastructure-only** — it creates/starts the VM, provisions Docker, the kind network, registries, and routing rules. It does **not** create or manage kind clusters.
-- **Cluster lifecycle is CLI-only** — `klimax cluster create/delete/list`. There is no cluster list in the config file. `klimax cluster apply -f <ClusterSet>` creates a *fleet* declaratively, but the manifest is a **separate, ephemeral input** (like `kubectl apply -f`), never `config.yaml` — the config stays infra-only. `apply` is additive (create-if-absent, skip-if-present).
+- **Cluster lifecycle is CLI-only** — `klimax cluster create/delete/list`. There is no cluster list in the config file. `klimax cluster apply -f <Fleet>` creates a *fleet* declaratively, but the manifest is a **separate, ephemeral input** (like `kubectl apply -f`), never `config.yaml` — the config stays infra-only. `apply` is additive (create-if-absent, skip-if-present).
 - **All provisioning is idempotent** — safe to re-run `klimax up` at any time.
 - **Pure L3 routing, no SNAT** — macOS routes `kindBridgeCIDR` to the VM's `lima0` IP; iptables exempts replies from MASQUERADE.
 
@@ -80,8 +80,8 @@ internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR compari
 internal/registry/registry.go        EnsureRegistries, RegistryHosts (local reg + mirrors → containerd certs.d hosts.toml + cache volumes)
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum
 internal/kind/addons.go              InstallMetricsServer (addon installers)
-internal/clusterset/clusterset.go    ClusterSet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
-internal/clusterset/plan.go          Resolve → Plan (num pre-assignment, defaults merge, existence marking)
+internal/fleet/fleet.go              Fleet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
+internal/fleet/plan.go               Resolve → Plan (num pre-assignment, defaults merge, existence marking), DeletionOrder
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
@@ -97,7 +97,7 @@ internal/cli/version.go              `klimax version`
 internal/cli/shell.go                `klimax shell` — interactive SSH session into the VM
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/e2e-test-nginx)
-internal/cli/cluster_apply.go        `klimax cluster apply -f` — ClusterSet fleet: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
+internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/registry.go             `klimax registry clean-cache`
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
@@ -220,23 +220,23 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 
 ---
 
-## ClusterSet fleet manifest (`klimax cluster apply -f`)
+## Fleet manifest (`klimax cluster apply -f`)
 
-A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/clusterset.yaml`.
+A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/fleet.yaml`.
 
 - **Minimal manifest lists only names** — everything else defaults:
   ```yaml
   apiVersion: klimax.dev/v1alpha1
-  kind: ClusterSet
+  kind: Fleet
   spec:
     clusters: [dev, staging]
   ```
-- **`ClusterEntry` unmarshals from a bare string OR an object** (`clusterset.ClusterEntry.UnmarshalYAML`) — that's what makes the names-only form work.
+- **`ClusterEntry` unmarshals from a bare string OR an object** (`fleet.ClusterEntry.UnmarshalYAML`) — that's what makes the names-only form work.
 - **Per-cluster options**: `dependsOn`, `num`, `nodeVersion`, `region`, `zone`, `registries` (cherry-pick: `localRegistry` bool + `mirrors` — `nil`=all, `["*"]`=all, `[]`=none, `[names]`=subset, by config mirror name), `addons.metricsServer` (`enabled`/`version`/`kubeletInsecureTLS`). `spec.defaults` supplies inherited values.
 - **Scheduler** (`internal/cli/cluster_apply.go`): builds a dependsOn DAG, creates clusters up to `spec.maxParallel` at a time (default 1 = sequential), gating each on its dependencies via per-cluster `done` channels. `strategy: FailFast` (default) stops scheduling new clusters after the first failure; `ContinueOnError` presses on.
-- **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `clusterset.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
+- **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
-- **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`clusterset.DeletionOrder`), prompting unless `--yes`.
+- **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
 
 ---
 
@@ -263,11 +263,11 @@ klimax cluster create <name>           Create a kind cluster (num auto-assigned)
   --num N                              Override cluster num (1-99)
   --region europe-west1                Override topology region label
   --zone   europe-west1-b              Override topology zone label
-klimax cluster apply -f <file>         Create a fleet from a ClusterSet manifest (- for stdin)
+klimax cluster apply -f <file>         Create a fleet from a Fleet manifest (- for stdin)
   --dry-run                            Print the resolved plan (nums, DAG, options) and exit
   --max-parallel N                     Override spec.maxParallel (concurrent creations)
 klimax cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
-  -f <file>                            Delete the clusters listed in a ClusterSet manifest (reverse-dependency order)
+  -f <file>                            Delete the clusters listed in a Fleet manifest (reverse-dependency order)
   -y, --yes                            Skip the confirmation prompt
 klimax cluster list [-o text|json|yaml] List clusters with num, API port, kubeconfig path
 klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig

@@ -280,15 +280,15 @@ klimax cluster create <name>
 klimax cluster create <name> --num 3             # pin to slot 3
 klimax cluster create <name> --region us-east1 --zone us-east1-a
 
-# Apply a fleet from a ClusterSet manifest (see below)
-klimax cluster apply -f clusterset.yaml
-klimax cluster apply -f clusterset.yaml --dry-run
-klimax cluster apply -f clusterset.yaml --max-parallel 3
+# Apply a fleet from a Fleet manifest (see below)
+klimax cluster apply -f fleet.yaml
+klimax cluster apply -f fleet.yaml --dry-run
+klimax cluster apply -f fleet.yaml --max-parallel 3
 
 # Delete — interactive multi-select picker when no name given
 klimax cluster delete <name>
 klimax cluster delete
-klimax cluster delete -f clusterset.yaml --yes   # tear down a whole fleet
+klimax cluster delete -f fleet.yaml --yes   # tear down a whole fleet
 
 # List
 klimax cluster list
@@ -318,13 +318,13 @@ Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm
 
 ### Fleets — `klimax cluster apply -f`
 
-Create several clusters at once from a declarative **ClusterSet** manifest. The
+Create several clusters at once from a declarative **Fleet** manifest. The
 minimal manifest lists only names — everything else defaults:
 
 ```yaml
-# clusterset.yaml
+# fleet.yaml
 apiVersion: klimax.dev/v1alpha1
-kind: ClusterSet
+kind: Fleet
 spec:
   clusters:
     - dev
@@ -332,7 +332,7 @@ spec:
 ```
 
 ```sh
-klimax cluster apply -f clusterset.yaml
+klimax cluster apply -f fleet.yaml
 ```
 
 `apply` is **additive**: clusters that already exist are skipped. Each entry can
@@ -341,12 +341,12 @@ optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 `addons.metricsServer`. Independent clusters build in parallel up to
 `spec.maxParallel`; `dependsOn` is always respected. Use `--dry-run` to preview
 the plan (assigned nums, ordering, per-cluster options). See
-[`examples/clusterset.yaml`](examples/clusterset.yaml) for the full reference.
+[`examples/fleet.yaml`](examples/fleet.yaml) for the full reference.
 
 Tear the fleet back down with the same manifest (reverse-dependency order):
 
 ```sh
-klimax cluster delete -f clusterset.yaml --yes
+klimax cluster delete -f fleet.yaml --yes
 ```
 
 ### Per-cluster resources (auto-assigned from `--num N`)

@@ -1,4 +1,4 @@
-package clusterset
+package fleet
 
 import "fmt"
 
@@ -10,7 +10,7 @@ type PlannedCluster struct {
 	Exists bool
 }
 
-// Plan is the resolved, ready-to-execute view of a ClusterSet.
+// Plan is the resolved, ready-to-execute view of a Fleet.
 type Plan struct {
 	Name        string
 	MaxParallel int
@@ -32,7 +32,7 @@ func (p *Plan) ToCreate() []PlannedCluster {
 // DeletionOrder returns cluster names in reverse dependency order — dependents
 // before the clusters they depend on — which is the safe order for teardown.
 // The manifest must already be acyclic (see Validate).
-func (cs *ClusterSet) DeletionOrder() []string {
+func (cs *Fleet) DeletionOrder() []string {
 	deps := make(map[string][]string, len(cs.Spec.Clusters))
 	names := make([]string, 0, len(cs.Spec.Clusters))
 	for _, c := range cs.Spec.Clusters {
@@ -68,7 +68,7 @@ func (cs *ClusterSet) DeletionOrder() []string {
 // each create race for the next free slot) is what makes parallel creation safe.
 //
 // existing maps live cluster num → name (from kind.DetectUsedNums).
-func (cs *ClusterSet) Resolve(existing map[int]string) (*Plan, error) {
+func (cs *Fleet) Resolve(existing map[int]string) (*Plan, error) {
 	existingByName := make(map[string]int, len(existing))
 	for num, name := range existing {
 		existingByName[name] = num

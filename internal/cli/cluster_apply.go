@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bcollard/klimax/internal/clusterset"
 	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/klimax/internal/fleet"
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/kind"
 	"github.com/spf13/cobra"
@@ -23,9 +23,9 @@ func newClusterApplyCmd() *cobra.Command {
 	var dryRun bool
 	var maxParallel int
 	cmd := &cobra.Command{
-		Use:   "apply -f <clusterset.yaml>",
-		Short: "Create a fleet of kind clusters from a ClusterSet manifest",
-		Long: `Reconcile the cluster fleet described by a ClusterSet manifest: create every
+		Use:   "apply -f <fleet.yaml>",
+		Short: "Create a fleet of kind clusters from a Fleet manifest",
+		Long: `Reconcile the cluster fleet described by a Fleet manifest: create every
 listed cluster that does not yet exist, honouring dependsOn ordering and running
 independent clusters up to maxParallel at a time. Existing clusters are left
 untouched (apply is additive).
@@ -33,7 +33,7 @@ untouched (apply is additive).
 The minimal manifest only lists cluster names:
 
   apiVersion: klimax.dev/v1alpha1
-  kind: ClusterSet
+  kind: Fleet
   spec:
     clusters:
       - dev
@@ -46,7 +46,7 @@ The minimal manifest only lists cluster names:
 			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel)
 		},
 	}
-	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Path to a ClusterSet manifest (- for stdin)")
+	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Path to a Fleet manifest (- for stdin)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the resolved plan and exit without creating anything")
 	cmd.Flags().IntVar(&maxParallel, "max-parallel", 0, "Override spec.maxParallel (concurrent cluster creations)")
 	return cmd
@@ -57,12 +57,12 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 	if err != nil {
 		return err
 	}
-	cs, err := clusterset.Parse(data)
+	cs, err := fleet.Parse(data)
 	if err != nil {
 		return err
 	}
 	if err := cs.Validate(); err != nil {
-		return fmt.Errorf("invalid ClusterSet: %w", err)
+		return fmt.Errorf("invalid Fleet: %w", err)
 	}
 
 	cfg, g, err := connectToRunningVM(ctx)
@@ -102,8 +102,8 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 }
 
 // executePlan schedules cluster creation honouring dependsOn and maxParallel.
-func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan *clusterset.Plan) error {
-	failFast := plan.Strategy != clusterset.StrategyContinueOnError
+func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan *fleet.Plan) error {
+	failFast := plan.Strategy != fleet.StrategyContinueOnError
 
 	var (
 		mu        sync.Mutex
@@ -139,7 +139,7 @@ func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan 
 
 	for _, pc := range plan.ToCreate() {
 		wg.Add(1)
-		go func(pc clusterset.PlannedCluster) {
+		go func(pc fleet.PlannedCluster) {
 			defer wg.Done()
 			defer close(done[pc.Name])
 
@@ -205,7 +205,7 @@ func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan 
 }
 
 // createOne builds the per-cluster config overrides and creates a single cluster.
-func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, pc clusterset.PlannedCluster, mergeMu *sync.Mutex) error {
+func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, pc fleet.PlannedCluster, mergeMu *sync.Mutex) error {
 	cl := config.ClusterConfig{Name: pc.Name, Num: pc.Num, Region: pc.Region, Zone: pc.Zone}
 
 	// Per-cluster nodeVersion override.
@@ -242,7 +242,7 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, pc clus
 }
 
 // applyRegistrySelect returns a copy of base with the cluster's cherry-picks applied.
-func applyRegistrySelect(base config.RegistryConfig, sel *clusterset.RegistrySelect) config.RegistryConfig {
+func applyRegistrySelect(base config.RegistryConfig, sel *fleet.RegistrySelect) config.RegistryConfig {
 	out := base
 	if sel == nil {
 		return out
@@ -272,17 +272,17 @@ func applyRegistrySelect(base config.RegistryConfig, sel *clusterset.RegistrySel
 
 // validateMirrorSelections fails early if a manifest references a mirror name
 // that is not defined in the infrastructure config's catalog.
-func validateMirrorSelections(cs *clusterset.ClusterSet, reg config.RegistryConfig) error {
+func validateMirrorSelections(cs *fleet.Fleet, reg config.RegistryConfig) error {
 	known := make(map[string]bool, len(reg.Mirrors))
 	for _, m := range reg.Mirrors {
 		known[m.Name] = true
 	}
-	check := func(cluster string, sel *clusterset.RegistrySelect) error {
+	check := func(cluster string, sel *fleet.RegistrySelect) error {
 		if sel == nil || sel.Mirrors == nil {
 			return nil
 		}
 		for _, name := range *sel.Mirrors {
-			if name == clusterset.MirrorsAll {
+			if name == fleet.MirrorsAll {
 				continue
 			}
 			if !known[name] {
@@ -302,12 +302,12 @@ func validateMirrorSelections(cs *clusterset.ClusterSet, reg config.RegistryConf
 	return nil
 }
 
-func printPlan(plan *clusterset.Plan) {
+func printPlan(plan *fleet.Plan) {
 	name := plan.Name
 	if name == "" {
 		name = "(unnamed)"
 	}
-	fmt.Printf("ClusterSet %s — maxParallel=%d strategy=%s\n\n", name, plan.MaxParallel, plan.Strategy)
+	fmt.Printf("Fleet %s — maxParallel=%d strategy=%s\n\n", name, plan.MaxParallel, plan.Strategy)
 	fmt.Printf("%-24s  %4s  %-8s  %-20s  %s\n", "NAME", "NUM", "ACTION", "DEPENDS-ON", "OPTIONS")
 	fmt.Printf("%-24s  %4s  %-8s  %-20s  %s\n", strings.Repeat("-", 24), "----", "--------", strings.Repeat("-", 20), "-------")
 	for _, pc := range plan.Clusters {
@@ -323,7 +323,7 @@ func printPlan(plan *clusterset.Plan) {
 	}
 }
 
-func planOptions(pc clusterset.PlannedCluster) string {
+func planOptions(pc fleet.PlannedCluster) string {
 	var opts []string
 	if pc.NodeVersion != "" {
 		opts = append(opts, "node="+pc.NodeVersion)
@@ -348,7 +348,7 @@ func planOptions(pc clusterset.PlannedCluster) string {
 	return strings.Join(opts, " ")
 }
 
-func summarize(plan *clusterset.Plan, results map[string]error) error {
+func summarize(plan *fleet.Plan, results map[string]error) error {
 	var created, skipped, failed int
 	var failedNames []string
 	for _, pc := range plan.Clusters {
@@ -372,19 +372,19 @@ func summarize(plan *clusterset.Plan, results map[string]error) error {
 	return nil
 }
 
-// runClusterDeleteFromManifest deletes every cluster listed in a ClusterSet
+// runClusterDeleteFromManifest deletes every cluster listed in a Fleet
 // manifest that currently exists, in reverse-dependency order (dependents first).
 func runClusterDeleteFromManifest(ctx context.Context, filename string, yes bool) error {
 	data, err := readManifest(filename)
 	if err != nil {
 		return err
 	}
-	cs, err := clusterset.Parse(data)
+	cs, err := fleet.Parse(data)
 	if err != nil {
 		return err
 	}
 	if err := cs.Validate(); err != nil {
-		return fmt.Errorf("invalid ClusterSet: %w", err)
+		return fmt.Errorf("invalid Fleet: %w", err)
 	}
 
 	cfg, g, err := connectToRunningVM(ctx)
@@ -461,7 +461,7 @@ func readManifest(filename string) ([]byte, error) {
 }
 
 func containsWildcard(s []string) bool {
-	return slices.Contains(s, clusterset.MirrorsAll)
+	return slices.Contains(s, fleet.MirrorsAll)
 }
 
 func boolOrTrue(p *bool) bool {
