@@ -343,6 +343,16 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 
 ---
 
+## Keeping docs in sync
+
+When adding or changing a user-facing command, flag, or manifest field, update **all** the doc surfaces — they drift independently:
+
+- `README.md` (user reference) and this `CLAUDE.md`
+- `config.example.yaml` and/or `examples/fleet.yaml` where a config/manifest field changed
+- `SKILL.md` — the Agent Skill is **`go:embed`-ded into the binary** (shipped by `klimax skill install`). It does not update itself; after a build, verify with `klimax skill install --print`. It shipped stale once because it was easy to forget.
+
+Verify behavior end-to-end against the live VM before cutting a release (see the live-VM testing caution: throwaway clusters, clean up).
+
 ## Release
 
 - `goreleaser` for cross-compilation and GitHub releases
