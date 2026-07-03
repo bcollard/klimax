@@ -12,9 +12,19 @@ import (
 )
 
 // EnsureRoute idempotently adds a macOS route for cidr via the VM's lima0 IP.
-// It first removes any existing route for that CIDR (best-effort), then adds it.
-// Requires sudo; macOS will prompt if not already authorized.
+// If a route for that CIDR already points at lima0IP it is a no-op — importantly
+// it does NOT invoke sudo, so re-running `klimax up` against an already-running VM
+// never prompts for a password. Only a missing or stale (wrong-gateway) route
+// triggers the sudo delete+add.
 func EnsureRoute(cidr, lima0IP string) error {
+	if gw, ok := RouteGateway(cidr); ok {
+		if gw == lima0IP {
+			slog.Info("macOS route already present and correct — skipping", "cidr", cidr, "via", lima0IP)
+			return nil
+		}
+		slog.Info("macOS route has a stale gateway — refreshing", "cidr", cidr, "old", gw, "new", lima0IP)
+	}
+
 	slog.Info("Ensuring macOS route", "cidr", cidr, "via", lima0IP)
 
 	// Best-effort delete of any stale route.
@@ -27,6 +37,43 @@ func EnsureRoute(cidr, lima0IP string) error {
 		return fmt.Errorf("adding route %s via %s: %w\n%s", cidr, lima0IP, err, out)
 	}
 	return nil
+}
+
+// RouteGateway returns the gateway of the macOS route that currently serves the
+// given CIDR, and whether a route dedicated to that CIDR exists. It returns
+// ok=false when only a broader/default route matches, so the caller knows a
+// dedicated route still needs to be added. It performs no privileged operations
+// (no sudo), making it safe to call on every `klimax up`.
+func RouteGateway(cidr string) (string, bool) {
+	ip, ipNet, err := net.ParseCIDR(cidr)
+	if err != nil {
+		return "", false
+	}
+	base := ip.Mask(ipNet.Mask)
+	probe := make(net.IP, len(base))
+	copy(probe, base)
+	probe[len(probe)-1]++
+
+	out, err := exec.Command("/sbin/route", "-n", "get", probe.String()).CombinedOutput()
+	if err != nil {
+		return "", false
+	}
+	var dest, gw string
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "destination:"):
+			dest = strings.TrimSpace(strings.TrimPrefix(line, "destination:"))
+		case strings.HasPrefix(line, "gateway:"):
+			gw = strings.TrimSpace(strings.TrimPrefix(line, "gateway:"))
+		}
+	}
+	// Only "our" route if the matched destination is the CIDR base (not the
+	// default route or a broader aggregate).
+	if dest != base.String() || gw == "" {
+		return "", false
+	}
+	return gw, true
 }
 
 // DeleteRoute removes the macOS route for cidr. Best-effort; ignores "not found".
