@@ -80,6 +80,7 @@ spec:
 klimax fleet create -f fleet.yaml             # create the missing clusters (existing ones are skipped)
 klimax fleet create -f fleet.yaml --dry-run   # preview the plan (nums, order, options); creates nothing
 klimax fleet list                             # fleets and their member clusters
+klimax fleet describe dev-fleet               # members with num, ports, node version/readiness, labels
 klimax fleet label dev-fleet -l tier=gold     # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes           # delete every cluster in the fleet; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
 klimax fleet delete -f fleet.yaml --yes       # ...or delete exactly what the manifest lists

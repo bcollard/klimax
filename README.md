@@ -341,6 +341,7 @@ spec:
 ```sh
 klimax fleet create -f fleet.yaml         # create the clusters (--dry-run to preview, --max-parallel N)
 klimax fleet list                         # show fleets and their member clusters
+klimax fleet describe dev-fleet           # members with num, ports, node version/readiness, labels
 klimax fleet label dev-fleet -l tier=gold # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes       # delete every cluster in the fleet
 klimax fleet delete -f fleet.yaml --yes   # ...or tear down exactly what the manifest lists

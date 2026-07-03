@@ -27,11 +27,149 @@ live clusters regardless of the original manifest.`,
 	}
 	cmd.AddCommand(
 		newFleetListCmd(),
+		newFleetDescribeCmd(),
 		newFleetCreateCmd(),
 		newFleetDeleteCmd(),
 		newFleetLabelCmd(),
 	)
 	return cmd
+}
+
+// ─── fleet describe ────────────────────────────────────────────────────────────
+
+func newFleetDescribeCmd() *cobra.Command {
+	var outputFmt string
+	cmd := &cobra.Command{
+		Use:     "describe <name>",
+		Aliases: []string{"desc", "show"},
+		Short:   "Show a fleet's member clusters with their num, ports, nodes, and labels",
+		Args:    cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runFleetDescribe(cmd.Context(), args[0], outputFmt)
+		},
+	}
+	cmd.Flags().StringVarP(&outputFmt, "output", "o", "text", "Output format: text, json, yaml")
+	return cmd
+}
+
+type fleetMember struct {
+	Name           string            `json:"name"           yaml:"name"`
+	Num            int               `json:"num"            yaml:"num"`
+	APIPort        int               `json:"apiPort"        yaml:"apiPort"`
+	KubeconfigPath string            `json:"kubeconfigPath" yaml:"kubeconfigPath"`
+	Nodes          int               `json:"nodes"          yaml:"nodes"`
+	K8sVersion     string            `json:"k8sVersion"     yaml:"k8sVersion"`
+	Ready          bool              `json:"ready"          yaml:"ready"`
+	Labels         map[string]string `json:"labels"         yaml:"labels"`
+}
+
+type fleetDescription struct {
+	Name    string        `json:"name"     yaml:"name"`
+	Members []fleetMember `json:"members"  yaml:"members"`
+}
+
+func runFleetDescribe(ctx context.Context, name, outputFmt string) error {
+	_, g, err := connectToRunningVM(ctx)
+	if err != nil {
+		return err
+	}
+	names, err := kind.ClustersMatchingSelector(ctx, g, fleetLabelKey+"="+name)
+	if err != nil {
+		return err
+	}
+	if len(names) == 0 {
+		return fmt.Errorf("no clusters found in fleet %q", name)
+	}
+	sort.Strings(names)
+
+	usedNums, _ := kind.DetectUsedNums(ctx, g) // best-effort
+	numByName := make(map[string]int, len(usedNums))
+	for num, n := range usedNums {
+		numByName[n] = num
+	}
+
+	desc := fleetDescription{Name: name}
+	for _, n := range names {
+		info, err := kind.ClusterInfoFor(ctx, g, n)
+		if err != nil {
+			return err
+		}
+		num := numByName[n]
+		desc.Members = append(desc.Members, fleetMember{
+			Name:           n,
+			Num:            num,
+			APIPort:        7000 + num,
+			KubeconfigPath: kind.KindKubeconfigPath(n),
+			Nodes:          info.NodeCount,
+			K8sVersion:     info.KubeletVersion,
+			Ready:          info.Ready,
+			Labels:         info.Labels,
+		})
+	}
+
+	switch outputFmt {
+	case "json":
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(desc)
+	case "yaml":
+		return yaml.NewEncoder(os.Stdout).Encode(desc)
+	default:
+		fmt.Printf("Fleet %q — %d cluster(s)\n", desc.Name, len(desc.Members))
+		for _, m := range desc.Members {
+			ready := "NotReady"
+			if m.Ready {
+				ready = "Ready"
+			}
+			fmt.Printf("\n▸ %s\n", m.Name)
+			fmt.Printf("    num:        %d\n", m.Num)
+			fmt.Printf("    apiPort:    %d\n", m.APIPort)
+			fmt.Printf("    kubeconfig: %s\n", m.KubeconfigPath)
+			fmt.Printf("    nodes:      %d (%s, %s)\n", m.Nodes, m.K8sVersion, ready)
+			fmt.Printf("    labels:     %s\n", formatLabels(m.Labels))
+		}
+		return nil
+	}
+}
+
+// infraLabelPrefixes are the standard read-only node labels kubelet sets. They
+// are hidden from the `describe` text view (JSON/YAML output keeps everything).
+// topology.kubernetes.io/* is intentionally NOT hidden — klimax sets region/zone.
+var infraLabelPrefixes = []string{
+	"kubernetes.io/",
+	"beta.kubernetes.io/",
+	"node-role.kubernetes.io/",
+	"node.kubernetes.io/",
+}
+
+// formatLabels renders the klimax/custom labels as sorted "k=v" pairs, hiding
+// the standard Kubernetes infrastructure node labels.
+func formatLabels(labels map[string]string) string {
+	keys := make([]string, 0, len(labels))
+	for k := range labels {
+		if isInfraLabel(k) {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	if len(keys) == 0 {
+		return "-"
+	}
+	sort.Strings(keys)
+	pairs := make([]string, 0, len(keys))
+	for _, k := range keys {
+		pairs = append(pairs, k+"="+labels[k])
+	}
+	return strings.Join(pairs, ", ")
+}
+
+func isInfraLabel(key string) bool {
+	for _, p := range infraLabelPrefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ─── fleet create ──────────────────────────────────────────────────────────────

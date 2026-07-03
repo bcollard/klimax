@@ -79,7 +79,7 @@ internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
 internal/registry/registry.go        EnsureRegistries, RegistryHosts (local reg + mirrors → containerd certs.d hosts.toml + cache volumes)
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
-internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq)
+internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/fleet/fleet.go              Fleet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
 internal/fleet/plan.go               Resolve → Plan (num pre-assignment, defaults merge, existence marking), DeletionOrder
@@ -99,7 +99,7 @@ internal/cli/shell.go                `klimax shell` — interactive SSH session 
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/label/e2e-test-nginx)
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
-internal/cli/fleet.go                `klimax fleet` subcommands (list/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest
+internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `klimax registry clean-cache`
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
@@ -287,6 +287,7 @@ klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses curre
 
 klimax fleet create -f <file>          Create clusters from a Fleet manifest (alias of 'cluster apply -f'; --dry-run, --max-parallel)
 klimax fleet list [-o text|json|yaml]  List fleets (grouped by klimax.dev/fleet) and their member clusters
+klimax fleet describe <name>           Show a fleet's members with num, API port, kubeconfig, node count/version/readiness, labels ([-o text|json|yaml])
 klimax fleet delete <name>             Delete all clusters in the named fleet (-y to skip prompt)
 klimax fleet delete -f <file>          Delete the clusters listed in a Fleet manifest
 klimax fleet label <name> -l key=value Apply node labels to every cluster in the fleet (key- to remove)

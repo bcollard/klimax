@@ -2,6 +2,7 @@ package kind
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -59,6 +60,37 @@ done`
 		byFleet[fleet] = append(byFleet[fleet], name)
 	}
 	return byFleet, nil
+}
+
+// ClusterInfo is a snapshot of a cluster's nodes, read from its live API.
+type ClusterInfo struct {
+	NodeCount      int               `json:"count"`
+	KubeletVersion string            `json:"version"`
+	Ready          bool              `json:"ready"`
+	Labels         map[string]string `json:"labels"`
+}
+
+// ClusterInfoFor returns node count, Kubernetes version, readiness, and the
+// control-plane node's labels for a cluster. Returns a zero-value ClusterInfo
+// (NodeCount 0) if the cluster's API can't be reached.
+func ClusterInfoFor(ctx context.Context, g *guest.Client, clusterName string) (*ClusterInfo, error) {
+	cmd := fmt.Sprintf(`kc=/tmp/klimax-kube-%s.yaml
+kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > "$kc" 2>/dev/null
+kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -c '{count:(.items|length), version:(.items[0].status.nodeInfo.kubeletVersion // ""), ready:(all(.items[]; any(.status.conditions[]; .type=="Ready" and .status=="True"))), labels:(.items[0].metadata.labels // {})}'`,
+		clusterName, clusterName)
+	out, err := g.Run(ctx, cmd)
+	if err != nil {
+		return nil, fmt.Errorf("reading cluster %q info: %w", clusterName, err)
+	}
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return &ClusterInfo{}, nil // API unreachable
+	}
+	var info ClusterInfo
+	if err := json.Unmarshal([]byte(out), &info); err != nil {
+		return nil, fmt.Errorf("parsing cluster %q info: %w", clusterName, err)
+	}
+	return &info, nil
 }
 
 func nonEmptyLines(s string) []string {
