@@ -44,7 +44,6 @@ func newClusterCmd() *cobra.Command {
 // ─── create ──────────────────────────────────────────────────────────────────
 
 func newClusterCreateCmd() *cobra.Command {
-	var num int
 	var region, zone string
 	var labels []string
 	cmd := &cobra.Command{
@@ -57,34 +56,32 @@ func newClusterCreateCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runClusterCreate(cmd.Context(), args[0], num, region, zone, lbls)
+			return runClusterCreate(cmd.Context(), args[0], region, zone, lbls)
 		},
 	}
-	cmd.Flags().IntVar(&num, "num", 0, "Cluster number (1-99) for subnet/port allocation; auto-assigned if 0")
 	cmd.Flags().StringVar(&region, "region", "", "topology.kubernetes.io/region label (default: europe-west<N>)")
 	cmd.Flags().StringVar(&zone, "zone", "", "topology.kubernetes.io/zone label (default: europe-west<N>-b)")
 	cmd.Flags().StringArrayVarP(&labels, "label", "l", nil, "Extra node label key=value (repeatable)")
 	return cmd
 }
 
-func runClusterCreate(ctx context.Context, name string, num int, region, zone string, labels map[string]string) error {
+func runClusterCreate(ctx context.Context, name string, region, zone string, labels map[string]string) error {
 	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Resolve num: find the lowest free slot by inspecting live cluster port bindings.
-	if num == 0 {
-		usedNums, err := kind.DetectUsedNums(ctx, g)
-		if err != nil {
-			return fmt.Errorf("detecting used cluster nums: %w", err)
-		}
-		num, err = kind.NextFreeNum(usedNums)
-		if err != nil {
-			return err
-		}
-		slog.Info("Auto-assigned cluster num", "name", name, "num", num)
+	// The cluster num (subnet/port slot) is always auto-assigned to the lowest
+	// free slot by inspecting live cluster port bindings.
+	usedNums, err := kind.DetectUsedNums(ctx, g)
+	if err != nil {
+		return fmt.Errorf("detecting used cluster nums: %w", err)
 	}
+	num, err := kind.NextFreeNum(usedNums)
+	if err != nil {
+		return err
+	}
+	slog.Info("Auto-assigned cluster num", "name", name, "num", num)
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone, Labels: labels}
 

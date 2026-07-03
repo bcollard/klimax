@@ -264,7 +264,6 @@ klimax docker-context                  Create/update "klimax" Docker context + d
 klimax docker-context --unset          docker context use default
 
 klimax cluster create <name>           Create a kind cluster (num auto-assigned)
-  --num N                              Override cluster num (1-99)
   --region europe-west1                Override topology region label
   --zone   europe-west1-b              Override topology zone label
   -l, --label key=value               Extra node label (repeatable)

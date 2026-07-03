@@ -277,7 +277,6 @@ klimax docker-context --unset      # docker context use default
 ```sh
 # Create
 klimax cluster create <name>
-klimax cluster create <name> --num 3             # pin to slot 3
 klimax cluster create <name> --region us-east1 --zone us-east1-a
 klimax cluster create <name> -l team=platform -l env=dev   # extra node labels
 
@@ -360,7 +359,7 @@ optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 > `klimax cluster apply -f` / `cluster delete -f` remain as lower-level equivalents
 > of `fleet create` / `fleet delete -f`.
 
-### Per-cluster resources (auto-assigned from `--num N`)
+### Per-cluster resources (derived from the auto-assigned cluster num)
 
 | Resource | Value |
 |---|---|
