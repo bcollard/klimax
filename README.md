@@ -44,7 +44,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 ### On your Mac (host)
 
 - **macOS 13 Ventura or later** — Apple Virtualization.framework is required (`vmType: vz`)
-- **`sudo` access** — needed only for `klimax up` (adds macOS route) and `klimax destroy`; `klimax down` does not require sudo
+- **`sudo` access** — needed only when `klimax up` first adds the macOS route (re-runs skip it if already correct) and for `klimax destroy`; `klimax down` does not require sudo
 - **Go 1.22+** — only if building from source; not needed for the pre-built binary
 - **kubectx** (optional) — for easier kubeconfig context switching, or use `klimax cluster use <name>`
 
@@ -55,7 +55,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 | Tool | Version | Purpose |
 |---|---|---|
 | Docker | latest via get.docker.com | Container runtime for kind and registries |
-| kind | v0.27.0 | Kubernetes-in-Docker cluster manager |
+| kind | v0.31.0 | Kubernetes-in-Docker cluster manager |
 | kubectl | latest stable | Cluster management from within the VM |
 | jq, iptables, curl, net-tools, python3 | distro packages | Tooling for scripts and routing rules |
 
@@ -101,7 +101,7 @@ klimax completion fish > ~/.config/fish/completions/klimax.fish
 
 ```sh
 # 1. Bring up the VM + Docker + networking + registries
-klimax up # this will prompt for sudo to add the macOS route, but it only needs to be done once; 
+klimax up # prompts for sudo once to add the macOS route; re-running up on a live VM skips it and won't prompt again
 
 # 2. Create a kind cluster
 klimax cluster create dev
@@ -179,8 +179,8 @@ network:
 
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
-  nodeVersion: "v1.32.0"
-  metalLBVersion: "v0.14.9"
+  nodeVersion: "v1.35.0"
+  metalLBVersion: "v0.15.2"
   customDnsResolvers:
     - domain: "runlocal.dev"          # forward to 8.8.8.8/8.8.4.4 (default resolvers)
     # - domain: "corp.internal"
@@ -232,7 +232,7 @@ klimax [--config ~/.klimax/config.yaml] [--debug] <command>
 | `klimax down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
 | `klimax destroy` | Stop + delete VM, delete all clusters, remove host route |
 | `klimax status` | Show VM state, clusters, route, and iptables rule presence |
-| `klimax doctor` | Diagnose common issues |
+| `klimax doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta) |
 | `klimax version` | Print the klimax version |
 | `klimax shell` | Open an interactive SSH session in the VM |
 | `klimax config edit` | Open the config file in `$VISUAL` / `$EDITOR` |

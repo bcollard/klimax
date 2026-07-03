@@ -77,7 +77,7 @@ internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 25.04, por
 internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspect
 internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
-internal/registry/registry.go        EnsureRegistries, ContainerdPatches (local reg + mirrors + cache volumes)
+internal/registry/registry.go        EnsureRegistries, RegistryHosts (local reg + mirrors → containerd certs.d hosts.toml + cache volumes)
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
@@ -124,8 +124,8 @@ network:
                                      # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
 
 kind:
-  nodeVersion: "v1.32.0"             # kindest/node image tag (default)
-  metalLBVersion: "v0.14.9"          # MetalLB manifest version (default)
+  nodeVersion: "v1.35.0"             # kindest/node image tag (default)
+  metalLBVersion: "v0.15.2"          # MetalLB manifest version (default)
   customDnsResolvers:                # per-zone upstream resolvers; resolvers default to 8.8.8.8/8.8.4.4 if omitted
     # - domain: "runlocal.dev"       # example; empty by default in code
   autoMergeKubeconfig: true          # merge context into ~/.kube/config after cluster create (default: true)
@@ -163,7 +163,7 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 3. Install: `jq`, `iptables`, `curl`, `net-tools`, `python3`
 4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=lima` — the guest user is pinned to `lima` via `user.name` in the Lima YAML; by default Lima derives it from the macOS host username, which would break the `SocketUser=lima` assumption on hosts whose username is a valid Linux name)
 5. Install Docker via `get.docker.com`
-6. Install kind CLI `v0.27.0`
+6. Install kind CLI `v0.31.0`
 7. Install kubectl (latest stable)
 
 ### Docker socket forwarding
@@ -202,13 +202,13 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
    - API port `70<num>` on `0.0.0.0`
    - `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`
    - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels; when `disablePortMirroring`, also a `ClusterConfiguration` patch adding the lima0 IP to `apiServer.certSANs` (plus `127.0.0.1` for intra-VM kubectl calls)
-   - `containerdConfigPatches`: mirror all registries through local containers
 4. **`kind create cluster`** with `--image kindest/node:<nodeVersion>`
-5. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
-6. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
-7. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
-8. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
-9. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (default) or `https://<lima0IP>:700N` (when `disablePortMirroring: true`)
+5. **Configure registry mirrors** — write `/etc/containerd/certs.d/<host>/hosts.toml` on every node (`configureRegistryMirrors` → `registry.RegistryHosts`). containerd 2.x (kind ≥ v0.30 node images) defaults `config_path = /etc/containerd/certs.d` and **rejects** the legacy `registry.mirrors` config.toml block ("`mirrors` cannot be set when `config_path` is provided"), which silently disables the CRI plugin and hangs `kubeadm init`. No containerd restart needed — certs.d is read per-pull.
+6. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
+7. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
+8. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
+9. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
+10. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (default) or `https://<lima0IP>:700N` (when `disablePortMirroring: true`)
 
 ### kubeconfig naming
 
@@ -224,7 +224,7 @@ klimax down                            Stop VM (no sudo required)
 klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
 klimax status                          Show VM state, clusters, route, iptables
-klimax doctor                          Diagnose common issues
+klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state)
 klimax version                         Print version
 klimax shell                           Open interactive SSH session in the VM
 klimax config edit                     Open config in $VISUAL / $EDITOR / nano / vi
@@ -278,7 +278,8 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 - iptables rules are inserted only if not already present (`-C` check before `-I`).
 - Registry containers are started only if not already running.
 - `kind create cluster` only runs for clusters that don't exist.
-- Route is deleted then re-added (no-op on the network level).
+- The macOS route is added/refreshed only when missing or pointing at a stale gateway; when it already targets the current lima0 IP, `klimax up` skips it entirely and does **not** invoke sudo (so re-running `up` on a live VM never prompts). See `routing.RouteGateway`.
+- `cluster create` warns (does not block) when `kind.nodeVersion` differs from `config.DefaultKindNodeVersion` — the image the bundled kind CLI is validated against.
 - All kubeconfigs are written atomically with `0600` permissions.
 
 ---
