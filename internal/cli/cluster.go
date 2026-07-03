@@ -95,18 +95,29 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 // ─── delete ──────────────────────────────────────────────────────────────────
 
 func newClusterDeleteCmd() *cobra.Command {
-	return &cobra.Command{
+	var filename string
+	var yes bool
+	cmd := &cobra.Command{
 		Use:     "delete [name]",
 		Aliases: []string{"de", "d"},
-		Short:   "Delete a kind cluster (interactive picker when no name is given)",
-		Args:  cobra.MaximumNArgs(1),
+		Short:   "Delete a kind cluster (by name, from a ClusterSet manifest, or via an interactive picker)",
+		Args:    cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if filename != "" {
+				if len(args) > 0 {
+					return errors.New("cannot combine a cluster name with -f")
+				}
+				return runClusterDeleteFromManifest(cmd.Context(), filename, yes)
+			}
 			if len(args) == 1 {
 				return runClusterDelete(cmd.Context(), args[0])
 			}
 			return runClusterDeleteInteractive(cmd.Context())
 		},
 	}
+	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a ClusterSet manifest (- for stdin)")
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
+	return cmd
 }
 
 func runClusterDelete(ctx context.Context, name string) error {

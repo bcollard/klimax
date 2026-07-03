@@ -288,6 +288,7 @@ klimax cluster apply -f clusterset.yaml --max-parallel 3
 # Delete — interactive multi-select picker when no name given
 klimax cluster delete <name>
 klimax cluster delete
+klimax cluster delete -f clusterset.yaml --yes   # tear down a whole fleet
 
 # List
 klimax cluster list
@@ -341,6 +342,12 @@ optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 `spec.maxParallel`; `dependsOn` is always respected. Use `--dry-run` to preview
 the plan (assigned nums, ordering, per-cluster options). See
 [`examples/clusterset.yaml`](examples/clusterset.yaml) for the full reference.
+
+Tear the fleet back down with the same manifest (reverse-dependency order):
+
+```sh
+klimax cluster delete -f clusterset.yaml --yes
+```
 
 ### Per-cluster resources (auto-assigned from `--num N`)
 

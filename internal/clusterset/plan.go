@@ -29,6 +29,40 @@ func (p *Plan) ToCreate() []PlannedCluster {
 	return out
 }
 
+// DeletionOrder returns cluster names in reverse dependency order — dependents
+// before the clusters they depend on — which is the safe order for teardown.
+// The manifest must already be acyclic (see Validate).
+func (cs *ClusterSet) DeletionOrder() []string {
+	deps := make(map[string][]string, len(cs.Spec.Clusters))
+	names := make([]string, 0, len(cs.Spec.Clusters))
+	for _, c := range cs.Spec.Clusters {
+		deps[c.Name] = c.DependsOn
+		names = append(names, c.Name)
+	}
+
+	visited := make(map[string]bool, len(names))
+	order := make([]string, 0, len(names))
+	var visit func(n string)
+	visit = func(n string) {
+		if visited[n] {
+			return
+		}
+		visited[n] = true
+		for _, d := range deps[n] {
+			visit(d)
+		}
+		order = append(order, n) // post-order → dependencies precede dependents
+	}
+	for _, n := range names {
+		visit(n)
+	}
+	// Reverse: dependents first.
+	for i, j := 0, len(order)-1; i < j; i, j = i+1, j-1 {
+		order[i], order[j] = order[j], order[i]
+	}
+	return order
+}
+
 // Resolve merges defaults, marks which clusters already exist, and pre-assigns
 // nums for the clusters to create. Pre-assigning up front (rather than letting
 // each create race for the next free slot) is what makes parallel creation safe.

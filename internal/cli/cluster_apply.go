@@ -372,6 +372,83 @@ func summarize(plan *clusterset.Plan, results map[string]error) error {
 	return nil
 }
 
+// runClusterDeleteFromManifest deletes every cluster listed in a ClusterSet
+// manifest that currently exists, in reverse-dependency order (dependents first).
+func runClusterDeleteFromManifest(ctx context.Context, filename string, yes bool) error {
+	data, err := readManifest(filename)
+	if err != nil {
+		return err
+	}
+	cs, err := clusterset.Parse(data)
+	if err != nil {
+		return err
+	}
+	if err := cs.Validate(); err != nil {
+		return fmt.Errorf("invalid ClusterSet: %w", err)
+	}
+
+	cfg, g, err := connectToRunningVM(ctx)
+	if err != nil {
+		return err
+	}
+
+	live, err := kind.ListClusters(ctx, g)
+	if err != nil {
+		return err
+	}
+	liveSet := make(map[string]bool, len(live))
+	for _, n := range live {
+		liveSet[n] = true
+	}
+
+	// Only delete manifest clusters that actually exist, dependents first.
+	var targets []string
+	for _, name := range cs.DeletionOrder() {
+		if liveSet[name] {
+			targets = append(targets, name)
+		}
+	}
+	if len(targets) == 0 {
+		fmt.Println("Nothing to delete — none of the manifest's clusters exist.")
+		return nil
+	}
+
+	fmt.Printf("The following clusters will be deleted (in order):\n  %s\n", strings.Join(targets, "\n  "))
+	if !yes {
+		if filename == "-" {
+			return errors.New("refusing to prompt while reading manifest from stdin; pass --yes to confirm")
+		}
+		fmt.Print("Proceed? [y/N] ")
+		var answer string
+		_, _ = fmt.Scanln(&answer)
+		if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+			fmt.Println("Aborted.")
+			return nil
+		}
+	}
+
+	autoRemove := cfg.Kind.AutoRemoveKubeconfig != nil && *cfg.Kind.AutoRemoveKubeconfig
+	var failed []string
+	for _, name := range targets {
+		fmt.Printf("→ deleting cluster %q\n", name)
+		if err := kind.DeleteCluster(ctx, g, name); err != nil {
+			slog.Error("Delete failed", "cluster", name, "err", err)
+			failed = append(failed, name)
+			continue
+		}
+		if autoRemove {
+			if err := removeFromKubeconfig(name); err != nil {
+				slog.Warn("Auto-remove kubeconfig failed", "cluster", name, "err", err)
+			}
+		}
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%d cluster(s) failed to delete: %s", len(failed), strings.Join(failed, ", "))
+	}
+	fmt.Printf("\ndeleted %d cluster(s)\n", len(targets))
+	return nil
+}
+
 func readManifest(filename string) ([]byte, error) {
 	if filename == "-" {
 		return io.ReadAll(os.Stdin)

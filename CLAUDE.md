@@ -236,6 +236,7 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
 - **Scheduler** (`internal/cli/cluster_apply.go`): builds a dependsOn DAG, creates clusters up to `spec.maxParallel` at a time (default 1 = sequential), gating each on its dependencies via per-cluster `done` channels. `strategy: FailFast` (default) stops scheduling new clusters after the first failure; `ContinueOnError` presses on.
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `clusterset.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
+- **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`clusterset.DeletionOrder`), prompting unless `--yes`.
 
 ---
 
@@ -266,6 +267,8 @@ klimax cluster apply -f <file>         Create a fleet from a ClusterSet manifest
   --dry-run                            Print the resolved plan (nums, DAG, options) and exit
   --max-parallel N                     Override spec.maxParallel (concurrent creations)
 klimax cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
+  -f <file>                            Delete the clusters listed in a ClusterSet manifest (reverse-dependency order)
+  -y, --yes                            Skip the confirmation prompt
 klimax cluster list [-o text|json|yaml] List clusters with num, API port, kubeconfig path
 klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
 klimax cluster merge <name>            Merge cluster context into ~/.kube/config
