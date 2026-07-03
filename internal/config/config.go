@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -197,12 +198,25 @@ func applyDefaults(cfg *Config) {
 func WriteDefaultConfig(path string) error {
 	cfg := &Config{}
 	applyDefaults(cfg)
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
+
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2) // 2-space indent (matches config.example.yaml)
+	if err := enc.Encode(cfg); err != nil {
 		return fmt.Errorf("marshaling default config: %w", err)
 	}
-	header := []byte("# klimax configuration — edit to customise, then re-run 'klimax up'\n# See https://github.com/bcollard/klimax for full documentation.\n\n")
-	return os.WriteFile(path, append(header, data...), 0o600)
+	_ = enc.Close()
+
+	// yaml encoding drops struct comments, so splice a cautionary note in above
+	// the nodeVersion field (indented to match its 2-space nesting under kind:).
+	note := "  # ⚠ nodeVersion is matched to the kind CLI bundled in the VM.\n" +
+		"  # Changing it to another kindest/node tag is UNSUPPORTED and may cause cluster\n" +
+		"  # creation to fail or hang (kubeadm/containerd errors), or other unexpected\n" +
+		"  # behaviour. 'klimax cluster create' logs a warning when this is overridden.\n"
+	body := strings.Replace(buf.String(), "  nodeVersion:", note+"  nodeVersion:", 1)
+
+	header := "# klimax configuration — edit to customise, then re-run 'klimax up'\n# See https://github.com/bcollard/klimax for full documentation.\n\n"
+	return os.WriteFile(path, []byte(header+body), 0o600)
 }
 
 func boolPtr(b bool) *bool { return &b }

@@ -40,6 +40,9 @@ network:
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:
   # kindest/node image tag used when creating clusters.
+  # ⚠ Matched to the kind CLI bundled in the VM. Changing it to another kindest/node
+  # tag is UNSUPPORTED and may cause cluster creation to fail or hang (kubeadm/containerd
+  # errors) or behave unexpectedly. 'klimax cluster create' warns when this is overridden.
   nodeVersion: "v1.35.0"
 
   # MetalLB manifest version installed in every cluster.

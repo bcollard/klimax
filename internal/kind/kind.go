@@ -13,6 +13,7 @@ import (
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/klimax/internal/limatemplate"
 	"github.com/bcollard/klimax/internal/registry"
 	"github.com/bcollard/klimax/internal/routing"
 )
@@ -45,6 +46,16 @@ func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig
 			return fmt.Errorf("resolving VM IP: %w", err)
 		}
 		apiServerAddr = lima0IP
+	}
+
+	if kindCfg.NodeVersion != config.DefaultKindNodeVersion {
+		slog.Warn("Using a non-default kind node version — UNSUPPORTED. "+
+			"The bundled kind CLI is validated only against the default node image; a mismatched "+
+			"kindest/node tag may cause cluster creation to fail or hang (kubeadm/containerd errors), "+
+			"or other unexpected behaviour.",
+			"requested", kindCfg.NodeVersion,
+			"recommended", config.DefaultKindNodeVersion,
+			"bundledKindCLI", limatemplate.KindCLIVersion)
 	}
 
 	slog.Info("Creating kind cluster", "cluster", cl.Name, "num", cl.Num, "nodeVersion", kindCfg.NodeVersion, "region", cl.Region, "zone", cl.Zone, "apiServerAddr", apiServerAddr)
