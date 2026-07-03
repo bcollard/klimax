@@ -29,6 +29,7 @@ brew install --cask klimax
 ```bash
 klimax up                              # Start VM + Docker + network + registries + routing. Idempotent.
 klimax cluster create <name>           # Create a kind cluster. Auto-assigns num (1-99), MetalLB, CoreDNS patches.
+klimax cluster apply -f fleet.yaml     # Create several clusters at once from a Fleet manifest (see below).
 klimax cluster delete <name>           # Delete a cluster. ALWAYS pass <name> in scripts — omitting it opens an interactive picker that will hang a non-interactive agent.
 klimax cluster list                    # List clusters with num, API port, kubeconfig path.
 klimax cluster e2e-test-nginx          # Built-in smoke test: deploy nginx, expose via LoadBalancer, curl it. Uses your current kubectl context.
@@ -59,6 +60,29 @@ kubectl --context cluster1 get nodes
 ```
 
 Cluster context names are stored bare in `~/.kube/config` (no `kind-` prefix). `kubectl --context <name>` works directly. Kubeconfigs are also written to `~/.kube/klimax/<name>.kubeconfig`.
+
+## Creating several clusters at once (Fleet)
+
+To bring up a whole set of clusters declaratively, write a **Fleet** manifest and `klimax cluster apply -f`. The minimal manifest lists only cluster names:
+
+```yaml
+# fleet.yaml
+apiVersion: klimax.dev/v1alpha1
+kind: Fleet
+spec:
+  clusters:
+    - global
+    - cluster1
+    - cluster2
+```
+
+```bash
+klimax cluster apply -f fleet.yaml             # create the missing clusters (existing ones are skipped)
+klimax cluster apply -f fleet.yaml --dry-run   # preview the plan (nums, order, options); creates nothing
+klimax cluster delete -f fleet.yaml --yes      # tear the whole fleet down; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
+```
+
+`apply` is additive and synchronous — each cluster is fully ready when it returns. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors / toggle the local registry), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
 
 ## Ephemeral cluster for testing (agent recipe)
 
@@ -112,7 +136,7 @@ The local registry is shared across all clusters and lives inside the VM (surviv
 - The kind Docker network is **shared across clusters** (subnet from `network.kindBridgeCIDR`, default `172.30.0.0/16`). Don't recreate it.
 - Cluster API server is exposed on host port `70<num>` (e.g. cluster num 1 → `https://127.0.0.1:7001`).
 - Per-cluster pod/service subnets: `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`. Keep cluster num 1–9 to avoid overlap.
-- Cluster nodes are labelled with `topology.kubernetes.io/region` and `zone` (overridable via `--region` / `--zone`).
+- Cluster nodes are labelled with `managed-by=klimax`, `topology.kubernetes.io/region` + `zone` (overridable via `--region` / `--zone`), and `klimax.dev/fleet=<name>` for clusters created from a Fleet. Add custom node labels with `klimax cluster create -l key=value` (repeatable), the Fleet `labels:` / `defaults.labels` fields, or relabel an existing cluster with `klimax cluster label <name> -l key=value` (`-l key-` removes).
 - Docker socket on the host: `~/.klimax.docker.sock`. Use `eval $(klimax docker-env)` or `klimax docker-context` to point your local docker CLI at it.
 
 ## Troubleshooting
