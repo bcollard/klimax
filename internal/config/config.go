@@ -107,11 +107,11 @@ type RegistryMirror struct {
 
 // defaults applied when fields are zero-valued.
 const (
-	DefaultVMName          = "klimax"
-	DefaultCPUs            = 4
-	DefaultMemory          = "10GiB"
-	DefaultDisk            = "40GiB"
-	DefaultKindCIDR        = "172.30.0.0/16"
+	DefaultVMName   = "klimax"
+	DefaultCPUs     = 4
+	DefaultMemory   = "10GiB"
+	DefaultDisk     = "40GiB"
+	DefaultKindCIDR = "172.30.0.0/16"
 	// DefaultKindNodeVersion is the kindest/node image the bundled kind CLI
 	// (limatemplate.KindCLIVersion) is built and validated against. Keep the two
 	// in sync; overriding nodeVersion away from this is unsupported (see the

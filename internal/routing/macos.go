@@ -115,4 +115,3 @@ func Lima0IP(ctx context.Context, g *guest.Client) (string, error) {
 	}
 	return out, nil
 }
-

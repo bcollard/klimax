@@ -48,7 +48,7 @@ func newClusterCreateCmd() *cobra.Command {
 		Use:     "create <name>",
 		Aliases: []string{"cr", "c"},
 		Short:   "Create a new kind cluster in the running VM",
-		Args:  cobra.ExactArgs(1),
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterCreate(cmd.Context(), args[0], num, region, zone)
 		},
@@ -300,7 +300,7 @@ func newClusterListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "list",
 		Aliases: []string{"ls", "l"},
-		Short: "List kind clusters running in the VM",
+		Short:   "List kind clusters running in the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterList(cmd.Context(), outputFmt)
 		},
