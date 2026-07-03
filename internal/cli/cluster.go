@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +35,7 @@ func newClusterCmd() *cobra.Command {
 		newClusterListCmd(),
 		newClusterUseCmd(),
 		newClusterMergeCmd(),
+		newClusterLabelCmd(),
 		newClusterE2ETestNginxCmd(),
 	)
 	return cmd
@@ -549,6 +551,72 @@ func mergeKubeconfigEntries(dst, src []map[string]interface{}) []map[string]inte
 		}
 	}
 	return dst
+}
+
+// ─── label ───────────────────────────────────────────────────────────────────
+
+func newClusterLabelCmd() *cobra.Command {
+	var labels []string
+	cmd := &cobra.Command{
+		Use:   "label <name> -l key=value",
+		Short: "Add, overwrite, or remove node labels on an existing cluster",
+		Long: `Apply node labels to every node of an existing cluster (kubectl label
+nodes --all --overwrite). Use -l key=value to set/overwrite a label and
+-l key- to remove one.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runClusterLabel(cmd.Context(), args[0], labels)
+		},
+	}
+	cmd.Flags().StringArrayVarP(&labels, "label", "l", nil, "Label to set (key=value) or remove (key-); repeatable")
+	return cmd
+}
+
+func runClusterLabel(ctx context.Context, name string, specs []string) error {
+	if len(specs) == 0 {
+		return errors.New("at least one -l key=value (or key- to remove) is required")
+	}
+
+	// Split into kubectl label operands, validating keys/values.
+	setMap := map[string]string{}
+	kubeArgs := make([]string, 0, len(specs))
+	for _, s := range specs {
+		if key, ok := strings.CutSuffix(s, "-"); ok && !strings.Contains(s, "=") {
+			if err := config.ValidateLabels(map[string]string{key: ""}); err != nil {
+				return fmt.Errorf("invalid label key %q: %w", key, err)
+			}
+			kubeArgs = append(kubeArgs, key+"-")
+			continue
+		}
+		k, v, ok := strings.Cut(s, "=")
+		if !ok {
+			return fmt.Errorf("invalid label %q: expected key=value or key-", s)
+		}
+		setMap[k] = v
+		kubeArgs = append(kubeArgs, k+"="+v)
+	}
+	if err := config.ValidateLabels(setMap); err != nil {
+		return err
+	}
+
+	_, g, err := connectToRunningVM(ctx)
+	if err != nil {
+		return err
+	}
+
+	names, err := kind.ListClusters(ctx, g)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(names, name) {
+		return fmt.Errorf("cluster %q not found (see 'klimax cluster list')", name)
+	}
+
+	if err := kind.LabelNodes(ctx, g, name, kubeArgs); err != nil {
+		return err
+	}
+	fmt.Printf("Labeled nodes on cluster %q\n", name)
+	return nil
 }
 
 // ─── e2e-test-nginx ──────────────────────────────────────────────────────────

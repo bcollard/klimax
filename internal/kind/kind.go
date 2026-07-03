@@ -207,11 +207,10 @@ func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName 
 	return g.RunScript(ctx, fmt.Sprintf("configure registry mirrors on cluster %q", clusterName), sb.String())
 }
 
-// applyNodeLabels labels every node in the cluster. It always applies
+// applyNodeLabels labels every node in the cluster at creation. It always applies
 // managed-by=klimax, plus any caller-supplied labels (klimax.dev/fleet, custom).
 // Topology labels (region/zone) and ingress-ready are already set at node
-// registration via the kubeadm node-labels patch. Applied with kubectl (admin
-// creds) so it is not subject to the kubelet self-labeling NodeRestriction.
+// registration via the kubeadm node-labels patch.
 func applyNodeLabels(ctx context.Context, g *guest.Client, clusterName string, labels map[string]string) error {
 	merged := map[string]string{"managed-by": "klimax"}
 	maps.Copy(merged, labels)
@@ -221,18 +220,28 @@ func applyNodeLabels(ctx context.Context, g *guest.Client, clusterName string, l
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	var pairs strings.Builder
+	args := make([]string, 0, len(merged))
 	for _, k := range keys {
-		fmt.Fprintf(&pairs, " %s=%s", k, merged[k])
+		args = append(args, k+"="+merged[k])
 	}
+	return LabelNodes(ctx, g, clusterName, args)
+}
 
-	slog.Info("Labeling cluster nodes", "cluster", clusterName, "labels", len(merged))
+// LabelNodes runs `kubectl label nodes --all --overwrite <args...>` against the
+// cluster. Each arg is a kubectl label operand: "key=value" to set/overwrite,
+// or "key-" to remove. Applied with admin creds, so it is not subject to the
+// kubelet self-labeling NodeRestriction. A no-op when args is empty.
+func LabelNodes(ctx context.Context, g *guest.Client, clusterName string, args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+	slog.Info("Labeling cluster nodes", "cluster", clusterName, "ops", len(args))
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
-kubectl --kubeconfig ${KIND_KUBECONFIG} label nodes --all --overwrite%s
-`, clusterName, clusterName, pairs.String())
+kubectl --kubeconfig ${KIND_KUBECONFIG} label nodes --all --overwrite %s
+`, clusterName, clusterName, strings.Join(args, " "))
 
 	return g.RunScript(ctx, fmt.Sprintf("label nodes on cluster %q", clusterName), script)
 }

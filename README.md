@@ -296,6 +296,10 @@ klimax cluster list
 klimax cluster list -o json
 klimax cluster list -o yaml
 
+# Label an existing cluster's nodes
+klimax cluster label <name> -l team=platform -l env=prod   # set/overwrite
+klimax cluster label <name> -l env-                        # remove
+
 # Kubeconfig
 eval $(klimax cluster use <name>)    # print + eval KUBECONFIG export
 klimax cluster merge <name>          # merge into ~/.kube/config manually

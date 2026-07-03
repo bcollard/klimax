@@ -96,7 +96,7 @@ internal/cli/doctor.go               `klimax doctor`
 internal/cli/version.go              `klimax version`
 internal/cli/shell.go                `klimax shell` — interactive SSH session into the VM
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
-internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/e2e-test-nginx)
+internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/label/e2e-test-nginx)
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/registry.go             `klimax registry clean-cache`
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
@@ -237,7 +237,7 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
 - **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
-- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every klimax cluster always gets `managed-by=klimax`; fleets add `klimax.dev/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create.
+- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every klimax cluster always gets `managed-by=klimax`; fleets add `klimax.dev/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `klimax cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
 
 ---
 
@@ -274,6 +274,9 @@ klimax cluster delete [name]           Delete a cluster; interactive multi-selec
 klimax cluster list [-o text|json|yaml] List clusters with num, API port, kubeconfig path
 klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
 klimax cluster merge <name>            Merge cluster context into ~/.kube/config
+klimax cluster label <name>            Label an existing cluster's nodes
+  -l, --label key=value               Set/overwrite a node label (repeatable)
+  -l, --label key-                    Remove a node label
 klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses current kubectl context on host
   --cleanup                            Only remove nginx pod/svc (does NOT run the test)
 
