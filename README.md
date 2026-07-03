@@ -71,6 +71,23 @@ brew trust --tap bcollard/klimax
 brew install --cask klimax
 ```
 
+### Upgrading
+
+```sh
+brew upgrade --cask klimax
+```
+
+> ⚠️ **Rebuild the VM after upgrading.** klimax bakes a specific kind CLI and
+> default Kubernetes node image into the VM at creation time; upgrading the binary
+> does **not** re-provision an existing VM. After a `brew upgrade`, run:
+>
+> ```sh
+> klimax destroy && klimax up
+> ```
+>
+> then recreate your clusters (`klimax cluster create <name>`). Skipping this can
+> leave you on an older kind that cannot create the new default node version.
+
 ### Build from source
 
 CGO is required because Lima's VM management packages link against macOS frameworks:

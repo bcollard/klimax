@@ -68,6 +68,15 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://github.com/bcollard/klimax
     description: Lima-based macOS VZ VM + multi-kind cluster manager
+    caveats: |
+      klimax bakes a specific kind CLI and default Kubernetes node image into the
+      VM at creation time. Upgrading the klimax binary does NOT re-provision an
+      existing VM, so after upgrading you should rebuild it:
+
+        klimax destroy && klimax up
+
+      Then recreate your clusters (klimax cluster create <name>). Skipping this can
+      leave you on an older kind that cannot create the new default node version.
     directory: Casks
     commit_author:
       name: goreleaserbot
