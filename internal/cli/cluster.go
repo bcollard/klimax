@@ -44,22 +44,28 @@ func newClusterCmd() *cobra.Command {
 func newClusterCreateCmd() *cobra.Command {
 	var num int
 	var region, zone string
+	var labels []string
 	cmd := &cobra.Command{
 		Use:     "create <name>",
 		Aliases: []string{"cr", "c"},
 		Short:   "Create a new kind cluster in the running VM",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runClusterCreate(cmd.Context(), args[0], num, region, zone)
+			lbls, err := config.ParseLabels(labels)
+			if err != nil {
+				return err
+			}
+			return runClusterCreate(cmd.Context(), args[0], num, region, zone, lbls)
 		},
 	}
 	cmd.Flags().IntVar(&num, "num", 0, "Cluster number (1-99) for subnet/port allocation; auto-assigned if 0")
 	cmd.Flags().StringVar(&region, "region", "", "topology.kubernetes.io/region label (default: europe-west<N>)")
 	cmd.Flags().StringVar(&zone, "zone", "", "topology.kubernetes.io/zone label (default: europe-west<N>-b)")
+	cmd.Flags().StringArrayVarP(&labels, "label", "l", nil, "Extra node label key=value (repeatable)")
 	return cmd
 }
 
-func runClusterCreate(ctx context.Context, name string, num int, region, zone string) error {
+func runClusterCreate(ctx context.Context, name string, num int, region, zone string, labels map[string]string) error {
 	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
@@ -78,7 +84,7 @@ func runClusterCreate(ctx context.Context, name string, num int, region, zone st
 		slog.Info("Auto-assigned cluster num", "name", name, "num", num)
 	}
 
-	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone}
+	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone, Labels: labels}
 
 	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, cfg.Network.DisablePortMirroring); err != nil {
 		return err

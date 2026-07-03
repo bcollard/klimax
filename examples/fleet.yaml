@@ -31,7 +31,11 @@ spec:
     registries:
       localRegistry: true
       mirrors: ["*"]        # all mirrors from ~/.klimax/config.yaml
+    labels:                 # merged into every cluster (entry labels win on conflict)
+      owner: platform-team
 
+  # Every cluster always gets node labels: managed-by=klimax, plus
+  # klimax.dev/fleet=<metadata.name> and topology.kubernetes.io/region + zone.
   clusters:
     # A bare string is shorthand for "just create a cluster with this name".
     - hub
@@ -45,6 +49,9 @@ spec:
       zone: europe-west4-b
       registries:
         mirrors: ["registry-dockerio", "registry-quayio"]   # cherry-pick by name
+      labels:              # extra node labels on this cluster's nodes
+        team: search
+        env: dev
       addons:
         metricsServer:
           enabled: true

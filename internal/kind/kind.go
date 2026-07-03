@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -123,6 +125,10 @@ echo "kind cluster %s created"
 		return fmt.Errorf("configuring registry mirrors for cluster %q: %w", cl.Name, err)
 	}
 
+	if err := applyNodeLabels(ctx, g, cl.Name, cl.Labels); err != nil {
+		return fmt.Errorf("labeling nodes for cluster %q: %w", cl.Name, err)
+	}
+
 	if err := installMetalLB(ctx, g, cl, kindCfg.MetalLBVersion, subnetPrefix); err != nil {
 		return fmt.Errorf("installing MetalLB for cluster %q: %w", cl.Name, err)
 	}
@@ -199,6 +205,36 @@ func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName 
 	sb.WriteString("done\n")
 
 	return g.RunScript(ctx, fmt.Sprintf("configure registry mirrors on cluster %q", clusterName), sb.String())
+}
+
+// applyNodeLabels labels every node in the cluster. It always applies
+// managed-by=klimax, plus any caller-supplied labels (klimax.dev/fleet, custom).
+// Topology labels (region/zone) and ingress-ready are already set at node
+// registration via the kubeadm node-labels patch. Applied with kubectl (admin
+// creds) so it is not subject to the kubelet self-labeling NodeRestriction.
+func applyNodeLabels(ctx context.Context, g *guest.Client, clusterName string, labels map[string]string) error {
+	merged := map[string]string{"managed-by": "klimax"}
+	maps.Copy(merged, labels)
+
+	keys := make([]string, 0, len(merged))
+	for k := range merged {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var pairs strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&pairs, " %s=%s", k, merged[k])
+	}
+
+	slog.Info("Labeling cluster nodes", "cluster", clusterName, "labels", len(merged))
+	script := fmt.Sprintf(`#!/bin/bash
+set -euo pipefail
+KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
+kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
+kubectl --kubeconfig ${KIND_KUBECONFIG} label nodes --all --overwrite%s
+`, clusterName, clusterName, pairs.String())
+
+	return g.RunScript(ctx, fmt.Sprintf("label nodes on cluster %q", clusterName), script)
 }
 
 // installMetalLB applies the MetalLB manifests and configures an IPAddressPool

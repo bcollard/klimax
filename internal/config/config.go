@@ -78,6 +78,9 @@ type ClusterConfig struct {
 	Num    int
 	Region string // topology.kubernetes.io/region label; default: europe-west<N>
 	Zone   string // topology.kubernetes.io/zone label;   default: europe-west<N>-b
+	// Labels are extra node labels applied to every node at creation. klimax
+	// always adds managed-by=klimax on top of these.
+	Labels map[string]string
 }
 
 // RegistryConfig controls the local Docker registry and pull-through mirrors.

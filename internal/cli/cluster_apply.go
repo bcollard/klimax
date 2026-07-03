@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -73,6 +74,17 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 	// Pre-flight: verify every cherry-picked mirror name exists in the config catalog.
 	if err := validateMirrorSelections(cs, cfg.Registries); err != nil {
 		return err
+	}
+	// Pre-flight: validate labels (merged with defaults, plus the fleet label).
+	if cs.Metadata.Name != "" {
+		if err := config.ValidateLabels(map[string]string{"klimax.dev/fleet": cs.Metadata.Name}); err != nil {
+			return fmt.Errorf("metadata.name %q is not a valid label value: %w", cs.Metadata.Name, err)
+		}
+	}
+	for _, c := range cs.Spec.Clusters {
+		if err := config.ValidateLabels(c.Merged(cs.Spec.Defaults).Labels); err != nil {
+			return fmt.Errorf("cluster %q: %w", c.Name, err)
+		}
 	}
 
 	existing, err := kind.DetectUsedNums(ctx, g)
@@ -190,7 +202,7 @@ func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan 
 			}
 
 			fmt.Printf("→ creating cluster %q (num %d)\n", pc.Name, pc.Num)
-			err := createOne(ctx, g, cfg, pc, &mergeMu)
+			err := createOne(ctx, g, cfg, plan.Name, pc, &mergeMu)
 			if err != nil {
 				slog.Error("Cluster creation failed", "cluster", pc.Name, "err", err)
 			} else {
@@ -205,8 +217,15 @@ func executePlan(ctx context.Context, g *guest.Client, cfg *config.Config, plan 
 }
 
 // createOne builds the per-cluster config overrides and creates a single cluster.
-func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, pc fleet.PlannedCluster, mergeMu *sync.Mutex) error {
-	cl := config.ClusterConfig{Name: pc.Name, Num: pc.Num, Region: pc.Region, Zone: pc.Zone}
+func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetName string, pc fleet.PlannedCluster, mergeMu *sync.Mutex) error {
+	// Labels: merged per-cluster/default labels, plus the fleet label.
+	labels := map[string]string{}
+	maps.Copy(labels, pc.Labels)
+	if fleetName != "" {
+		labels["klimax.dev/fleet"] = fleetName
+	}
+
+	cl := config.ClusterConfig{Name: pc.Name, Num: pc.Num, Region: pc.Region, Zone: pc.Zone, Labels: labels}
 
 	// Per-cluster nodeVersion override.
 	kindCfg := cfg.Kind

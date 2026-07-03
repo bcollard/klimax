@@ -232,11 +232,12 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
     clusters: [dev, staging]
   ```
 - **`ClusterEntry` unmarshals from a bare string OR an object** (`fleet.ClusterEntry.UnmarshalYAML`) — that's what makes the names-only form work.
-- **Per-cluster options**: `dependsOn`, `num`, `nodeVersion`, `region`, `zone`, `registries` (cherry-pick: `localRegistry` bool + `mirrors` — `nil`=all, `["*"]`=all, `[]`=none, `[names]`=subset, by config mirror name), `addons.metricsServer` (`enabled`/`version`/`kubeletInsecureTLS`). `spec.defaults` supplies inherited values.
+- **Per-cluster options**: `dependsOn`, `num`, `nodeVersion`, `region`, `zone`, `registries` (cherry-pick: `localRegistry` bool + `mirrors` — `nil`=all, `["*"]`=all, `[]`=none, `[names]`=subset, by config mirror name), `addons.metricsServer` (`enabled`/`version`/`kubeletInsecureTLS`), `labels` (map). `spec.defaults` supplies inherited values (labels are merged, entry wins).
 - **Scheduler** (`internal/cli/cluster_apply.go`): builds a dependsOn DAG, creates clusters up to `spec.maxParallel` at a time (default 1 = sequential), gating each on its dependencies via per-cluster `done` channels. `strategy: FailFast` (default) stops scheduling new clusters after the first failure; `ContinueOnError` presses on.
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
 - **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
+- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every klimax cluster always gets `managed-by=klimax`; fleets add `klimax.dev/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create.
 
 ---
 
@@ -263,6 +264,7 @@ klimax cluster create <name>           Create a kind cluster (num auto-assigned)
   --num N                              Override cluster num (1-99)
   --region europe-west1                Override topology region label
   --zone   europe-west1-b              Override topology zone label
+  -l, --label key=value               Extra node label (repeatable)
 klimax cluster apply -f <file>         Create a fleet from a Fleet manifest (- for stdin)
   --dry-run                            Print the resolved plan (nums, DAG, options) and exit
   --max-parallel N                     Override spec.maxParallel (concurrent creations)

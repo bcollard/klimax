@@ -279,6 +279,7 @@ klimax docker-context --unset      # docker context use default
 klimax cluster create <name>
 klimax cluster create <name> --num 3             # pin to slot 3
 klimax cluster create <name> --region us-east1 --zone us-east1-a
+klimax cluster create <name> -l team=platform -l env=dev   # extra node labels
 
 # Apply a fleet from a Fleet manifest (see below)
 klimax cluster apply -f fleet.yaml
@@ -337,8 +338,8 @@ klimax cluster apply -f fleet.yaml
 
 `apply` is **additive**: clusters that already exist are skipped. Each entry can
 optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
-`registries` (cherry-pick mirrors / toggle the local registry), and
-`addons.metricsServer`. Independent clusters build in parallel up to
+`registries` (cherry-pick mirrors / toggle the local registry),
+`addons.metricsServer`, and `labels`. Independent clusters build in parallel up to
 `spec.maxParallel`; `dependsOn` is always respected. Use `--dry-run` to preview
 the plan (assigned nums, ordering, per-cluster options). See
 [`examples/fleet.yaml`](examples/fleet.yaml) for the full reference.
@@ -359,6 +360,7 @@ klimax cluster delete -f fleet.yaml --yes
 | MetalLB pool | `<kindPrefix>.N.1–7` and `<kindPrefix>.N.16–254` |
 | kubeconfig | `~/.kube/klimax/<name>.kubeconfig` |
 | topology labels | `topology.kubernetes.io/region=europe-westN`, `zone=europe-westN-b` |
+| default node labels | `managed-by=klimax` (always); `klimax.dev/fleet=<name>` (via `apply -f`); plus any `-l key=value` / Fleet `labels` |
 
 ### Registries
 

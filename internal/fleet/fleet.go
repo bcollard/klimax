@@ -20,6 +20,7 @@ package fleet
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 
@@ -69,24 +70,26 @@ type Spec struct {
 
 // Defaults holds field values inherited by every cluster entry.
 type Defaults struct {
-	NodeVersion string          `yaml:"nodeVersion"`
-	Region      string          `yaml:"region"`
-	Zone        string          `yaml:"zone"`
-	Registries  *RegistrySelect `yaml:"registries"`
-	Addons      *Addons         `yaml:"addons"`
+	NodeVersion string            `yaml:"nodeVersion"`
+	Region      string            `yaml:"region"`
+	Zone        string            `yaml:"zone"`
+	Registries  *RegistrySelect   `yaml:"registries"`
+	Addons      *Addons           `yaml:"addons"`
+	Labels      map[string]string `yaml:"labels"`
 }
 
 // ClusterEntry is one cluster in the set. It unmarshals from either a bare
 // string (just the name) or a mapping with options.
 type ClusterEntry struct {
-	Name        string          `yaml:"name"`
-	DependsOn   []string        `yaml:"dependsOn"`
-	Num         int             `yaml:"num"`
-	NodeVersion string          `yaml:"nodeVersion"`
-	Region      string          `yaml:"region"`
-	Zone        string          `yaml:"zone"`
-	Registries  *RegistrySelect `yaml:"registries"`
-	Addons      *Addons         `yaml:"addons"`
+	Name        string            `yaml:"name"`
+	DependsOn   []string          `yaml:"dependsOn"`
+	Num         int               `yaml:"num"`
+	NodeVersion string            `yaml:"nodeVersion"`
+	Region      string            `yaml:"region"`
+	Zone        string            `yaml:"zone"`
+	Registries  *RegistrySelect   `yaml:"registries"`
+	Addons      *Addons           `yaml:"addons"`
+	Labels      map[string]string `yaml:"labels"`
 }
 
 // UnmarshalYAML accepts either a scalar (the cluster name) or a full mapping.
@@ -259,6 +262,13 @@ func (c ClusterEntry) Merged(d Defaults) ClusterEntry {
 	}
 	if c.Addons == nil {
 		c.Addons = d.Addons
+	}
+	// Merge labels: defaults first, entry values win on key conflicts.
+	if len(d.Labels) > 0 {
+		merged := make(map[string]string, len(d.Labels)+len(c.Labels))
+		maps.Copy(merged, d.Labels)
+		maps.Copy(merged, c.Labels)
+		c.Labels = merged
 	}
 	return c
 }

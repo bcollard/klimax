@@ -157,6 +157,36 @@ spec:
 	}
 }
 
+func TestLabelsMergeWithDefaults(t *testing.T) {
+	data := []byte(`apiVersion: klimax.dev/v1alpha1
+kind: Fleet
+spec:
+  defaults:
+    labels:
+      tier: shared
+      env: dev
+  clusters:
+    - name: a
+      labels:
+        env: prod
+        team: platform
+`)
+	cs, err := Parse(data)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	m := cs.Spec.Clusters[0].Merged(cs.Spec.Defaults).Labels
+	want := map[string]string{"tier": "shared", "env": "prod", "team": "platform"}
+	if len(m) != len(want) {
+		t.Fatalf("merged labels = %v, want %v", m, want)
+	}
+	for k, v := range want {
+		if m[k] != v {
+			t.Errorf("label %q = %q, want %q", k, m[k], v)
+		}
+	}
+}
+
 func TestResolvePinnedNumConflictsWithLive(t *testing.T) {
 	data := []byte(`apiVersion: klimax.dev/v1alpha1
 kind: Fleet
