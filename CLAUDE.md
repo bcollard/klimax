@@ -329,6 +329,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 - `kind create cluster` only runs for clusters that don't exist.
 - The macOS route is added/refreshed only when missing or pointing at a stale gateway; when it already targets the current lima0 IP, `klimax up` skips it entirely and does **not** invoke sudo (so re-running `up` on a live VM never prompts). See `routing.RouteGateway`.
 - `cluster create` warns (does not block) when `kind.nodeVersion` differs from `config.DefaultKindNodeVersion` — the image the bundled kind CLI is validated against.
+- **On first VM creation only**, `klimax up` reviews an existing config (`reviewConfigBeforeCreate` in `up.go`): it lists options this klimax version adds that the config doesn't set (`config.MissingKeys` — schema diff of the user's file vs the defaulted struct), and if `kind.nodeVersion` drifts from `config.DefaultKindNodeVersion` it **interactively offers to rewrite it** in the config file (`rewriteNodeVersion`, preserves comments/indent). Non-interactive (no TTY): it keeps the pinned value and only warns — never blocks. Skipped entirely when the VM already exists.
 - All kubeconfigs are written atomically with `0600` permissions.
 
 ---

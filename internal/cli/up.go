@@ -6,14 +6,18 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/docker"
 	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/klimax/internal/limatemplate"
 	"github.com/bcollard/klimax/internal/registry"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newUpCmd() *cobra.Command {
@@ -41,6 +45,15 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 
 	// 1. Ensure VM is running.
 	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+
+	// If the VM doesn't exist yet, this `up` will create it — review the config
+	// for evolution (new options) and node-version drift before baking anything in.
+	if existing, ierr := mgr.Inspect(ctx); ierr == nil && existing == nil {
+		if err := reviewConfigBeforeCreate(cfg); err != nil {
+			return err
+		}
+	}
+
 	inst, err := mgr.EnsureRunning(ctx, cfg, showVMLogs)
 	if err != nil {
 		return fmt.Errorf("vm: %w", err)
@@ -87,6 +100,64 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	)
 	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n\n")
 	return nil
+}
+
+// reviewConfigBeforeCreate runs just before a VM is created. It surfaces config
+// evolution (options added in newer klimax versions that the user's config
+// doesn't set) and, if the pinned kind.nodeVersion drifts from this version's
+// default (matched to the bundled kind CLI), interactively offers to update it.
+func reviewConfigBeforeCreate(cfg *config.Config) error {
+	// 1. New options available but not set (config likely predates this version).
+	if raw, err := os.ReadFile(configFile); err == nil {
+		if missing, err := config.MissingKeys(raw); err == nil && len(missing) > 0 {
+			fmt.Printf("Note: %s does not set these options available in this klimax version (defaults apply):\n  %s\nSee config.example.yaml for what's new.\n\n",
+				configFile, strings.Join(missing, ", "))
+		}
+	}
+
+	// 2. kind.nodeVersion drift vs the current default.
+	if cfg.Kind.NodeVersion == config.DefaultKindNodeVersion {
+		return nil
+	}
+	fmt.Printf("⚠ Your config pins kind.nodeVersion=%q, but this klimax version's default is %q\n"+
+		"  (matched to the bundled kind CLI %s). A mismatched node version is unsupported and\n"+
+		"  can make cluster creation fail.\n",
+		cfg.Kind.NodeVersion, config.DefaultKindNodeVersion, limatemplate.KindCLIVersion)
+
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		slog.Warn("Non-interactive: keeping the pinned nodeVersion. Edit the config or re-run interactively to update it.",
+			"pinned", cfg.Kind.NodeVersion, "default", config.DefaultKindNodeVersion)
+		return nil
+	}
+
+	fmt.Printf("Update kind.nodeVersion to %s in %s before creating the VM? [y/N] ", config.DefaultKindNodeVersion, configFile)
+	var answer string
+	_, _ = fmt.Scanln(&answer)
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		fmt.Println("Keeping the pinned nodeVersion.")
+		return nil
+	}
+	if err := rewriteNodeVersion(configFile, config.DefaultKindNodeVersion); err != nil {
+		return fmt.Errorf("updating nodeVersion in %s: %w", configFile, err)
+	}
+	cfg.Kind.NodeVersion = config.DefaultKindNodeVersion
+	fmt.Printf("Updated kind.nodeVersion to %s.\n\n", config.DefaultKindNodeVersion)
+	return nil
+}
+
+// rewriteNodeVersion rewrites the kind.nodeVersion value in a config file in
+// place, preserving indentation and any trailing inline comment.
+func rewriteNodeVersion(path, newVersion string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	re := regexp.MustCompile(`(?m)^(\s*nodeVersion:\s*)("?[^"\s#]+"?)(\s*(#.*)?)$`)
+	if !re.Match(data) {
+		return fmt.Errorf("no nodeVersion line found")
+	}
+	out := re.ReplaceAll(data, []byte(`${1}"`+newVersion+`"${3}`))
+	return os.WriteFile(path, out, 0o600)
 }
 
 // ensureConfig creates a default config file at configFile if it does not exist.

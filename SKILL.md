@@ -42,6 +42,7 @@ klimax destroy                         # Delete all clusters + VM + macOS host r
 **Timing & synchrony (important for agents):**
 - `klimax up` on a fresh machine downloads an Ubuntu image and provisions Docker + kind — this takes **several minutes** the first time. Do not treat a slow first run as a hang. Subsequent runs are fast.
 - `klimax cluster create` is **synchronous**: it blocks until the cluster is up, MetalLB is ready, and the kubeconfig is written. `kubectl` against the new context works immediately after it returns — no extra `sleep`/wait loops needed.
+- On **first VM creation** `klimax up` reviews an existing config for drift (new options; a stale pinned `kind.nodeVersion`). Run non-interactively it never blocks — it just warns and keeps existing values. It only prompts on a real terminal, and only when creating the VM.
 
 ## Standard recipe pattern
 
