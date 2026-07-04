@@ -264,11 +264,13 @@ kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > 
 kubectl --kubeconfig ${KIND_KUBECONFIG} apply \
   -f https://raw.githubusercontent.com/metallb/metallb/%s/config/manifests/metallb-native.yaml
 
+# 300s (not 120s): the controller/speaker images are pulled from quay.io through
+# the mirror on first use, which can exceed two minutes on a cold cache / slow link.
 kubectl --kubeconfig ${KIND_KUBECONFIG} \
-  -n metallb-system wait pod --all --timeout=120s --for=condition=Ready
+  -n metallb-system wait pod --all --timeout=300s --for=condition=Ready
 
 kubectl --kubeconfig ${KIND_KUBECONFIG} \
-  -n metallb-system wait deploy controller --timeout=120s --for=condition=Available
+  -n metallb-system wait deploy controller --timeout=300s --for=condition=Available
 
 sleep 5
 
