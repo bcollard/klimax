@@ -237,8 +237,12 @@ registries:
 ## CLI reference
 
 ```
-klimax [--config ~/.klimax/config.yaml] [--debug] <command>
+klimax [--config ~/.klimax/config.yaml] [--debug] [--lima-log-level <level>] <command>
 ```
+
+By default only klimax's own logs are shown; the underlying Lima VM logs are
+hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
+(or `--debug`, which shows Lima at `info`).
 
 ### VM lifecycle
 

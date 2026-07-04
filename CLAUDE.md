@@ -306,7 +306,9 @@ klimax skill path                      Print the Claude Code install path for th
 klimax completion bash|zsh|fish|powershell   Print shell completion script
 ```
 
-Global flags (all commands): `-c config.yaml`, `--debug`
+Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <level>`
+
+**Logging:** klimax's own logs use `log/slog`; Lima's library logs use `logrus`. By default klimax raises logrus to `error` so only klimax logs (and genuine Lima errors) show — the noisy `INFO[…]`/`WARN[…]` Lima lines are hidden. `--debug` surfaces Lima at `info` (and klimax at debug); `--lima-log-level trace|debug|info|warn|error|off` overrides explicitly (`off`→panic-only). Set in `root.go` `PersistentPreRunE` (`resolveLimaLogLevel`). The `hostagent` subcommand re-sets logrus to debug/JSON in `initHostagentLogrus`, so quieting the parent never affects VM readiness detection.
 
 ---
 
