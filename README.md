@@ -46,7 +46,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 - **macOS 13 Ventura or later** — Apple Virtualization.framework is required (`vmType: vz`)
 - **`sudo` access** — needed only when `klimax up` first adds the macOS route (re-runs skip it if already correct) and for `klimax destroy`; `klimax down` does not require sudo
 - **Go 1.22+** — only if building from source; not needed for the pre-built binary
-- **kubectx** (optional) — for easier kubeconfig context switching, or use `klimax cluster use <name>`
+- **kubectx** (optional) — for easier kubeconfig context switching, or use `klimax kubeconfig use <name>`
 
 > klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary. No separate Lima installation required.
 
@@ -305,8 +305,11 @@ klimax cluster label <name> -l team=platform -l env=prod   # set/overwrite
 klimax cluster label <name> -l env-                        # remove
 
 # Kubeconfig
-eval $(klimax cluster use <name>)    # print + eval KUBECONFIG export
-klimax cluster merge <name>          # merge into ~/.kube/config manually
+klimax kubeconfig use <name>            # merge + switch active kubectl context to it
+klimax kubeconfig merge <name>          # merge into ~/.kube/config (don't switch)
+eval $(klimax kubeconfig env <name>)    # or point KUBECONFIG at the isolated file
+klimax kubeconfig path <name>           # print the kubeconfig file path
+klimax kubeconfig remove <name>         # remove the context from ~/.kube/config
 
 # E2E smoke test (uses current kubectl context)
 klimax cluster e2e-test-nginx
@@ -444,7 +447,7 @@ Use this when running klimax alongside other Lima-based VMs (kind-on-lima, Ranch
 
 Setting `disablePortMirroring: true` disables all Lima TCP port mirroring for the klimax VM. Kubeconfigs then use the VM's direct `lima0` IP (e.g. `192.168.64.3:700N`), which is L2-reachable from the host via vzNAT. The API server cert automatically includes the lima0 IP as a SAN.
 
-> Note: the lima0 IP is assigned dynamically by macOS and may change on VM restart. Run `klimax cluster merge <name>` after a restart to refresh the address in `~/.kube/config`.
+> Note: the lima0 IP is assigned dynamically by macOS and may change on VM restart. Run `klimax kubeconfig merge <name>` after a restart to refresh the address in `~/.kube/config`.
 
 This is a VM-level setting — it only takes effect on new VMs (`klimax destroy && klimax up`).
 
@@ -487,7 +490,7 @@ This is a VM-level setting — recreate the VM once to apply it (`klimax destroy
 then forget about it.
 
 > The `lima0` IP is assigned dynamically by macOS and may change on VM restart.
-> Run `klimax cluster merge <name>` after a restart to refresh kubeconfigs.
+> Run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs.
 
 See [docs/klimax-vs-other-lima-based-tools.md](docs/klimax-vs-other-lima-based-tools.md) for
 a detailed comparison with Rancher Desktop, Colima, and kind-on-lima.

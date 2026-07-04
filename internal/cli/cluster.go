@@ -445,16 +445,12 @@ func runClusterList(ctx context.Context, outputFmt, selector string) error {
 
 func newClusterUseCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "use <name>",
-		Short: "Print the export command to set KUBECONFIG for the given cluster",
-		Args:  cobra.ExactArgs(1),
+		Use:        "use <name>",
+		Short:      "Print the export command to set KUBECONFIG for the given cluster",
+		Deprecated: "use 'klimax kubeconfig env <name>' (or 'klimax kubeconfig use <name>' to switch context).",
+		Args:       cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := kind.KindKubeconfigPath(args[0])
-			if _, err := os.Stat(path); os.IsNotExist(err) {
-				fmt.Fprintf(os.Stderr, "warning: kubeconfig not found at %s\n", path)
-			}
-			fmt.Printf("export KUBECONFIG=%s\n", path)
-			return nil
+			return printKubeconfigEnv(args[0])
 		},
 	}
 }
@@ -463,14 +459,10 @@ func newClusterUseCmd() *cobra.Command {
 
 func newClusterMergeCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "merge <name>",
-		Short: "Merge cluster kubeconfig into ~/.kube/config",
-		Long: `Adds the cluster's context, cluster, and user entries into the default
-kubeconfig (~/.kube/config) so that kubectx/kubens can switch to it.
-
-A backup of the existing ~/.kube/config is written to ~/.kube/config.bak
-before any modifications are made.`,
-		Args: cobra.ExactArgs(1),
+		Use:        "merge <name>",
+		Short:      "Merge cluster kubeconfig into ~/.kube/config",
+		Deprecated: "use 'klimax kubeconfig merge <name>'.",
+		Args:       cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterMerge(args[0])
 		},

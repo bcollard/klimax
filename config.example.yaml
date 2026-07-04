@@ -31,7 +31,7 @@ network:
   #   - Kubeconfigs use the VM's direct lima0 IP (e.g. 192.168.64.3:700N) instead
   #     of 127.0.0.1:700N. The lima0 IP is L2-reachable from the host via vzNAT.
   #   - The API server cert includes the lima0 IP as a SAN (added automatically).
-  #   - Re-run 'klimax cluster merge <name>' after each VM restart to refresh the
+  #   - Re-run 'klimax kubeconfig merge <name>' after each VM restart to refresh the
   #     address if the lima0 IP changes (vzNAT assigns IPs dynamically).
   #
   # ⚠ VM-level setting: only takes effect on new VMs (klimax destroy && klimax up).

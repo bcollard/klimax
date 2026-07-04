@@ -60,7 +60,7 @@ kubectl --context global get nodes
 kubectl --context cluster1 get nodes
 ```
 
-Cluster context names are stored bare in `~/.kube/config` (no `kind-` prefix). `kubectl --context <name>` works directly. Kubeconfigs are also written to `~/.kube/klimax/<name>.kubeconfig`.
+Cluster context names are stored bare in `~/.kube/config` (no `kind-` prefix). `kubectl --context <name>` works directly. Kubeconfigs are also written to `~/.kube/klimax/<name>.kubeconfig`. To switch the active context use `klimax kubeconfig use <name>` (merge + `kubectl config use-context`); other helpers: `klimax kubeconfig path|env|merge|remove <name>`.
 
 ## Creating several clusters at once (Fleet)
 

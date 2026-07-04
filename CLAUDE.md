@@ -97,7 +97,8 @@ internal/cli/doctor.go               `klimax doctor`
 internal/cli/version.go              `klimax version`
 internal/cli/shell.go                `klimax shell` — interactive SSH session into the VM
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
-internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/use/merge/label/e2e-test-nginx)
+internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/label/e2e-test-nginx; use+merge deprecated → kubeconfig)
+internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/use) — kubeconfig helpers; `use` merges + kubectl use-context
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `klimax registry clean-cache`
@@ -278,8 +279,14 @@ klimax cluster delete [name]           Delete a cluster; interactive multi-selec
 klimax cluster list                    List clusters with num, API port, kubeconfig path
   -o text|json|yaml                    Output format
   -l, --selector <sel>                 Filter by node label selector (e.g. klimax.dev/fleet=f1)
-klimax cluster use <name>              Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
-klimax cluster merge <name>            Merge cluster context into ~/.kube/config
+klimax cluster use <name>              DEPRECATED → 'klimax kubeconfig env <name>'
+klimax cluster merge <name>            DEPRECATED → 'klimax kubeconfig merge <name>'
+
+klimax kubeconfig path <name>          Print the cluster's kubeconfig file path
+klimax kubeconfig env <name>           Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
+klimax kubeconfig merge <name>         Merge the cluster's context into ~/.kube/config
+klimax kubeconfig remove <name>        Remove the cluster's context from ~/.kube/config
+klimax kubeconfig use <name>           Merge + `kubectl config use-context <name>` (switch active context)
 klimax cluster label <name>            Label an existing cluster's nodes
   -l, --label key=value               Set/overwrite a node label (repeatable)
   -l, --label key-                    Remove a node label
@@ -339,6 +346,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 ## Known caveats
 
 - Docker rewrites iptables on restart → handled by `ExecStartPost` drop-in.
+- MetalLB (and metrics-server) readiness waits are `300s` — their images are pulled from quay.io through the mirror on first use, which can exceed two minutes on a cold cache. On a *very* slow link even 300s can be too short (controller must pull+run before speaker's `memberlist` secret exists, then speaker pulls too); the mirror cache warms after the first successful pull. `kind create cluster --wait 5m` covers the core node images (preloaded).
 - macOS VPN software can conflict with the host route → `klimax doctor` warns.
 - `podSubnet: 10.1<num>.0.0/16` overlaps with `serviceSubnet: 10.<num+10>.0.0/16` for num≥10. In practice keep num 1–9 per VM.
 - The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).
