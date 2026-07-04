@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
+	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/kind"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -29,10 +31,51 @@ live clusters regardless of the original manifest.`,
 		newFleetListCmd(),
 		newFleetDescribeCmd(),
 		newFleetCreateCmd(),
+		newFleetAdoptCmd(),
 		newFleetDeleteCmd(),
 		newFleetLabelCmd(),
 	)
 	return cmd
+}
+
+// ─── fleet adopt ───────────────────────────────────────────────────────────────
+
+func newFleetAdoptCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "adopt <fleet> <cluster> [cluster...]",
+		Short: "Adopt existing clusters into a fleet (sets their klimax.dev/fleet label)",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runFleetAdopt(cmd.Context(), args[0], args[1:])
+		},
+	}
+	return cmd
+}
+
+func runFleetAdopt(ctx context.Context, name string, clusters []string) error {
+	if err := config.ValidateLabels(map[string]string{fleetLabelKey: name}); err != nil {
+		return fmt.Errorf("%q is not a valid fleet name: %w", name, err)
+	}
+	_, g, err := connectToRunningVM(ctx)
+	if err != nil {
+		return err
+	}
+	live, err := kind.ListClusters(ctx, g)
+	if err != nil {
+		return err
+	}
+	for _, c := range clusters {
+		if !slices.Contains(live, c) {
+			return fmt.Errorf("cluster %q not found (see 'klimax cluster list')", c)
+		}
+	}
+	for _, c := range clusters {
+		if err := kind.LabelNodes(ctx, g, c, []string{fleetLabelKey + "=" + name}); err != nil {
+			return fmt.Errorf("adopting cluster %q: %w", c, err)
+		}
+	}
+	fmt.Printf("Adopted %d cluster(s) into fleet %q: %s\n", len(clusters), name, strings.Join(clusters, ", "))
+	return nil
 }
 
 // ─── fleet describe ────────────────────────────────────────────────────────────
@@ -178,6 +221,7 @@ func newFleetCreateCmd() *cobra.Command {
 	var filename string
 	var dryRun bool
 	var maxParallel int
+	var adopt bool
 	cmd := &cobra.Command{
 		Use:   "create -f <fleet.yaml>",
 		Short: "Create the clusters described by a Fleet manifest",
@@ -186,12 +230,13 @@ func newFleetCreateCmd() *cobra.Command {
 			if filename == "" {
 				return errors.New("a manifest is required: klimax fleet create -f <file>")
 			}
-			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel)
+			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel, adopt)
 		},
 	}
 	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Path to a Fleet manifest (- for stdin)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the resolved plan and exit without creating anything")
 	cmd.Flags().IntVar(&maxParallel, "max-parallel", 0, "Override spec.maxParallel (concurrent cluster creations)")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "Adopt pre-existing clusters listed in the manifest into this fleet (relabel them)")
 	return cmd
 }
 

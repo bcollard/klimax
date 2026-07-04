@@ -345,7 +345,12 @@ klimax fleet describe dev-fleet           # members with num, ports, node versio
 klimax fleet label dev-fleet -l tier=gold # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes       # delete every cluster in the fleet
 klimax fleet delete -f fleet.yaml --yes   # ...or tear down exactly what the manifest lists
+klimax fleet adopt dev-fleet legacy1      # pull an existing standalone cluster into the fleet
 ```
+
+If `fleet create` finds a listed cluster that already exists but isn't part of the
+fleet, it **warns and skips** it (never silently relabels). Re-run with `--adopt`
+to pull those clusters into the fleet, or use `klimax fleet adopt <fleet> <cluster>…`.
 
 Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so
 `fleet list/label/delete` work on the live clusters regardless of the manifest.

@@ -9,6 +9,7 @@ import (
 	"maps"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -23,6 +24,7 @@ func newClusterApplyCmd() *cobra.Command {
 	var filename string
 	var dryRun bool
 	var maxParallel int
+	var adopt bool
 	cmd := &cobra.Command{
 		Use:   "apply -f <fleet.yaml>",
 		Short: "Create a fleet of kind clusters from a Fleet manifest",
@@ -44,16 +46,17 @@ The minimal manifest only lists cluster names:
 			if filename == "" {
 				return errors.New("a manifest is required: klimax cluster apply -f <file>")
 			}
-			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel)
+			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel, adopt)
 		},
 	}
 	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Path to a Fleet manifest (- for stdin)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the resolved plan and exit without creating anything")
 	cmd.Flags().IntVar(&maxParallel, "max-parallel", 0, "Override spec.maxParallel (concurrent cluster creations)")
+	cmd.Flags().BoolVar(&adopt, "adopt", false, "Adopt pre-existing clusters listed in the manifest into this fleet (relabel them)")
 	return cmd
 }
 
-func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParallel int) error {
+func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParallel int, adopt bool) error {
 	data, err := readManifest(filename)
 	if err != nil {
 		return err
@@ -100,17 +103,111 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 		plan.MaxParallel = maxParallel
 	}
 
-	printPlan(plan)
-	if dryRun {
-		fmt.Println("\n(dry-run: no clusters created)")
-		return nil
+	// Identify pre-existing clusters that the manifest lists but that are not
+	// (yet) members of this fleet — candidates for adoption.
+	foreign, err := foreignExisting(ctx, g, cs, plan)
+	if err != nil {
+		return err
 	}
-	if len(plan.ToCreate()) == 0 {
-		fmt.Println("\nNothing to do — all clusters already exist.")
+
+	printPlan(plan, foreign, adopt)
+	if dryRun {
+		fmt.Println("\n(dry-run: no changes made)")
 		return nil
 	}
 
-	return executePlan(ctx, g, cfg, plan)
+	if len(foreign) > 0 && !adopt {
+		slog.Warn("Existing clusters are listed in the manifest but are not part of this fleet — left unchanged. Re-run with --adopt to adopt them into the fleet.",
+			"fleet", cs.Metadata.Name, "clusters", strings.Join(sortedKeys(foreign), ", "))
+	}
+
+	if len(plan.ToCreate()) > 0 {
+		if err := executePlan(ctx, g, cfg, plan); err != nil {
+			return err
+		}
+	}
+
+	if adopt && len(foreign) > 0 {
+		if err := adoptIntoFleet(ctx, g, cs, plan, foreign); err != nil {
+			return err
+		}
+	}
+
+	if len(plan.ToCreate()) == 0 && !(adopt && len(foreign) > 0) {
+		fmt.Println("\nNothing to do — all listed clusters already exist.")
+	}
+	return nil
+}
+
+// foreignExisting returns the set of already-running clusters that the manifest
+// lists but that do not currently carry this fleet's klimax.dev/fleet label.
+// Empty when the manifest has no metadata.name (no fleet identity to adopt into).
+func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan *fleet.Plan) (map[string]bool, error) {
+	if cs.Metadata.Name == "" {
+		return nil, nil
+	}
+	anyExisting := false
+	for _, pc := range plan.Clusters {
+		if pc.Exists {
+			anyExisting = true
+			break
+		}
+	}
+	if !anyExisting {
+		return nil, nil
+	}
+
+	byFleet, err := kind.ClustersByFleet(ctx, g)
+	if err != nil {
+		return nil, err
+	}
+	fleetOf := map[string]string{}
+	for f, clusters := range byFleet {
+		for _, c := range clusters {
+			fleetOf[c] = f
+		}
+	}
+
+	foreign := map[string]bool{}
+	for _, pc := range plan.Clusters {
+		if pc.Exists && fleetOf[pc.Name] != cs.Metadata.Name {
+			foreign[pc.Name] = true
+		}
+	}
+	return foreign, nil
+}
+
+// adoptIntoFleet relabels pre-existing clusters so they join the fleet: it applies
+// the klimax.dev/fleet label plus the manifest entry's merged labels.
+func adoptIntoFleet(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan *fleet.Plan, foreign map[string]bool) error {
+	byName := map[string]fleet.PlannedCluster{}
+	for _, pc := range plan.Clusters {
+		byName[pc.Name] = pc
+	}
+	names := sortedKeys(foreign)
+	for _, name := range names {
+		pc := byName[name]
+		args := []string{fleetLabelKey + "=" + cs.Metadata.Name}
+		for _, k := range sortedKeys(pc.Labels) {
+			args = append(args, k+"="+pc.Labels[k])
+		}
+		fmt.Printf("→ adopting cluster %q into fleet %q\n", name, cs.Metadata.Name)
+		if err := kind.LabelNodes(ctx, g, name, args); err != nil {
+			return fmt.Errorf("adopting cluster %q: %w", name, err)
+		}
+	}
+	fmt.Printf("adopted %d cluster(s) into fleet %q\n", len(names), cs.Metadata.Name)
+	return nil
+}
+
+// sortedKeys returns the map's keys in sorted order.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // executePlan schedules cluster creation honouring dependsOn and maxParallel.
@@ -321,7 +418,7 @@ func validateMirrorSelections(cs *fleet.Fleet, reg config.RegistryConfig) error 
 	return nil
 }
 
-func printPlan(plan *fleet.Plan) {
+func printPlan(plan *fleet.Plan, foreign map[string]bool, adopt bool) {
 	name := plan.Name
 	if name == "" {
 		name = "(unnamed)"
@@ -331,7 +428,12 @@ func printPlan(plan *fleet.Plan) {
 	fmt.Printf("%-24s  %4s  %-8s  %-20s  %s\n", strings.Repeat("-", 24), "----", "--------", strings.Repeat("-", 20), "-------")
 	for _, pc := range plan.Clusters {
 		action := "create"
-		if pc.Exists {
+		switch {
+		case !pc.Exists:
+			action = "create"
+		case foreign[pc.Name] && adopt:
+			action = "adopt"
+		default:
 			action = "skip"
 		}
 		deps := "-"

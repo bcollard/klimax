@@ -84,7 +84,10 @@ klimax fleet describe dev-fleet               # members with num, ports, node ve
 klimax fleet label dev-fleet -l tier=gold     # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes           # delete every cluster in the fleet; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
 klimax fleet delete -f fleet.yaml --yes       # ...or delete exactly what the manifest lists
+klimax fleet adopt dev-fleet legacy1          # pull an existing standalone cluster into the fleet
 ```
+
+If a manifest lists a cluster that already exists but isn't in the fleet, `fleet create` warns and skips it (no silent relabel); re-run with `--adopt` to pull them in.
 
 `create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors / toggle the local registry), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
 
