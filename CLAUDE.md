@@ -132,7 +132,7 @@ network:
 
 kind:
   nodeVersion: "v1.35.0"             # kindest/node image tag (default)
-  metalLBVersion: "v0.15.2"          # MetalLB manifest version (default)
+  metalLBVersion: "v0.16.1"          # MetalLB manifest version (default)
   customDnsResolvers:                # per-zone upstream resolvers; resolvers default to 8.8.8.8/8.8.4.4 if omitted
     # - domain: "runlocal.dev"       # example; empty by default in code
   autoMergeKubeconfig: true          # merge context into ~/.kube/config after cluster create (default: true)
@@ -346,7 +346,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 ## Known caveats
 
 - Docker rewrites iptables on restart → handled by `ExecStartPost` drop-in.
-- MetalLB (and metrics-server) readiness waits are `300s` — their images are pulled from quay.io through the mirror on first use, which can exceed two minutes on a cold cache. On a *very* slow link even 300s can be too short (controller must pull+run before speaker's `memberlist` secret exists, then speaker pulls too); the mirror cache warms after the first successful pull. `kind create cluster --wait 5m` covers the core node images (preloaded).
+- MetalLB (and metrics-server) readiness waits are `180s` — their images pull from quay.io through the mirror on first use (controller must pull+run before speaker's `memberlist` secret exists, then speaker pulls); the mirror caches them so subsequent clusters are fast. (The multi-minute timeouts seen historically were actually the hostname-shadowing mirror-bypass bug — direct, uncached pulls — not a genuinely slow mirror.) `kind create cluster --wait 5m` covers the core node images (preloaded).
 - macOS VPN software can conflict with the host route → `klimax doctor` warns.
 - `podSubnet: 10.1<num>.0.0/16` overlaps with `serviceSubnet: 10.<num+10>.0.0/16` for num≥10. In practice keep num 1–9 per VM.
 - The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).

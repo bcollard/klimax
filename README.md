@@ -197,7 +197,7 @@ network:
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
   nodeVersion: "v1.35.0"
-  metalLBVersion: "v0.15.2"
+  metalLBVersion: "v0.16.1"
   customDnsResolvers:
     - domain: "runlocal.dev"          # forward to 8.8.8.8/8.8.4.4 (default resolvers)
     # - domain: "corp.internal"

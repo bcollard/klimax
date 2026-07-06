@@ -46,7 +46,7 @@ kind:
   nodeVersion: "v1.35.0"
 
   # MetalLB manifest version installed in every cluster.
-  metalLBVersion: "v0.15.2"
+  metalLBVersion: "v0.16.1"
 
   # Custom DNS zones forwarded to specific upstream resolvers by CoreDNS.
   # Each entry takes a domain and an optional list of resolvers.
