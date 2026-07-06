@@ -3,7 +3,7 @@ module github.com/bcollard/klimax
 go 1.25.7
 
 require (
-	github.com/lima-vm/lima/v2 v2.1.2
+	github.com/lima-vm/lima/v2 v2.1.4
 	github.com/sirupsen/logrus v1.9.4
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/crypto v0.52.0

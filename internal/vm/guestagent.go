@@ -21,7 +21,7 @@ import (
 // Falls back to a hardcoded value only when build info is unavailable (e.g.
 // built with -buildvcs=false or in some test environments).
 func limaModuleVersion() string {
-	const fallback = "v2.1.0"
+	const fallback = "v2.1.4"
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return fallback
@@ -45,7 +45,7 @@ func limaModuleVersion() string {
 // the current host architecture, downloading it from Lima's GitHub release if
 // not already present.
 //
-// Cache location: <klimaxHome>/share/lima/lima-guestagent.Linux-<arch>.gz
+// Cache location: <klimaxHome>/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz
 func EnsureGuestAgent(ctx context.Context, klimaxHome string) (string, error) {
 	guestArch := "aarch64"
 	if runtime.GOARCH == "amd64" {
@@ -53,7 +53,12 @@ func EnsureGuestAgent(ctx context.Context, klimaxHome string) (string, error) {
 	}
 
 	cacheDir := filepath.Join(klimaxHome, "share", "lima")
-	cached := filepath.Join(cacheDir, "lima-guestagent.Linux-"+guestArch+".gz")
+	limaVer := limaModuleVersion()
+	ver := strings.TrimPrefix(limaVer, "v")
+	// Version-stamped cache filename: bumping the Lima module changes the name so
+	// the matching guest agent is re-downloaded (guest and host agents must be the
+	// same version — a stale cached agent could break the hostagent protocol).
+	cached := filepath.Join(cacheDir, fmt.Sprintf("lima-guestagent.Linux-%s-%s.gz", guestArch, ver))
 	if _, err := os.Stat(cached); err == nil {
 		slog.Debug("Lima guest agent already cached", "path", cached)
 		return cached, nil
@@ -71,8 +76,6 @@ func EnsureGuestAgent(ctx context.Context, klimaxHome string) (string, error) {
 	if runtime.GOARCH == "amd64" {
 		hostArch = "x86_64"
 	}
-	limaVer := limaModuleVersion()
-	ver := strings.TrimPrefix(limaVer, "v")
 	url := fmt.Sprintf(
 		"https://github.com/lima-vm/lima/releases/download/%s/lima-%s-Darwin-%s.tar.gz",
 		limaVer, ver, hostArch,
