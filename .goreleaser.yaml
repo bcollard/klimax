@@ -48,6 +48,11 @@ archives:
 checksum:
   name_template: checksums.txt
 
+# Generate an SPDX SBOM (via syft) for each release archive and attach it to the
+# GitHub release. syft is installed by the release workflow (anchore/sbom-action).
+sboms:
+  - artifacts: archive
+
 changelog:
   sort: asc
   use: github

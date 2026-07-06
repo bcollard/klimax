@@ -44,6 +44,13 @@ jobs:
           go-licenses check ./... \
             --allowed_licenses=MIT,ISC,BSD-2-Clause,BSD-3-Clause,Apache-2.0,MPL-2.0
 
+      - name: Vulnerability scan (govulncheck)
+        env:
+          CGO_ENABLED: "1"
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
       - name: GoReleaser check
         uses: goreleaser/goreleaser-action@v7.2.1
         with:

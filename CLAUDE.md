@@ -374,3 +374,9 @@ Verify behavior end-to-end against the live VM before cutting a release (see the
 - Triggered by pushing a `vX.Y.Z` tag (`.github/workflows/release.yml`); default bump is a patch on the latest tag.
 - **Tags must be annotated** — `git tag -a vX.Y.Z -m "..."`. A lightweight `git tag vX.Y.Z` fails with `fatal: no tag message?` (repo is configured to require annotated tags).
 - Homebrew distribution is a **Cask**, not a Formula: `bcollard/homebrew-klimax` → `Casks/klimax.rb`. goreleaser bumps it automatically on release. Users install/upgrade with `brew upgrade --cask klimax` (or `brew reinstall --cask klimax`).
+
+### Supply chain / SBOM
+
+- **SBOM per release**: `.goreleaser.yaml` `sboms:` runs **syft** (installed by `release.yml` via `anchore/sbom-action`) to attach an SPDX SBOM for each release archive to the GitHub release. An SBOM is pinned to its build, so it's generated once per tag — not regenerated on a schedule.
+- **Vuln scanning**: `govulncheck` runs in `ci.yml` on every PR/push, and weekly via `security.yml` (cron) to catch newly-disclosed CVEs against unchanged deps. `dependabot.yml` opens weekly update PRs for gomod + github-actions.
+- Scope note: the SBOM covers the klimax **binary's** Go deps — not the tools klimax provisions inside the VM (Docker, kind, kubectl, MetalLB, node images), which are version-pinned in code instead.
