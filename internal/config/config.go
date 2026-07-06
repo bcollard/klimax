@@ -224,6 +224,18 @@ func WriteDefaultConfig(path string) error {
 
 func boolPtr(b bool) *bool { return &b }
 
+// sanitizeMirrorName strips a hostname-like string down to a safe container-name
+// suffix (alphanumerics and '-') for use in a validation hint.
+func sanitizeMirrorName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 // Validate checks the config for correctness.
 func Validate(cfg *Config) error {
 	var errs []error
@@ -242,6 +254,15 @@ func Validate(cfg *Config) error {
 	for _, m := range cfg.Registries.Mirrors {
 		if m.Name == "" || m.Port == 0 || m.RemoteURL == "" {
 			errs = append(errs, fmt.Errorf("registry mirror missing name/port/remoteURL: %+v", m))
+		}
+		// A mirror container joins the shared "kind" Docker network. If its name
+		// looks like a hostname (contains a dot), Docker's embedded DNS resolves
+		// that hostname to the container itself — so the pull-through proxy can no
+		// longer reach the real upstream (it resolves to itself → 404 → containerd
+		// silently falls back to slow, unauthenticated direct pulls). Forbid it.
+		if strings.Contains(m.Name, ".") || strings.Contains(m.Name, ":") {
+			errs = append(errs, fmt.Errorf("registry mirror name %q must not look like a hostname (no '.' or ':') — it would shadow its upstream on the kind Docker network; use e.g. %q",
+				m.Name, "registry-"+sanitizeMirrorName(m.Name)))
 		}
 	}
 

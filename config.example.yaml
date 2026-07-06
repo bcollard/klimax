@@ -90,6 +90,12 @@ registries:
   # All mirrors are connected to the "kind" Docker network so cluster nodes
   # resolve them by hostname (e.g. registry-dockerio:5030).
   # Set to an empty list ([]) to disable all mirrors.
+  #
+  # ⚠ A mirror `name` must NOT be a hostname (no '.' or ':'). The container joins
+  # the "kind" network, and a name like "quay.io" would make Docker DNS resolve
+  # quay.io to the container itself — the proxy could no longer reach the real
+  # upstream, silently falling back to slow, unauthenticated direct pulls.
+  # Use names like registry-quayio / registry-dockerio (klimax rejects hostname names).
   mirrors:
     - name: "registry-dockerio"
       port: 5030
