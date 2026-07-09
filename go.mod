@@ -1,6 +1,6 @@
 module github.com/bcollard/klimax
 
-go 1.25.11
+go 1.25.12
 
 require (
 	github.com/lima-vm/lima/v2 v2.1.4
