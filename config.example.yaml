@@ -19,14 +19,12 @@ network:
   kindBridgeCIDR: "172.30.0.0/16"
 
   # Disable Lima's automatic TCP port mirroring from the VM to 127.0.0.1 on the host.
-  # Default: false — Lima mirrors every guest TCP port to 127.0.0.1 (e.g. 7001 → 127.0.0.1:7001).
+  # Default: true — Lima's TCP auto-mirroring is disabled, so klimax coexists cleanly
+  # with other Lima-based VMs (kind-on-lima, Rancher Desktop) that also manage kind
+  # clusters. Without this, both VMs race to mirror the same API-server port (e.g.
+  # 7001) to 127.0.0.1, corrupting each other's kubeconfig connectivity.
   #
-  # Set to true when running klimax alongside other Lima-based VMs (kind-on-lima,
-  # Rancher Desktop) that also manage kind clusters. Without this, both VMs race to
-  # mirror the same API-server port (e.g. 7001) to 127.0.0.1, corrupting each
-  # other's kubeconfig connectivity.
-  #
-  # When true:
+  # When true (default):
   #   - Lima TCP auto-mirroring is disabled for all ports in the klimax VM.
   #   - Kubeconfigs use the VM's direct lima0 IP (e.g. 192.168.64.3:700N) instead
   #     of 127.0.0.1:700N. The lima0 IP is L2-reachable from the host via vzNAT.
@@ -34,8 +32,12 @@ network:
   #   - Re-run 'klimax kubeconfig merge <name>' after each VM restart to refresh the
   #     address if the lima0 IP changes (vzNAT assigns IPs dynamically).
   #
+  # Set to false to force loopback (127.0.0.1) addressing — e.g. if host-based
+  # security software (CrowdStrike) blocks TCP connections to vzNAT IPs, or if you
+  # run only a single klimax VM and prefer stable 127.0.0.1 kubeconfigs.
+  #
   # ⚠ VM-level setting: only takes effect on new VMs (klimax destroy && klimax up).
-  # disablePortMirroring: false
+  # disablePortMirroring: true
 
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:
@@ -80,12 +82,6 @@ registries:
   #   cache is wiped on 'klimax destroy'.
   # cacheStorage: "host"
 
-  # Local push registry available inside every cluster as kind-registry:5000.
-  # Push with: docker push kind-registry:5000/myimage:tag
-  localRegistry:
-    enabled: true
-    port: 5000
-
   # Pull-through mirror containers running in the VM.
   # All mirrors are connected to the "kind" Docker network so cluster nodes
   # resolve them by hostname (e.g. registry-dockerio:5030).
@@ -112,11 +108,11 @@ registries:
       port: 5020
       remoteURL: "https://gcr.io"
 
-    # Uncomment to add Google Artifact Registry mirrors:
-    # - name: "registry-us-docker-pkg-dev"
-    #   port: 5040
-    #   remoteURL: "https://us-docker.pkg.dev"
+    # Google Artifact Registry mirrors:
+    - name: "registry-us-docker-pkgdev"
+      port: 5040
+      remoteURL: "https://us-docker.pkg.dev"
 
-    # - name: "registry-us-central1-docker-pkg-dev"
-    #   port: 5050
-    #   remoteURL: "https://us-central1-docker.pkg.dev"
+    - name: "registry-us-central1-docker-pkgdev"
+      port: 5050
+      remoteURL: "https://us-central1-docker.pkg.dev"

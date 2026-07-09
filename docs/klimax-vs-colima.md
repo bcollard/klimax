@@ -75,13 +75,12 @@ iptables rules in the guest and a `route add` on the host.
 | Auto cluster numbering | Detects live port bindings to find lowest free slot |
 | Per-cluster subnet allocation | `serviceSubnet 10.N.0.0/16`, `podSubnet 10.1N.0.0/16` |
 | MetalLB with IP pool | Installed in every cluster; pool derived from `kindBridgeCIDR` + num |
-| Pull-through registry mirrors | docker.io, quay.io, gcr.io running as containers in the VM |
-| Local push registry | `kind-registry:5000` connected to the `kind` Docker network |
+| Pull-through registry mirrors | docker.io, quay.io, gcr.io, us-docker.pkg.dev, us-central1-docker.pkg.dev running as containers in the VM |
 | Containerd mirror patches | Generated per-cluster into the kind config YAML |
 | Pure L3 routing | iptables nat exemption + systemd oneshot + docker.service.d drop-in |
 | macOS route management | `sudo route add/delete` for `kindBridgeCIDR` → VM IP |
 | CoreDNS custom domains | Configurable zones forwarded to 8.8.8.8 at cluster creation |
-| Kubeconfig export | Written to `~/.kube/klimax/<name>.kubeconfig`; server points to `127.0.0.1:700N` via Lima port forwarding |
+| Kubeconfig export | Written to `~/.kube/klimax/<name>.kubeconfig`; server points to the VM's `lima0` IP `<lima0IP>:700N` by default (`disablePortMirroring: true`), or `127.0.0.1:700N` via Lima port forwarding when `disablePortMirroring: false` |
 | Kubeconfig auto-merge | `autoMergeKubeconfig` / `autoRemoveKubeconfig` config flags; `cluster merge` for manual merge |
 | Topology labels | `topology.kubernetes.io/region/zone` on kind nodes |
 | Persistent registry cache | Mirror blobs bind-mounted from `~/.klimax/registry-cache/` (host, survives destroy) or inside VM (`guest` mode) |

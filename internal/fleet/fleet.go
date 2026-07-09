@@ -107,11 +107,9 @@ func (c *ClusterEntry) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-// RegistrySelect cherry-picks which registries a cluster uses. A nil pointer
-// means "inherit the default" (all configured registries + local registry).
+// RegistrySelect cherry-picks which registry mirrors a cluster uses. A nil
+// pointer means "inherit the default" (all configured mirrors).
 type RegistrySelect struct {
-	// LocalRegistry toggles the kind-registry push registry. nil = inherit (true).
-	LocalRegistry *bool `yaml:"localRegistry"`
 	// Mirrors selects pull-through mirrors by name. nil = all; ["*"] = all;
 	// [] = none; [names...] = exactly those.
 	Mirrors *[]string `yaml:"mirrors"`

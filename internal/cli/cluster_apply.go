@@ -333,7 +333,7 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetNa
 	// Per-cluster registry cherry-pick.
 	regCfg := applyRegistrySelect(cfg.Registries, pc.Registries)
 
-	if err := kind.CreateCluster(ctx, g, cl, kindCfg, regCfg, cfg.Network.KindBridgeCIDR, cfg.Network.DisablePortMirroring); err != nil {
+	if err := kind.CreateCluster(ctx, g, cl, kindCfg, regCfg, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
 
@@ -362,9 +362,6 @@ func applyRegistrySelect(base config.RegistryConfig, sel *fleet.RegistrySelect) 
 	out := base
 	if sel == nil {
 		return out
-	}
-	if sel.LocalRegistry != nil {
-		out.LocalRegistry.Enabled = *sel.LocalRegistry
 	}
 	if sel.Mirrors != nil {
 		want := *sel.Mirrors

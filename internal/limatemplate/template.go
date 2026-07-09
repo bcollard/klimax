@@ -123,7 +123,7 @@ fi
 // ports bound to all interfaces (0.0.0.0) inside the VM.
 func buildPortForwards(cfg *config.Config) []limatype.PortForward {
 	var fwds []limatype.PortForward
-	if cfg.Network.DisablePortMirroring {
+	if cfg.Network.PortMirroringDisabled() {
 		fwds = append(fwds, limatype.PortForward{
 			GuestIP:        net.IPv4zero,
 			GuestPortRange: [2]int{1, 65535},

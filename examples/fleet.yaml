@@ -29,7 +29,6 @@ spec:
   # Applied to every cluster below that does not set the field itself.
   defaults:
     registries:
-      localRegistry: true
       mirrors: ["*"]        # all mirrors from ~/.klimax/config.yaml
     labels:                 # merged into every cluster (entry labels win on conflict)
       owner: platform-team
@@ -62,4 +61,3 @@ spec:
       dependsOn: [hub]
       registries:
         mirrors: []          # no pull-through mirrors (pull straight from upstream)
-        localRegistry: false # no kind-registry push registry

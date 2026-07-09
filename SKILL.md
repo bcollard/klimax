@@ -90,7 +90,7 @@ klimax fleet adopt dev-fleet legacy1          # pull an existing standalone clus
 
 If a manifest lists a cluster that already exists but isn't in the fleet, `fleet create` warns and skips it (no silent relabel); re-run with `--adopt` to pull them in.
 
-`create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors / toggle the local registry), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
+`create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
 
 You can also filter/select clusters by label: `klimax cluster list -l klimax.dev/fleet=dev-fleet` and `klimax cluster delete -l env=test --yes`. (`klimax cluster apply -f` / `cluster delete -f` remain as lower-level equivalents of `fleet create` / `fleet delete -f`.)
 
@@ -120,31 +120,34 @@ Prefer one fresh cluster per test run for isolation; clusters are cheap and crea
 
 ## Getting a test image into the cluster
 
-Point your host Docker at the klimax VM, then push to the built-in local registry (`localhost:5000`) and reference it by that name — containerd in every cluster is pre-patched to pull from it:
+Point your host Docker at the klimax VM to build the image inside the VM's Docker daemon, then load it into the cluster's nodes with `kind load` (the kind CLI lives in the VM — open `klimax shell` to run it):
 
 ```bash
 eval "$(klimax docker-env)"                       # DOCKER_HOST → the klimax VM's Docker
+docker build -t myapp:test .                      # image now lives in the VM's Docker
 
-docker build -t localhost:5000/myapp:test .
-docker push localhost:5000/myapp:test
+klimax shell                                       # open an SSH session in the VM
+#   $ kind load docker-image myapp:test --name <cluster>
 
-# In manifests, use the same reference:
-#   image: localhost:5000/myapp:test
+# In manifests, reference the image and pin the pull policy so the node
+# uses the loaded image instead of pulling from a registry:
+#   image: myapp:test
+#   imagePullPolicy: IfNotPresent
 ```
 
-The local registry is shared across all clusters and lives inside the VM (survives `down`/`up`). This is more reliable for agents than `kind load`, which would additionally require the kind CLI on the host.
+Public images pull transparently through the built-in pull-through mirrors (docker.io, quay.io, gcr.io, us-docker.pkg.dev, us-central1-docker.pkg.dev) — no extra steps.
 
 ## What klimax sets up for you on each cluster
 
 - **MetalLB** installed automatically with IPAddressPool `172.30.<num>.1-7` and `172.30.<num>.16-254`, plus L2Advertisement. **LoadBalancer Services get real IPs out of the box** — no extra setup.
-- **Registry mirrors** for docker.io / quay.io / gcr.io routed through local pull-through caches (configurable in `~/.klimax/config.yaml`). Survives VM restarts; cache lives on the macOS host under `~/.klimax/registry-cache/`.
+- **Registry mirrors** for docker.io / quay.io / gcr.io / us-docker.pkg.dev / us-central1-docker.pkg.dev routed through local pull-through caches (configurable in `~/.klimax/config.yaml`). Survives VM restarts; cache lives on the macOS host under `~/.klimax/registry-cache/`.
 - **CoreDNS** patched with optional per-zone upstream resolvers.
 - **L3 routing** from macOS → VM → cluster pods/services. Source IPs are preserved (no SNAT) for host→cluster traffic.
 
 ## Things to know when writing recipes
 
 - The kind Docker network is **shared across clusters** (subnet from `network.kindBridgeCIDR`, default `172.30.0.0/16`). Don't recreate it.
-- Cluster API server is exposed on host port `70<num>` (e.g. cluster num 1 → `https://127.0.0.1:7001`).
+- Cluster API server is exposed on port `70<num>`. By default (`network.disablePortMirroring: true`) the kubeconfig points at the VM's `lima0` IP (e.g. `https://192.168.64.3:7001`); set `disablePortMirroring: false` and it points at `https://127.0.0.1:7001` instead. Either way, just use the exported kubeconfig — don't hardcode the address.
 - Per-cluster pod/service subnets: `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`. Keep cluster num 1–9 to avoid overlap.
 - Cluster nodes are labelled with `managed-by=klimax`, `topology.kubernetes.io/region` + `zone` (overridable via `--region` / `--zone`), and `klimax.dev/fleet=<name>` for clusters created from a Fleet. Add custom node labels with `klimax cluster create -l key=value` (repeatable), the Fleet `labels:` / `defaults.labels` fields, or relabel an existing cluster with `klimax cluster label <name> -l key=value` (`-l key-` removes).
 - Docker socket on the host: `~/.klimax.docker.sock`. Use `eval $(klimax docker-env)` or `klimax docker-context` to point your local docker CLI at it.

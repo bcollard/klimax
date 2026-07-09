@@ -71,7 +71,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("docker network: %w", err)
 	}
 
-	// 4. Ensure local registry + pull-through mirrors.
+	// 4. Ensure pull-through mirrors.
 	if err := registry.EnsureRegistries(ctx, g, cfg.Registries); err != nil {
 		return fmt.Errorf("registries: %w", err)
 	}

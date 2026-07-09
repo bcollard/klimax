@@ -1,5 +1,5 @@
-// Package registry manages the local Docker registry and pull-through mirror
-// containers running inside the klimax Lima VM.
+// Package registry manages the pull-through mirror containers running inside
+// the klimax Lima VM.
 package registry
 
 import (
@@ -18,49 +18,18 @@ import (
 const (
 	registryImage   = "registry"
 	registryTag     = "2"
-	localRegName    = "kind-registry"
 	kindNetworkName = "kind"
 )
 
-// EnsureRegistries idempotently starts the local registry and all configured
-// pull-through mirrors in the guest VM, connecting them to the kind network.
+// EnsureRegistries idempotently starts all configured pull-through mirrors in
+// the guest VM, connecting them to the kind network.
 func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryConfig) error {
-	if cfg.LocalRegistry.Enabled {
-		if err := ensureLocalRegistry(ctx, g, cfg.LocalRegistry.Port); err != nil {
-			return fmt.Errorf("local registry: %w", err)
-		}
-	}
 	for _, m := range cfg.Mirrors {
 		if err := ensureMirror(ctx, g, m, cfg.CacheStorage); err != nil {
 			return fmt.Errorf("mirror %q: %w", m.Name, err)
 		}
 	}
 	return nil
-}
-
-// ensureLocalRegistry starts the push-capable local registry (kind-registry:5000).
-func ensureLocalRegistry(ctx context.Context, g *guest.Client, port int) error {
-	slog.Info("Ensuring local registry", "name", localRegName, "port", port)
-	running, err := isContainerRunning(ctx, g, localRegName)
-	if err != nil {
-		return err
-	}
-	if running {
-		slog.Info("Local registry already running", "name", localRegName)
-		return connectToKindNetwork(ctx, g, localRegName)
-	}
-	// Remove a stopped container if present.
-	if _, err := g.Run(ctx, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", localRegName)); err != nil {
-		return err
-	}
-	cmd := fmt.Sprintf(
-		"docker run -d --restart=always -p 0.0.0.0:%d:%d --name %s %s:%s",
-		port, port, localRegName, registryImage, registryTag,
-	)
-	if _, err := g.Run(ctx, cmd); err != nil {
-		return fmt.Errorf("starting local registry: %w", err)
-	}
-	return connectToKindNetwork(ctx, g, localRegName)
 }
 
 // ensureMirror starts a pull-through cache container for the given mirror config.
@@ -155,9 +124,9 @@ storage:
 // e.g. "docker.io") to the local mirror endpoint URL that serves it.
 type RegistryHost struct {
 	// Host is the registry as it appears in image references, and the directory
-	// name under /etc/containerd/certs.d/ (e.g. "docker.io", "kind-registry:5000").
+	// name under /etc/containerd/certs.d/ (e.g. "docker.io", "quay.io").
 	Host string
-	// Endpoint is the local mirror URL containerd pulls from (e.g.
+	// Endpoint is the mirror URL containerd pulls from (e.g.
 	// "http://registry-dockerio:5030").
 	Endpoint string
 }
@@ -173,16 +142,6 @@ type RegistryHost struct {
 // instead of patching containerd's config.toml.
 func RegistryHosts(cfg config.RegistryConfig) []RegistryHost {
 	var hosts []RegistryHost
-
-	// Local registry: reachable as both "kind-registry:<port>" and "localhost:<port>".
-	if cfg.LocalRegistry.Enabled {
-		host := fmt.Sprintf("%s:%d", localRegName, cfg.LocalRegistry.Port)
-		endpoint := fmt.Sprintf("http://%s", host)
-		hosts = append(hosts,
-			RegistryHost{Host: host, Endpoint: endpoint},
-			RegistryHost{Host: fmt.Sprintf("localhost:%d", cfg.LocalRegistry.Port), Endpoint: endpoint},
-		)
-	}
 
 	// Pull-through mirrors.
 	for _, m := range cfg.Mirrors {

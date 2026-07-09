@@ -77,7 +77,7 @@ internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 25.04, por
 internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspect
 internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
-internal/registry/registry.go        EnsureRegistries, RegistryHosts (local reg + mirrors → containerd certs.d hosts.toml + cache volumes)
+internal/registry/registry.go        EnsureRegistries, RegistryHosts (pull-through mirrors → containerd certs.d hosts.toml + cache volumes)
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
 internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
@@ -125,9 +125,11 @@ vm:
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet
-  disablePortMirroring: false        # true: disable Lima TCP port mirroring; kubeconfigs use VM's lima0 IP directly
-                                     # Use when coexisting with other Lima VMs (kind-on-lima, Rancher Desktop)
-                                     # that manage kind clusters — prevents API-server port conflicts on 127.0.0.1.
+  disablePortMirroring: true         # default true: disable Lima TCP port mirroring; kubeconfigs use VM's lima0 IP directly
+                                     # Coexists with other Lima VMs (kind-on-lima, Rancher Desktop) that manage
+                                     # kind clusters — prevents API-server port conflicts on 127.0.0.1.
+                                     # Set false to force loopback (127.0.0.1) — e.g. host security software
+                                     # (CrowdStrike) blocking vzNAT IPs.
                                      # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
 
 kind:
@@ -141,9 +143,6 @@ kind:
 registries:
   cacheStorage: "host"               # "host" (default): ~/.klimax/registry-cache/ via virtiofs, survives destroy
                                      # "guest": inside VM, wiped on destroy
-  localRegistry:
-    enabled: true
-    port: 5000                       # kind-registry push registry
   mirrors:
     - name: "registry-dockerio"
       port: 5030
@@ -155,6 +154,12 @@ registries:
     - name: "registry-gcrio"
       port: 5020
       remoteURL: "https://gcr.io"
+    - name: "registry-us-docker-pkgdev"
+      port: 5040
+      remoteURL: "https://us-docker.pkg.dev"
+    - name: "registry-us-central1-docker-pkgdev"
+      port: 5050
+      remoteURL: "https://us-central1-docker.pkg.dev"
 ```
 
 See `config.example.yaml` for the full annotated reference.
@@ -204,18 +209,17 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 ## Cluster creation flow (`klimax cluster create <name>`)
 
 1. **Auto-assign num** — inspect live `<name>-control-plane` containers' port bindings (70N → num=N); find lowest free slot 1–99.
-2. **Resolve API server address** — `127.0.0.1` by default; when `network.disablePortMirroring: true`, resolves the VM's live `lima0` IP via SSH (`routing.Lima0IP`) to embed in the cert SANs.
+2. **Resolve API server address** — by default (`network.disablePortMirroring: true`) resolves the VM's live `lima0` IP via SSH (`routing.Lima0IP`) to embed in the cert SANs; with `disablePortMirroring: false` it uses `127.0.0.1`.
 3. **Build kind cluster config** with:
    - API port `70<num>` on `0.0.0.0`
    - `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`
-   - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels; when `disablePortMirroring`, also a `ClusterConfiguration` patch adding the lima0 IP to `apiServer.certSANs` (plus `127.0.0.1` for intra-VM kubectl calls)
+   - `kubeadmConfigPatches`: `topology.kubernetes.io/region` + `zone` labels; when `disablePortMirroring` (the default), also a `ClusterConfiguration` patch adding the lima0 IP to `apiServer.certSANs` (plus `127.0.0.1` for intra-VM kubectl calls)
 4. **`kind create cluster`** with `--image kindest/node:<nodeVersion>`
 5. **Configure registry mirrors** — write `/etc/containerd/certs.d/<host>/hosts.toml` on every node (`configureRegistryMirrors` → `registry.RegistryHosts`). containerd 2.x (kind ≥ v0.30 node images) defaults `config_path = /etc/containerd/certs.d` and **rejects** the legacy `registry.mirrors` config.toml block ("`mirrors` cannot be set when `config_path` is provided"), which silently disables the CRI plugin and hangs `kubeadm init`. No containerd restart needed — certs.d is read per-pull.
 6. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
 7. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
-8. **Apply `local-registry-hosting` ConfigMap** in `kube-public`
-9. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
-10. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://127.0.0.1:700N` (default) or `https://<lima0IP>:700N` (when `disablePortMirroring: true`)
+8. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
+9. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://<lima0IP>:700N` by default (`disablePortMirroring: true`) or `https://127.0.0.1:700N` (when `disablePortMirroring: false`)
 
 ### kubeconfig naming
 
@@ -235,7 +239,7 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
     clusters: [dev, staging]
   ```
 - **`ClusterEntry` unmarshals from a bare string OR an object** (`fleet.ClusterEntry.UnmarshalYAML`) — that's what makes the names-only form work.
-- **Per-cluster options**: `dependsOn`, `num`, `nodeVersion`, `region`, `zone`, `registries` (cherry-pick: `localRegistry` bool + `mirrors` — `nil`=all, `["*"]`=all, `[]`=none, `[names]`=subset, by config mirror name), `addons.metricsServer` (`enabled`/`version`/`kubeletInsecureTLS`), `labels` (map). `spec.defaults` supplies inherited values (labels are merged, entry wins).
+- **Per-cluster options**: `dependsOn`, `num`, `nodeVersion`, `region`, `zone`, `registries` (cherry-pick: `mirrors` — `nil`=all, `["*"]`=all, `[]`=none, `[names]`=subset, by config mirror name), `addons.metricsServer` (`enabled`/`version`/`kubeletInsecureTLS`), `labels` (map). `spec.defaults` supplies inherited values (labels are merged, entry wins).
 - **Scheduler** (`internal/cli/cluster_apply.go`): builds a dependsOn DAG, creates clusters up to `spec.maxParallel` at a time (default 1 = sequential), gating each on its dependencies via per-cluster `done` channels. `strategy: FailFast` (default) stops scheduling new clusters after the first failure; `ContinueOnError` presses on.
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
@@ -321,7 +325,7 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 
 ## Registry cache persistence
 
-Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gcrio`) are started with `-v <cacheDir>:/var/lib/registry`. The cache dir location depends on `registries.cacheStorage`:
+Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gcrio`, `registry-us-docker-pkgdev`, `registry-us-central1-docker-pkgdev`) are started with `-v <cacheDir>:/var/lib/registry`. The cache dir location depends on `registries.cacheStorage`:
 
 - **`host`** (default): `~/.klimax/registry-cache/<name>/` on the macOS host, virtiofs-mounted into the VM at the same absolute path. Survives `klimax destroy`. Lima mount is added to the instance at creation time in `limatemplate.Build()`.
 - **`guest`**: `/var/lib/klimax/registry-cache/<name>/` inside the VM. Persists across `klimax down`/`up`, wiped on `klimax destroy`.
@@ -354,7 +358,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 - Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
 - **Mirror names must not be hostnames.** A mirror container joins the shared `kind` Docker network; a name like `quay.io` makes Docker's embedded DNS resolve `quay.io` to the container itself, so the pull-through proxy (whose `remoteurl` is `https://quay.io`) resolves upstream to itself → connection refused → `404 manifest unknown` → containerd silently falls back to slow, unauthenticated **direct** pulls (no cache, docker.io throttling). `config.Validate` now rejects mirror names containing `.` or `:`. Renaming a mirror also requires recreating its container (`docker rm -f` the old one, then `klimax up`) since the old-named container keeps its port.
 - `klimax down` does **not** remove the macOS host route by default (stale route is harmless; `klimax up` refreshes it). Use `--remove-route` to remove it explicitly.
-- `network.disablePortMirroring: true` — the lima0 IP is assigned dynamically by macOS and may change on VM restart; re-run `klimax cluster merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may also block TCP connections to vzNAT IPs — use the default loopback mode in that case.
+- `network.disablePortMirroring` defaults to **true** — kubeconfigs use the VM's `lima0` IP, which is assigned dynamically by macOS and may change on VM restart; re-run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may block TCP connections to vzNAT IPs — set `disablePortMirroring: false` (loopback/127.0.0.1 mode) in that case.
 
 ---
 

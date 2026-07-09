@@ -85,7 +85,7 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone, Labels: labels}
 
-	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, cfg.Network.DisablePortMirroring); err != nil {
+	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
 

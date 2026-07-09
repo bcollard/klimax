@@ -161,7 +161,7 @@ After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the 
 | VM | Creates/starts/stops/deletes a Lima VZ instance |
 | Docker | Installs Docker in the VM; forwards the socket to `~/.<vmname>.docker.sock` |
 | kind | Creates/deletes multiple kind clusters; each gets its own subnet slice and API port |
-| Registries | Runs a local push registry (`kind-registry:5000`) + pull-through mirrors for docker.io, quay.io, gcr.io; mirror data cached persistently |
+| Registries | Runs pull-through mirrors for docker.io, quay.io, gcr.io, and Google Artifact Registry (us-docker.pkg.dev, us-central1-docker.pkg.dev); mirror data cached persistently |
 | Networking | Routes `kindBridgeCIDR` from macOS → VM via `lima0`; no SNAT so source IPs are preserved |
 | MetalLB | Installed in every cluster with a dedicated IP pool slice |
 | CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
@@ -187,12 +187,14 @@ vm:
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # routed from macOS → VM; no SNAT
 
-  # Set to true when running alongside other Lima VMs (kind-on-lima, Rancher Desktop)
-  # that also manage kind clusters. Lima mirrors every guest TCP port to 127.0.0.1 by
-  # default; when two VMs both try to mirror port 7001 the connections conflict.
+  # Defaults to true: Lima's TCP port mirroring is disabled, so klimax coexists with
+  # other Lima VMs (kind-on-lima, Rancher Desktop) that also manage kind clusters —
+  # otherwise two VMs racing to mirror the same port (e.g. 7001) to 127.0.0.1 conflict.
   # With disablePortMirroring: true, kubeconfigs use the VM's direct lima0 IP instead
-  # of 127.0.0.1. ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
-  # disablePortMirroring: false
+  # of 127.0.0.1. Set to false to force loopback (127.0.0.1) — e.g. host security
+  # software (CrowdStrike) blocking vzNAT IPs. ⚠ VM-level: only takes effect on new
+  # VMs (klimax destroy && up).
+  # disablePortMirroring: true
 
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
@@ -211,10 +213,6 @@ registries:
   # "guest": cache inside the VM — wiped on klimax destroy
   cacheStorage: "host"
 
-  localRegistry:
-    enabled: true
-    port: 5000            # push with: docker push kind-registry:5000/myimage:tag
-
   mirrors:
     - name: "registry-dockerio"
       port: 5030
@@ -228,6 +226,14 @@ registries:
     - name: "registry-gcrio"
       port: 5020
       remoteURL: "https://gcr.io"
+
+    - name: "registry-us-docker-pkgdev"
+      port: 5040
+      remoteURL: "https://us-docker.pkg.dev"
+
+    - name: "registry-us-central1-docker-pkgdev"
+      port: 5050
+      remoteURL: "https://us-central1-docker.pkg.dev"
 ```
 
 > Cluster lifecycle is managed exclusively via `klimax cluster` subcommands — there is no cluster list in the config file.
@@ -364,7 +370,7 @@ Fleet membership is tracked by the `klimax.dev/fleet=<name>` node label, so
 
 `create` is **additive**: clusters that already exist are skipped. Each entry can
 optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
-`registries` (cherry-pick mirrors / toggle the local registry),
+`registries` (cherry-pick mirrors),
 `addons.metricsServer`, and `labels`. Independent clusters build in parallel up to
 `spec.maxParallel`; `dependsOn` is always respected. See
 [`examples/fleet.yaml`](examples/fleet.yaml) for the full reference.
@@ -437,27 +443,23 @@ The result: `curl http://172.30.1.200/` on your Mac reaches the MetalLB VIP dire
 
 klimax supports two modes for kubeconfig API server addresses:
 
-**Default (loopback mode — `network.disablePortMirroring: false`)**
+**Default (direct IP mode — `network.disablePortMirroring: true`)**
 
-Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent automatically forwards these ports to `127.0.0.1:700N` on the host. Exported kubeconfigs point at `https://127.0.0.1:700N` — no VPN or direct vzNAT IP access required. This mode also avoids conflicts with host-based security software (e.g. endpoint agents that block direct VM IP access).
-
-**Direct IP mode (`network.disablePortMirroring: true`)**
-
-Use this when running klimax alongside other Lima-based VMs (kind-on-lima, Rancher Desktop) that also manage kind clusters. By default, Lima mirrors every guest TCP port to `127.0.0.1` — when two VMs both try to mirror port `7001`, they conflict.
-
-Setting `disablePortMirroring: true` disables all Lima TCP port mirroring for the klimax VM. Kubeconfigs then use the VM's direct `lima0` IP (e.g. `192.168.64.3:700N`), which is L2-reachable from the host via vzNAT. The API server cert automatically includes the lima0 IP as a SAN.
+Lima's TCP port mirroring is disabled for the klimax VM, so klimax coexists cleanly with other Lima-based VMs (kind-on-lima, Rancher Desktop) that also manage kind clusters — otherwise two VMs racing to mirror the same port (e.g. `7001`) to `127.0.0.1` conflict. Kubeconfigs use the VM's direct `lima0` IP (e.g. `192.168.64.3:700N`), which is L2-reachable from the host via vzNAT. The API server cert automatically includes the lima0 IP as a SAN.
 
 > Note: the lima0 IP is assigned dynamically by macOS and may change on VM restart. Run `klimax kubeconfig merge <name>` after a restart to refresh the address in `~/.kube/config`.
+
+**Loopback mode (`network.disablePortMirroring: false`)**
+
+Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent forwards these ports to `127.0.0.1:700N` on the host, and exported kubeconfigs point at `https://127.0.0.1:700N` — a stable address that survives VM restarts. Use this when running only a single klimax VM, or when host-based security software (e.g. endpoint agents like CrowdStrike) blocks direct vzNAT IP access.
 
 This is a VM-level setting — it only takes effect on new VMs (`klimax destroy && klimax up`).
 
 ### Registry mirrors
 
-Every kind cluster is configured via containerd patches to:
-- Push/pull from `kind-registry:5000` — the local push registry in the VM.
-- Cache pulls from docker.io, quay.io, gcr.io transparently through pull-through mirrors, avoiding rate limits and accelerating cluster creation.
+Every kind cluster is configured via containerd patches to cache pulls from docker.io, quay.io, gcr.io, and Google Artifact Registry (us-docker.pkg.dev, us-central1-docker.pkg.dev) transparently through pull-through mirrors, avoiding rate limits and accelerating cluster creation.
 
-All registry containers are attached to the `kind` Docker network so cluster nodes resolve them by hostname.
+All mirror containers are attached to the `kind` Docker network so cluster nodes resolve them by hostname.
 
 ---
 
@@ -467,27 +469,28 @@ klimax is designed to coexist with other Lima-based tools on the same Mac. Each 
 its own vzNAT interface (`bridge1xx`) and a distinct macOS-assigned IP, so there is no
 IP-level conflict between VMs.
 
-The one friction point is **Lima's TCP port mirroring**: by default, Lima's hostagent
-forwards every TCP port that a process in the VM listens on to `127.0.0.1` on the host. When
-two VMs independently manage kind clusters, both hostagents try to mirror the same API-server
-ports (e.g. `7001`) to `127.0.0.1` simultaneously, breaking connectivity for both.
+The one friction point would be **Lima's TCP port mirroring**: Lima's hostagent can
+forward every TCP port that a process in the VM listens on to `127.0.0.1` on the host. When
+two VMs independently manage kind clusters, both hostagents would try to mirror the same
+API-server ports (e.g. `7001`) to `127.0.0.1` simultaneously, breaking connectivity for both.
 
-**klimax bypasses this entirely** with a single config flag:
+**klimax bypasses this by default** — `network.disablePortMirroring` is `true`:
 
 ```yaml
 # ~/.klimax/config.yaml
 network:
-  disablePortMirroring: true
+  disablePortMirroring: true   # default
 ```
 
-With this flag:
-- Lima stops forwarding any TCP port from the klimax VM to `127.0.0.1`.
+With this setting (the default):
+- Lima does not forward any TCP port from the klimax VM to `127.0.0.1`.
 - Cluster kubeconfigs use the VM's direct `lima0` IP (e.g. `https://192.168.64.3:7001`) — reachable from the host over vzNAT without any routing or VPN.
 - The API server cert automatically includes the `lima0` IP as a SAN, so TLS verification works out of the box.
 - Every other Lima VM (Rancher Desktop, Colima, kind-on-lima) keeps forwarding its own ports to `127.0.0.1` completely unaffected.
 
-This is a VM-level setting — recreate the VM once to apply it (`klimax destroy && klimax up`),
-then forget about it.
+This is a VM-level setting — it is applied when the VM is created. (Set it to `false` before
+`klimax up` if you need stable `127.0.0.1` kubeconfigs or your host security software blocks
+vzNAT IPs.)
 
 > The `lima0` IP is assigned dynamically by macOS and may change on VM restart.
 > Run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs.
@@ -509,7 +512,7 @@ klimax/
 │   ├── limatemplate/        # Builds limatype.LimaYAML (VZ, mounts, provision script)
 │   ├── guest/               # SSH client for running commands/scripts in the VM
 │   ├── docker/              # Docker network management in guest
-│   ├── registry/            # Local registry + pull-through mirror lifecycle
+│   ├── registry/            # Pull-through mirror lifecycle
 │   ├── kind/                # kind cluster create/delete/list; MetalLB, CoreDNS, kubeconfig
 │   └── routing/             # iptables no-NAT rules; macOS route management
 ├── config.example.yaml

@@ -25,10 +25,9 @@ import (
 //  1. Writes a kind cluster config with containerd patches for all registries.
 //  2. Creates the cluster using the configured node image version.
 //  3. Installs MetalLB and configures an IP address pool.
-//  4. Creates the local-registry-hosting ConfigMap in kube-public.
-//  5. Exports the kubeconfig to ~/.kube/klimax/<name>.kubeconfig on the host,
-//     with the API server address set to 127.0.0.1 (loopback mode, default) or
-//     the VM's lima0 IP (direct mode, kind.useLoopbackAddress: false).
+//  4. Exports the kubeconfig to ~/.kube/klimax/<name>.kubeconfig on the host,
+//     with the API server address set to the VM's lima0 IP (direct mode, the
+//     default when useDirectIP is true) or 127.0.0.1 (loopback mode).
 func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR string, useDirectIP bool) error {
 	// Apply locality defaults based on num.
 	if cl.Region == "" {
@@ -131,12 +130,6 @@ echo "kind cluster %s created"
 
 	if err := installMetalLB(ctx, g, cl, kindCfg.MetalLBVersion, subnetPrefix); err != nil {
 		return fmt.Errorf("installing MetalLB for cluster %q: %w", cl.Name, err)
-	}
-
-	if regCfg.LocalRegistry.Enabled {
-		if err := applyLocalRegistryConfigMap(ctx, g, cl.Name, regCfg.LocalRegistry.Port); err != nil {
-			return fmt.Errorf("applying local registry ConfigMap for cluster %q: %w", cl.Name, err)
-		}
 	}
 
 	if len(kindCfg.CustomDNSResolvers) > 0 {
@@ -302,31 +295,6 @@ echo "MetalLB configured for cluster %s"
 	)
 
 	return g.RunScript(ctx, fmt.Sprintf("install MetalLB on cluster %q", cl.Name), metallbScript)
-}
-
-// applyLocalRegistryConfigMap creates the standard kube-public ConfigMap that
-// advertises the local push registry to tooling (e.g. Tilt, Skaffold).
-func applyLocalRegistryConfigMap(ctx context.Context, g *guest.Client, clusterName string, port int) error {
-	slog.Info("Applying local-registry-hosting ConfigMap", "cluster", clusterName)
-
-	script := fmt.Sprintf(`#!/bin/bash
-set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
-kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
-cat <<EOF | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: local-registry-hosting
-  namespace: kube-public
-data:
-  localRegistryHosting.v1: |
-    host: "kind-registry:%d"
-    help: "https://kind.sigs.k8s.io/docs/user/local-registry/"
-EOF
-`, clusterName, clusterName, port)
-
-	return g.RunScript(ctx, fmt.Sprintf("local registry ConfigMap for cluster %q", clusterName), script)
 }
 
 // exportKubeconfig fetches the kubeconfig from the VM, patches the server address

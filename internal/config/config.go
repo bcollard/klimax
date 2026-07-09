@@ -30,14 +30,18 @@ type NetworkConfig struct {
 	// KindBridgeCIDR is the subnet for the Docker bridge network named "kind".
 	KindBridgeCIDR string `yaml:"kindBridgeCIDR"` // e.g. "172.30.0.0/16"
 	// DisablePortMirroring prevents Lima from auto-mirroring guest TCP ports to
-	// 127.0.0.1 on the host. Required when running klimax alongside other Lima-based
-	// VMs (kind-on-lima, Rancher Desktop) that manage kind clusters with overlapping
-	// port numbers — without this, both VMs race to mirror the same port (e.g. 7001)
-	// to 127.0.0.1 and confuse each other's tooling.
+	// 127.0.0.1 on the host. Defaults to true. Enabled by default so klimax
+	// coexists cleanly with other Lima-based VMs (kind-on-lima, Rancher Desktop)
+	// that manage kind clusters with overlapping port numbers — otherwise both VMs
+	// race to mirror the same port (e.g. 7001) to 127.0.0.1 and confuse each
+	// other's tooling.
 	// When true, kubeconfigs use the VM's direct lima0 IP instead of 127.0.0.1,
-	// and the API server cert includes the lima0 IP as a SAN.
+	// and the API server cert includes the lima0 IP as a SAN. Set to false to
+	// force loopback (127.0.0.1) addressing — e.g. if host security software
+	// (CrowdStrike) blocks TCP connections to vzNAT IPs.
+	// nil = default (true).
 	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
-	DisablePortMirroring bool `yaml:"disablePortMirroring"`
+	DisablePortMirroring *bool `yaml:"disablePortMirroring"`
 }
 
 // CustomDNSResolver forwards a DNS zone to one or more upstream resolvers via CoreDNS.
@@ -83,19 +87,13 @@ type ClusterConfig struct {
 	Labels map[string]string
 }
 
-// RegistryConfig controls the local Docker registry and pull-through mirrors.
+// RegistryConfig controls the pull-through registry mirrors.
 type RegistryConfig struct {
-	LocalRegistry LocalRegistryConfig `yaml:"localRegistry"`
-	Mirrors       []RegistryMirror    `yaml:"mirrors"`
+	Mirrors []RegistryMirror `yaml:"mirrors"`
 	// CacheStorage controls where mirror registry data is persisted.
 	// "host" (default): bind-mounted from ~/.klimax/registry-cache on the macOS host via virtiofs.
 	// "guest": stored inside the VM at /var/lib/klimax/registry-cache (wiped on destroy).
 	CacheStorage string `yaml:"cacheStorage"`
-}
-
-type LocalRegistryConfig struct {
-	Enabled bool `yaml:"enabled"` // default: true
-	Port    int  `yaml:"port"`    // default: 5000
 }
 
 // RegistryMirror describes a pull-through cache container to run in the VM.
@@ -121,7 +119,6 @@ const (
 	// warning emitted by kind.CreateCluster).
 	DefaultKindNodeVersion = "v1.35.0"
 	DefaultMetalLBVersion  = "v0.16.1"
-	DefaultLocalRegPort    = 5000
 )
 
 // DefaultMirrors are the pull-through registry caches enabled by default.
@@ -130,6 +127,8 @@ var DefaultMirrors = []RegistryMirror{
 	{Name: "registry-dockerio", Port: 5030, RemoteURL: "https://registry-1.docker.io"},
 	{Name: "registry-quayio", Port: 5010, RemoteURL: "https://quay.io"},
 	{Name: "registry-gcrio", Port: 5020, RemoteURL: "https://gcr.io"},
+	{Name: "registry-us-docker-pkgdev", Port: 5040, RemoteURL: "https://us-docker.pkg.dev"},
+	{Name: "registry-us-central1-docker-pkgdev", Port: 5050, RemoteURL: "https://us-central1-docker.pkg.dev"},
 }
 
 // LoadConfig reads and parses a klimax YAML config file, applying defaults.
@@ -162,6 +161,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Network.KindBridgeCIDR == "" {
 		cfg.Network.KindBridgeCIDR = DefaultKindCIDR
 	}
+	if cfg.Network.DisablePortMirroring == nil {
+		cfg.Network.DisablePortMirroring = boolPtr(true)
+	}
 	if cfg.Kind.NodeVersion == "" {
 		cfg.Kind.NodeVersion = DefaultKindNodeVersion
 	}
@@ -179,13 +181,6 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Kind.AutoRemoveKubeconfig == nil {
 		cfg.Kind.AutoRemoveKubeconfig = boolPtr(true)
-	}
-	// Registry defaults: local registry enabled by default.
-	if !cfg.Registries.LocalRegistry.Enabled && cfg.Registries.LocalRegistry.Port == 0 {
-		cfg.Registries.LocalRegistry.Enabled = true
-	}
-	if cfg.Registries.LocalRegistry.Port == 0 {
-		cfg.Registries.LocalRegistry.Port = DefaultLocalRegPort
 	}
 	// If the user provided no mirrors section at all, use built-in defaults.
 	if cfg.Registries.Mirrors == nil {
@@ -223,6 +218,14 @@ func WriteDefaultConfig(path string) error {
 }
 
 func boolPtr(b bool) *bool { return &b }
+
+// PortMirroringDisabled reports whether Lima port mirroring should be disabled.
+// It defaults to true (the field is nil-defaulted to true in applyDefaults; a
+// nil pointer here — e.g. a Config built without applyDefaults — is also treated
+// as the default).
+func (n NetworkConfig) PortMirroringDisabled() bool {
+	return n.DisablePortMirroring == nil || *n.DisablePortMirroring
+}
 
 // sanitizeMirrorName strips a hostname-like string down to a safe container-name
 // suffix (alphanumerics and '-') for use in a validation hint.
