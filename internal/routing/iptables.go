@@ -124,9 +124,22 @@ systemctl enable --now lima-no-nat-kind.service
 }
 
 // CheckNoNatRule returns true if the NAT exemption rule is present in the guest.
+//
+// The probe must exactly reconstruct the rule installed by noNatScript (Rule 1),
+// including the `-d "${VM_NET}"` destination qualifier — `iptables -C` requires an
+// exact spec match, so a `-d`-less probe never matches the installed `-d` rule and
+// would always report the rule as missing. VM_NET is derived from lima0's IP as a
+// /24 via python3's ipaddress module, identically to noNatScript.
+//
+// The probe also runs under sudo: the guest SSH user is `lima` (unprivileged) and
+// iptables requires root, so an unsudoed probe fails with a permission error that
+// `2>/dev/null` swallows into a false "missing" result.
 func CheckNoNatRule(ctx context.Context, g *guest.Client, kindCIDR string) (bool, error) {
 	cmd := fmt.Sprintf(
-		`iptables -t nat -C POSTROUTING -s "%s" -o lima0 -j ACCEPT 2>/dev/null && echo yes || echo no`,
+		`HOST_IF=lima0
+VM_IP=$(ip -o -4 addr show ${HOST_IF} | awk '{print $4}' | cut -d/ -f1)
+VM_NET=$(python3 -c "import ipaddress; print(ipaddress.ip_interface('${VM_IP}/24').network)")
+sudo iptables -t nat -C POSTROUTING -s "%s" -d "${VM_NET}" -o "${HOST_IF}" -j ACCEPT 2>/dev/null && echo yes || echo no`,
 		kindCIDR,
 	)
 	out, err := g.Run(ctx, cmd)
