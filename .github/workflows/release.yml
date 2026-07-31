@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: macos-latest  # ARM64; macOS system clang cross-compiles to amd64 transparently
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0  # full history so goreleaser can generate the changelog
 
