@@ -7,7 +7,7 @@ vm:
   name: "klimax"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
   cpus: 4
   memory: "10GiB"
-  disk: "40GiB"
+  disk: "40GiB"       # grow later without recreating the VM: klimax disk resize 80GiB
   # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
   # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
   # rosetta: false

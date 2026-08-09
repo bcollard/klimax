@@ -180,7 +180,7 @@ vm:
   name: "klimax"         # Lima instance name; Docker socket at ~/.<name>.docker.sock
   cpus: 4
   memory: "10GiB"
-  disk: "40GiB"
+  disk: "40GiB"       # grow later with: klimax disk resize 80GiB
   # rosetta: false       # enable Rosetta 2 for amd64 containers (ARM64 only)
 
 # ── Networking ───────────────────────────────────────────────────────────────
@@ -262,7 +262,75 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 | `klimax doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta) |
 | `klimax version` | Print the klimax version |
 | `klimax shell` | Open an interactive SSH session in the VM |
+| `klimax shell <cmd> [args...]` | Run a command in the VM and exit with its exit code |
+| `klimax copy <src>... <dst>` | Copy files between host and VM (`vm:` marks the VM side; `-r` for directories) |
 | `klimax config edit` | Open the config file in `$VISUAL` / `$EDITOR` |
+| `klimax disk resize <size>` | Grow the VM disk (e.g. `80GiB`) — applied on the next VM start |
+| `klimax prune` | Remove reclaimable cached files (`--dry-run`, `--downloads`, `-y`) |
+| `klimax sudoers` | Print a sudoers snippet so `klimax up` never prompts for the host route (`--check`) |
+| `klimax autostart install\|uninstall\|status` | Manage a launchd agent that starts the VM at login |
+
+### Running commands and copying files
+
+`klimax shell` doubles as a non-interactive runner, so VM-side work composes in
+scripts and pipelines without needing `limactl`:
+
+```sh
+klimax shell docker ps                          # flags after the command are passed through
+klimax shell -- bash -c 'kind get clusters'     # use -- when flags could look like klimax's
+cat setup.sh | klimax shell bash -s             # stdin is piped through
+klimax shell -t htop                            # -t forces a pseudo-terminal
+```
+
+The exit code is the remote command's, so `if klimax shell test -e /run/docker.sock; then ...` works.
+
+```sh
+klimax copy ./script.sh vm:/tmp/script.sh       # host → VM
+klimax copy vm:/tmp/out.json ./out.json         # VM → host
+klimax copy -r ./manifests vm:/tmp/manifests    # directories
+```
+
+### Growing the disk
+
+```sh
+klimax disk resize 80GiB      # updates vm.disk and the Lima instance config
+klimax down && klimax up      # Lima expands the image; the guest FS grows on boot
+```
+
+Shrinking is not supported. Node images are large (~2.7GB each), so check
+headroom with `klimax shell df -h /`.
+
+### Reclaiming space
+
+```sh
+klimax prune --dry-run           # show what would go
+klimax prune --downloads         # also clear Lima's shared image download cache
+```
+
+It removes superseded Lima guest agents and registry cache directories whose
+mirror is no longer configured. Caches of *configured* mirrors are never touched
+— use `klimax registry clean-cache` for those.
+
+### Passwordless host route (and starting at login)
+
+`klimax up` needs root for exactly one thing: the macOS route for the kind bridge
+CIDR. Grant just that, and `up` stops prompting:
+
+```sh
+klimax sudoers | sudo tee /etc/sudoers.d/klimax >/dev/null
+sudo chmod 0440 /etc/sudoers.d/klimax
+klimax sudoers --check            # inspects the sudo policy for the two rules
+```
+
+That is also what makes autostart useful, since launchd cannot answer a prompt:
+
+```sh
+klimax autostart install          # runs 'klimax up' at login; --print shows the plist
+klimax autostart status
+klimax autostart uninstall
+```
+
+Autostart output is appended to `~/.klimax/logs/autostart.log`.
 
 ### Docker
 

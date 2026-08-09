@@ -120,14 +120,13 @@ Prefer one fresh cluster per test run for isolation; clusters are cheap and crea
 
 ## Getting a test image into the cluster
 
-Point your host Docker at the klimax VM to build the image inside the VM's Docker daemon, then load it into the cluster's nodes with `kind load` (the kind CLI lives in the VM — open `klimax shell` to run it):
+Point your host Docker at the klimax VM to build the image inside the VM's Docker daemon, then load it into the cluster's nodes with `kind load`. The kind CLI lives in the VM, so run it with `klimax shell <cmd>` — non-interactive, safe for agents:
 
 ```bash
 eval "$(klimax docker-env)"                       # DOCKER_HOST → the klimax VM's Docker
 docker build -t myapp:test .                      # image now lives in the VM's Docker
 
-klimax shell                                       # open an SSH session in the VM
-#   $ kind load docker-image myapp:test --name <cluster>
+klimax shell kind load docker-image myapp:test --name <cluster>
 
 # In manifests, reference the image and pin the pull policy so the node
 # uses the loaded image instead of pulling from a registry:
@@ -151,14 +150,21 @@ Public images pull transparently through the built-in pull-through mirrors (dock
 - Per-cluster pod/service subnets: `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`. Keep cluster num 1–9 to avoid overlap.
 - Cluster nodes are labelled with `managed-by=klimax`, `topology.kubernetes.io/region` + `zone` (overridable via `--region` / `--zone`), and `klimax.dev/fleet=<name>` for clusters created from a Fleet. Add custom node labels with `klimax cluster create -l key=value` (repeatable), the Fleet `labels:` / `defaults.labels` fields, or relabel an existing cluster with `klimax cluster label <name> -l key=value` (`-l key-` removes).
 - Docker socket on the host: `~/.klimax.docker.sock`. Use `eval $(klimax docker-env)` or `klimax docker-context` to point your local docker CLI at it.
+- To run anything inside the VM (kind, ctr, iptables, docker), use `klimax shell <cmd> [args...]` — it is non-interactive, passes stdin/stdout through, and exits with the remote command's exit code. Bare `klimax shell` opens an interactive session and **will hang a non-interactive agent**. Put `--` before the command if its flags could be mistaken for klimax's: `klimax shell -- bash -c '...'`.
+- Move files with `klimax copy ./file vm:/tmp/file` (and back with `klimax copy vm:/tmp/file ./file`); `-r` for directories.
+- Disk filling up (kind node images are ~2.7GB each): `klimax shell df -h /` to check, `klimax prune --dry-run` to find reclaimable caches, `klimax disk resize 80GiB` + `klimax down && klimax up` to grow it.
+- If `klimax up` prompts for a sudo password (it needs root only for the macOS host route), install the rules once with `klimax sudoers | sudo tee /etc/sudoers.d/klimax >/dev/null && sudo chmod 0440 /etc/sudoers.d/klimax`. Required for `klimax autostart`, since launchd cannot answer a prompt.
 
 ## Troubleshooting
 
 ```bash
-klimax doctor       # Diagnose route, iptables, VPN conflicts, hostagent collisions, etc.
-klimax status       # VM state, clusters, route, iptables snapshot.
-klimax shell        # Interactive SSH into the VM (for poking at iptables / containerd / docker).
+klimax doctor              # Diagnose route, iptables, VPN conflicts, hostagent collisions, etc.
+klimax status              # VM state, clusters, route, iptables snapshot.
+klimax shell <cmd>         # Run a diagnostic command in the VM, e.g. klimax shell iptables -t nat -L POSTROUTING -n
+klimax sudoers --check     # Are the passwordless host-route rules in effect?
 ```
+
+Bare `klimax shell` (interactive) is for humans only — always pass a command when scripting.
 
 ## When NOT to use klimax
 

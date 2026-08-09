@@ -95,7 +95,12 @@ internal/cli/destroy.go              `klimax destroy`
 internal/cli/status.go               `klimax status`
 internal/cli/doctor.go               `klimax doctor`
 internal/cli/version.go              `klimax version`
-internal/cli/shell.go                `klimax shell` — interactive SSH session into the VM
+internal/cli/shell.go                `klimax shell` — interactive SSH session, or non-interactive command runner (args → remote command, exit code propagated)
+internal/cli/copy.go                 `klimax copy` — scp between host and VM (`vm:`/`<vmName>:` marks the guest side)
+internal/cli/sudoers.go              `klimax sudoers` — emits/checks the NOPASSWD rules for the two /sbin/route commands
+internal/cli/disk.go                 `klimax disk resize` — grows vm.disk + the Lima instance config (applied on next start)
+internal/cli/prune.go                `klimax prune` — removes superseded guest agents, orphaned registry caches, (opt-in) Lima download cache
+internal/cli/autostart.go            `klimax autostart` — launchd agent (dev.klimax.autostart) running `klimax up` at login
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/label/e2e-test-nginx; use+merge deprecated → kubeconfig)
 internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/use) — kubeconfig helpers; `use` merges + kubectl use-context
@@ -261,7 +266,22 @@ klimax status                          Show VM state, clusters, route, iptables
 klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state)
 klimax version                         Print version
 klimax shell                           Open interactive SSH session in the VM
+klimax shell <cmd> [args...]           Run a command in the VM (stdin/stdout passed through, exit code propagated)
+  -t, --tty                            Force pseudo-terminal allocation
+klimax copy <src>... <dst>             Copy files host↔VM; prefix the VM side with `vm:` (or the VM's name)
+  -r, --recursive                      Copy directories
 klimax config edit                     Open config in $VISUAL / $EDITOR / nano / vi
+
+klimax disk resize <size>              Grow the VM disk (e.g. 80GiB); rewrites vm.disk + instance lima.yaml, applied on next start
+klimax prune                           Remove reclaimable caches (superseded guest agents, orphaned registry-cache dirs)
+  --dry-run                            Report without removing
+  --downloads                          Also clear Lima's shared image download cache (~/Library/Caches/lima/download)
+  -y, --yes                            Skip the confirmation prompt (required when non-interactive)
+klimax sudoers                         Print sudoers rules so `up` never prompts for the host route
+  --check                              Inspect `sudo -l` output for both NOPASSWD route rules
+klimax autostart install               Install + load the launchd agent (--print writes the plist to stdout)
+klimax autostart uninstall             Unload + remove it
+klimax autostart status                Report plist presence and launchd state
 
 klimax docker-env                      Print: export DOCKER_HOST=unix://~/.<name>.docker.sock
 klimax docker-env --unset              Print: unset DOCKER_HOST
@@ -341,6 +361,8 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 - Registry containers are started only if not already running.
 - `kind create cluster` only runs for clusters that don't exist.
 - The macOS route is added/refreshed only when missing or pointing at a stale gateway; when it already targets the current lima0 IP, `klimax up` skips it entirely and does **not** invoke sudo (so re-running `up` on a live VM never prompts). See `routing.RouteGateway`.
+- Route presence is judged by `routing.RouteGateway`, which requires `route -n get` to return the CIDR's own base as the destination. `RouteExists` (used by `status` and `doctor`) delegates to it — a plain `route -n get` succeeds for *any* address via the default route, which previously made both report a missing route as present.
+- `klimax up` needs root **only** for that route. `klimax sudoers` emits NOPASSWD rules for exactly the two `/sbin/route` invocations, which is what makes `klimax autostart` viable (launchd cannot answer a password prompt).
 - `cluster create` warns (does not block) when `kind.nodeVersion` differs from `config.DefaultKindNodeVersion` — the image the bundled kind CLI is validated against.
 - **On first VM creation only**, `klimax up` reviews an existing config (`reviewConfigBeforeCreate` in `up.go`): it lists options this klimax version adds that the config doesn't set (`config.MissingKeys` — schema diff of the user's file vs the defaulted struct), and if `kind.nodeVersion` drifts from `config.DefaultKindNodeVersion` it **interactively offers to rewrite it** in the config file (`rewriteNodeVersion`, preserves comments/indent). Non-interactive (no TTY): it keeps the pinned value and only warns — never blocks. Skipped entirely when the VM already exists.
 - All kubeconfigs are written atomically with `0600` permissions.

@@ -41,24 +41,37 @@ func limaModuleVersion() string {
 	return fallback
 }
 
+// guestAgentArch returns the guest agent's uname -m style architecture name.
+func guestAgentArch() string {
+	if runtime.GOARCH == "amd64" {
+		return "x86_64"
+	}
+	return "aarch64"
+}
+
+// GuestAgentCachePath returns where the guest agent matching this binary's Lima
+// module version is cached. The filename is version-stamped, so bumping the Lima
+// module points at a new path and the matching agent is re-downloaded (guest and
+// host agents must be the same version — a stale cached agent could break the
+// hostagent protocol). Earlier versions linger until 'klimax prune' removes them.
+func GuestAgentCachePath(klimaxHome string) string {
+	ver := strings.TrimPrefix(limaModuleVersion(), "v")
+	return filepath.Join(klimaxHome, "share", "lima",
+		fmt.Sprintf("lima-guestagent.Linux-%s-%s.gz", guestAgentArch(), ver))
+}
+
 // EnsureGuestAgent returns the path to the cached lima guest agent binary for
 // the current host architecture, downloading it from Lima's GitHub release if
 // not already present.
 //
 // Cache location: <klimaxHome>/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz
 func EnsureGuestAgent(ctx context.Context, klimaxHome string) (string, error) {
-	guestArch := "aarch64"
-	if runtime.GOARCH == "amd64" {
-		guestArch = "x86_64"
-	}
+	guestArch := guestAgentArch()
 
-	cacheDir := filepath.Join(klimaxHome, "share", "lima")
 	limaVer := limaModuleVersion()
 	ver := strings.TrimPrefix(limaVer, "v")
-	// Version-stamped cache filename: bumping the Lima module changes the name so
-	// the matching guest agent is re-downloaded (guest and host agents must be the
-	// same version — a stale cached agent could break the hostagent protocol).
-	cached := filepath.Join(cacheDir, fmt.Sprintf("lima-guestagent.Linux-%s-%s.gz", guestArch, ver))
+	cached := GuestAgentCachePath(klimaxHome)
+	cacheDir := filepath.Dir(cached)
 	if _, err := os.Stat(cached); err == nil {
 		slog.Debug("Lima guest agent already cached", "path", cached)
 		return cached, nil

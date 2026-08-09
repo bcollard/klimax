@@ -164,6 +164,24 @@ func SSHArgs(inst *limatype.Instance) ([]string, error) {
 	return args, nil
 }
 
+// SCPArgs returns the scp option flags for the given running Lima instance and
+// the "user@host" prefix to use for guest-side paths. scp needs -P (not -p) for
+// the port, which is why it cannot reuse SSHArgs.
+func SCPArgs(inst *limatype.Instance) (opts []string, userHost string, err error) {
+	keyPath, err := limaPrivateKeyPath()
+	if err != nil {
+		return nil, "", err
+	}
+	opts = []string{
+		"-i", keyPath,
+		"-P", fmt.Sprintf("%d", inst.SSHLocalPort),
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+	}
+	return opts, fmt.Sprintf("%s@%s", guestUser(inst), inst.SSHAddress), nil
+}
+
 // dial opens a new SSH connection. Callers are responsible for closing it.
 func (c *Client) dial() (*ssh.Client, error) {
 	cl, err := ssh.Dial("tcp", c.address, c.config)
