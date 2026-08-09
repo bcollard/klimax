@@ -48,8 +48,8 @@ func runStatus(ctx context.Context) error {
 
 	// Route section
 	fmt.Println("\n=== macOS Route ===")
-	if routing.RouteExists(cfg.Network.KindBridgeCIDR) {
-		fmt.Printf("  %s → present\n", cfg.Network.KindBridgeCIDR)
+	if gw, ok := routing.RouteGateway(cfg.Network.KindBridgeCIDR); ok {
+		fmt.Printf("  %s → present (via %s)\n", cfg.Network.KindBridgeCIDR, gw)
 	} else {
 		fmt.Printf("  %s → MISSING\n", cfg.Network.KindBridgeCIDR)
 	}

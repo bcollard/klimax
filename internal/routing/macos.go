@@ -86,17 +86,13 @@ func DeleteRoute(cidr string) error {
 	return nil
 }
 
-// RouteExists checks whether a macOS route for the given CIDR currently exists.
+// RouteExists checks whether a dedicated macOS route for the given CIDR exists.
+// It delegates to RouteGateway so that a broader match — most importantly the
+// default route, which answers `route -n get` for any address — is not mistaken
+// for our route.
 func RouteExists(cidr string) bool {
-	// Pick the first host IP in the CIDR to query.
-	ip, ipNet, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return false
-	}
-	ip = ip.Mask(ipNet.Mask)
-	ip[len(ip)-1]++
-	cmd := exec.Command("/sbin/route", "-n", "get", ip.String())
-	return cmd.Run() == nil
+	_, ok := RouteGateway(cidr)
+	return ok
 }
 
 // Lima0IP returns the IPv4 address of the lima0 interface inside the VM.
