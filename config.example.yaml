@@ -18,7 +18,7 @@ vm:
   # only kind no registry mirror can restore.
   # Empty/unset = disabled (image store lives on the VM root disk).
   # WARNING: only takes effect on new VMs (klimax destroy && klimax up).
-  # imageDisk: "20GiB"
+  # imageDisk: "10GiB"
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

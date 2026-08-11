@@ -26,9 +26,9 @@ type VMConfig struct {
 	Memory  string `yaml:"memory"`  // e.g. "10GiB"
 	Disk    string `yaml:"disk"`    // e.g. "40GiB"
 	Rosetta bool   `yaml:"rosetta"` // enable Rosetta 2 for amd64 containers (ARM64 only)
-	// ImageDisk, when non-empty (e.g. "20GiB"), provisions a separate Lima data
+	// ImageDisk, when non-empty (e.g. "10GiB"), provisions a separate Lima data
 	// disk mounted over the guest's container image store (/var/lib/containerd).
-	// Named Lima disks live in $LIMA_HOME/_disk/<vm>-images and survive
+	// Named Lima disks live in $LIMA_HOME/_disks/<vm>-img and survive
 	// `klimax destroy`, so kindest/node, registry:2 and locally built images are
 	// not lost when the VM is re-created (a locally built image is the only kind
 	// no registry mirror can restore).

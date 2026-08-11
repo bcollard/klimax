@@ -182,7 +182,7 @@ vm:
   memory: "10GiB"
   disk: "40GiB"       # grow later with: klimax disk resize 80GiB
   # rosetta: false       # enable Rosetta 2 for amd64 containers (ARM64 only)
-  # imageDisk: "20GiB"   # persistent image store disk; survives `klimax destroy`
+  # imageDisk: "10GiB"   # persistent image store disk; survives `klimax destroy`
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

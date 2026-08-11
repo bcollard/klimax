@@ -128,7 +128,7 @@ vm:
   memory: "10GiB"
   disk: "40GiB"
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
-  imageDisk: ""          # e.g. "20GiB": persistent Lima data disk mounted over
+  imageDisk: ""          # e.g. "10GiB": persistent Lima data disk mounted over
                          # /var/lib/containerd so the image store survives `destroy`.
                          # Empty = disabled. ⚠ VM-level: new VMs only.
 
