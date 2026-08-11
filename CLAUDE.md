@@ -87,6 +87,7 @@ internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
+internal/vm/disk.go                  EnsureImageDisk — creates the persistent Lima data disk for the container image store
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
@@ -127,6 +128,9 @@ vm:
   memory: "10GiB"
   disk: "40GiB"
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
+  imageDisk: ""          # e.g. "20GiB": persistent Lima data disk mounted over
+                         # /var/lib/containerd so the image store survives `destroy`.
+                         # Empty = disabled. ⚠ VM-level: new VMs only.
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet

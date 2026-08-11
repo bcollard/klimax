@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -24,6 +26,45 @@ type VMConfig struct {
 	Memory  string `yaml:"memory"`  // e.g. "10GiB"
 	Disk    string `yaml:"disk"`    // e.g. "40GiB"
 	Rosetta bool   `yaml:"rosetta"` // enable Rosetta 2 for amd64 containers (ARM64 only)
+	// ImageDisk, when non-empty (e.g. "20GiB"), provisions a separate Lima data
+	// disk mounted over the guest's container image store (/var/lib/containerd).
+	// Named Lima disks live in $LIMA_HOME/_disk/<vm>-images and survive
+	// `klimax destroy`, so kindest/node, registry:2 and locally built images are
+	// not lost when the VM is re-created (a locally built image is the only kind
+	// no registry mirror can restore).
+	// Empty = disabled (the image store lives on the VM's root disk).
+	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
+	ImageDisk string `yaml:"imageDisk"`
+}
+
+// maxLimaDiskNameLen is the longest Lima disk name that survives round-tripping
+// through an ext4 volume label.
+//
+// Lima formats a data disk with label "lima-<name>" and then decides, on EVERY
+// boot, whether the disk needs first-time setup by testing for
+// /dev/disk/by-label/lima-<name>. ext4 labels are capped at 16 bytes, so any
+// name longer than 11 chars is silently truncated by mkfs — the by-label path
+// Lima looks for then never exists and it REFORMATS the disk on every boot,
+// destroying the image store it was meant to preserve.
+//
+// Found the hard way: "klimax-images" produced label "lima-klimax-imag".
+const maxLimaDiskNameLen = 16 - len("lima-")
+
+// ImageDiskName is the Lima data disk holding the container image store for the
+// named VM. Lima disks are namespaced globally rather than per-instance, so the
+// VM name is embedded to keep multiple klimax VMs from colliding.
+//
+// The result is always <= maxLimaDiskNameLen chars; long VM names fall back to a
+// hashed suffix so distinct VMs still get distinct disks.
+//
+// Lives here rather than in internal/vm so that internal/limatemplate can use it
+// without importing internal/vm (which imports limatemplate).
+func ImageDiskName(vmName string) string {
+	if name := vmName + "-img"; len(name) <= maxLimaDiskNameLen {
+		return name
+	}
+	sum := sha256.Sum256([]byte(vmName))
+	return vmName[:4] + "-" + hex.EncodeToString(sum[:])[:6]
 }
 
 type NetworkConfig struct {

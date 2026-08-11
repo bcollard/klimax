@@ -54,6 +54,14 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		}
 	}
 
+	// The image-store disk must exist before the instance starts: Lima fails to
+	// start an instance whose additionalDisks reference a missing disk.
+	if cfg.VM.ImageDisk != "" {
+		if err := vm.EnsureImageDisk(ctx, config.ImageDiskName(cfg.VM.Name), cfg.VM.ImageDisk); err != nil {
+			return fmt.Errorf("image disk: %w", err)
+		}
+	}
+
 	inst, err := mgr.EnsureRunning(ctx, cfg, showVMLogs)
 	if err != nil {
 		return fmt.Errorf("vm: %w", err)
