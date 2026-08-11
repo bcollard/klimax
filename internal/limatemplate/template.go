@@ -12,10 +12,15 @@ import (
 	"github.com/lima-vm/lima/v2/pkg/ptr"
 )
 
-// Ubuntu 25.04 (plucky) cloud images.
+// Ubuntu 26.04 LTS (resolute) cloud images.
+//
+// LTS is deliberate: interim releases (24.10, 25.04, 25.10) are supported for
+// only 9 months, and 25.04 had already gone EOL — a VM built from it stopped
+// receiving security updates. The /releases/26.04/release/ URLs redirect to
+// the current point release, so a re-created VM picks up the latest respin.
 const (
-	ubuntuAMD64 = "https://cloud-images.ubuntu.com/releases/25.04/release/ubuntu-25.04-server-cloudimg-amd64.img"
-	ubuntuARM64 = "https://cloud-images.ubuntu.com/releases/25.04/release/ubuntu-25.04-server-cloudimg-arm64.img"
+	ubuntuAMD64 = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img"
+	ubuntuARM64 = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-arm64.img"
 )
 
 // KindCLIVersion is the kind binary version installed in the VM.

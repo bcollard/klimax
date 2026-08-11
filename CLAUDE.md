@@ -73,7 +73,7 @@ skill.go                             root package `klimax`; go:embed SKILL.md in
 SKILL.md                             canonical Agent Skill (single source of truth; embedded into the binary)
 
 internal/config/config.go            Config struct, LoadConfig, Validate, defaults
-internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 25.04, portForwards, provision script)
+internal/limatemplate/template.go    builds limatype.LimaYAML (Ubuntu 26.04 LTS, portForwards, provision script)
 internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspect
 internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
