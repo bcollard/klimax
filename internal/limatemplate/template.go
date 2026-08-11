@@ -24,25 +24,40 @@ const (
 	ubuntuARM64 = "https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-arm64.img"
 )
 
-// buildProvision returns the system provision scripts, in execution order.
+// buildProvision returns the provision entries, in execution order.
 //
-// When a persistent image disk is configured, its bind-mount setup must run
-// *before* the main script — that script installs Docker, and /var/lib/containerd
-// has to already point at the data disk so the image store is populated there
-// rather than on the VM's root disk.
+// When a persistent image disk is configured, its setup must land *before* the
+// main script — that script installs Docker, and /var/lib/containerd has to
+// already be the data disk so the image store is populated there rather than on
+// the VM's root disk.
 func buildProvision(cfg *config.Config) []limatype.Provision {
 	var provisions []limatype.Provision
 	if cfg.VM.ImageDisk != "" {
-		script := imageDiskScript(config.ImageDiskName(cfg.VM.Name))
-		provisions = append(provisions, limatype.Provision{
-			Mode:   limatype.ProvisionModeSystem,
-			Script: &script,
-		})
+		provisions = append(provisions, imageDiskProvisions(config.ImageDiskName(cfg.VM.Name))...)
 	}
 	return append(provisions, limatype.Provision{
 		Mode:   limatype.ProvisionModeSystem,
 		Script: &provisionScript,
 	})
+}
+
+// dataFile returns a `provision: data` entry writing content to path.
+//
+// Lima applies these in boot.sh (before the provision.system scripts) and
+// re-applies them on every boot, creating parent directories as needed. Every
+// ProvisionData field is dereferenced unconditionally by Lima's cidata builder,
+// so all of them must be set.
+func dataFile(path, content, permissions string) limatype.Provision {
+	return limatype.Provision{
+		Mode: limatype.ProvisionModeData,
+		ProvisionData: limatype.ProvisionData{
+			Content:     ptr.Of(content),
+			Overwrite:   ptr.Of(true),
+			Owner:       ptr.Of("root:root"),
+			Path:        ptr.Of(path),
+			Permissions: ptr.Of(permissions),
+		},
+	}
 }
 
 // imageDiskScript mounts the Lima data disk at /var/lib/containerd.
@@ -77,50 +92,41 @@ func buildProvision(cfg *config.Config) []limatype.Provision {
 //
 // If the disk never appears the unit fails and takes Docker with it, which is
 // far better than silently starting on an empty store and re-pulling the world.
-func imageDiskScript(diskName string) string {
-	return fmt.Sprintf(`#!/bin/bash
-set -eux -o pipefail
-
-DISK_LABEL="lima-%s"
-TARGET="/var/lib/containerd"
-
-cat > /usr/local/sbin/klimax-image-disk.sh <<SCRIPT_EOF
-#!/bin/bash
+func imageDiskProvisions(diskName string) []limatype.Provision {
+	mountScript := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 
-DEV="/dev/disk/by-label/${DISK_LABEL}"
-TARGET="${TARGET}"
+DEV="/dev/disk/by-label/lima-%s"
+TARGET="/var/lib/containerd"
 
 # udev may not have published the by-label symlink yet this early in boot.
-for _ in \$(seq 1 60); do
-  [ -b "\${DEV}" ] && break
+for _ in $(seq 1 60); do
+  [ -b "${DEV}" ] && break
   sleep 1
 done
-if [ ! -b "\${DEV}" ]; then
-  echo "klimax: image disk ${DISK_LABEL} not found; refusing to start Docker on an empty image store" >&2
+if [ ! -b "${DEV}" ]; then
+  echo "klimax: image disk ${DEV} not found; refusing to start Docker on an empty image store" >&2
   exit 1
 fi
-real=\$(readlink -f "\${DEV}")
+real=$(readlink -f "${DEV}")
 
-mkdir -p "\${TARGET}"
+mkdir -p "${TARGET}"
 
 # Already mounted from the right device? Nothing to do. Mounted from anything
 # else (e.g. the root filesystem) — unmount before taking over.
-if mountpoint -q "\${TARGET}"; then
-  have=\$(findmnt -no SOURCE "\${TARGET}")
-  case "\${have}" in
-    "\${real}"*) exit 0 ;;
+if mountpoint -q "${TARGET}"; then
+  have=$(findmnt -no SOURCE "${TARGET}")
+  case "${have}" in
+    "${real}"*) exit 0 ;;
   esac
-  umount "\${TARGET}"
+  umount "${TARGET}"
 fi
 
-mount "\${DEV}" "\${TARGET}"
-SCRIPT_EOF
-chmod +x /usr/local/sbin/klimax-image-disk.sh
+mount "${DEV}" "${TARGET}"
+`, diskName)
 
-cat > /etc/systemd/system/klimax-image-disk.service <<'UNIT_EOF'
-[Unit]
-Description=Bind the klimax persistent image disk over /var/lib/containerd
+	unit := `[Unit]
+Description=Mount the klimax persistent image disk at /var/lib/containerd
 Before=containerd.service docker.service
 
 [Service]
@@ -130,26 +136,32 @@ ExecStart=/usr/local/sbin/klimax-image-disk.sh
 
 [Install]
 WantedBy=multi-user.target
-UNIT_EOF
+`
 
-# containerd/docker do not exist yet on first boot (the next provision script
-# installs Docker); systemd picks these drop-ins up when the units appear.
-for unit in containerd.service docker.service; do
-  mkdir -p "/etc/systemd/system/${unit}.d"
-  cat > "/etc/systemd/system/${unit}.d/10-klimax-image-disk.conf" <<'DROPIN_EOF'
-[Unit]
+	// containerd/docker do not exist yet on first boot (the main provision script
+	// installs Docker); systemd picks these drop-ins up when the units appear.
+	dropIn := `[Unit]
 Requires=klimax-image-disk.service
 After=klimax-image-disk.service
-DROPIN_EOF
-done
+`
 
+	// systemctl still needs a script: `data` writes files, not enablement
+	// symlinks. Mounting here too means the Docker install in the next provision
+	// script populates the data disk rather than the root disk.
+	enableScript := `#!/bin/bash
+set -eux -o pipefail
 systemctl daemon-reload
 systemctl enable klimax-image-disk.service
-
-# Bind it now so the Docker install in the next provision script populates the
-# data disk rather than the root disk.
 /usr/local/sbin/klimax-image-disk.sh
-`, diskName)
+`
+
+	return []limatype.Provision{
+		dataFile("/usr/local/sbin/klimax-image-disk.sh", mountScript, "0755"),
+		dataFile("/etc/systemd/system/klimax-image-disk.service", unit, "0644"),
+		dataFile("/etc/systemd/system/containerd.service.d/10-klimax-image-disk.conf", dropIn, "0644"),
+		dataFile("/etc/systemd/system/docker.service.d/10-klimax-image-disk.conf", dropIn, "0644"),
+		{Mode: limatype.ProvisionModeSystem, Script: &enableScript},
+	}
 }
 
 // KindCLIVersion is the kind binary version installed in the VM.
