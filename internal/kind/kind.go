@@ -265,9 +265,8 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} \
 kubectl --kubeconfig ${KIND_KUBECONFIG} \
   -n metallb-system wait deploy controller --timeout=180s --for=condition=Available
 
-sleep 5
-
-cat <<EOF | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
+KLIMAX_POOL=/tmp/klimax-metallb-pool-$$.yaml
+cat > ${KLIMAX_POOL} <<EOF
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -284,6 +283,21 @@ metadata:
   name: kind-l2
   namespace: metallb-system
 EOF
+
+# MetalLB's validating webhook often is not yet serving when the controller
+# Deployment first reports Available, so this apply gets rejected with a
+# webhook connection error. Retry until it is accepted rather than sleeping a
+# fixed amount: measured, the blind "sleep 5" was nearly a third of the whole
+# MetalLB phase, while the webhook is usually ready in well under a second.
+KLIMAX_DEADLINE=$((SECONDS + 60))
+until kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f ${KLIMAX_POOL}; do
+  if [ ${SECONDS} -ge ${KLIMAX_DEADLINE} ]; then
+    echo "ERROR: MetalLB IPAddressPool/L2Advertisement not accepted within 60s" >&2
+    exit 1
+  fi
+  sleep 1
+done
+rm -f ${KLIMAX_POOL}
 
 echo "MetalLB configured for cluster %s"
 `,
