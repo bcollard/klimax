@@ -27,7 +27,7 @@ const (
 // Separate from the kind node image version (specified per-cluster in config).
 // Its default/validated kindest/node image tag is config.DefaultKindNodeVersion —
 // keep the two in sync when bumping kind.
-const KindCLIVersion = "v0.31.0"
+const KindCLIVersion = "v0.32.0"
 
 // provisionScript runs inside the VM as root (mode: system) on first boot.
 // It installs Docker, sets socket permissions, enables IP forwarding, and

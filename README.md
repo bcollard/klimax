@@ -55,7 +55,7 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 | Tool | Version | Purpose |
 |---|---|---|
 | Docker | latest via get.docker.com | Container runtime for kind and registries |
-| kind | v0.31.0 | Kubernetes-in-Docker cluster manager |
+| kind | v0.32.0 | Kubernetes-in-Docker cluster manager |
 | kubectl | latest stable | Cluster management from within the VM |
 | jq, iptables, curl, net-tools, python3 | distro packages | Tooling for scripts and routing rules |
 
@@ -198,7 +198,7 @@ network:
 
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
-  nodeVersion: "v1.35.0"
+  nodeVersion: "v1.36.1"
   metalLBVersion: "v0.16.1"
   customDnsResolvers:
     - domain: "runlocal.dev"          # forward to 8.8.8.8/8.8.4.4 (default resolvers)

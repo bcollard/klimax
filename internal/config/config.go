@@ -58,7 +58,7 @@ type CustomDNSResolver struct {
 // is no cluster list here.
 type KindConfig struct {
 	// NodeVersion is the kindest/node image tag used when creating clusters.
-	NodeVersion string `yaml:"nodeVersion"` // e.g. "v1.35.0"
+	NodeVersion string `yaml:"nodeVersion"` // e.g. "v1.36.1"
 	// MetalLBVersion is the MetalLB manifest version installed in each cluster.
 	MetalLBVersion string `yaml:"metalLBVersion"` // e.g. "v0.16.1"
 	// CustomDNSResolvers are extra DNS zones forwarded to custom upstream resolvers
@@ -117,7 +117,7 @@ const (
 	// (limatemplate.KindCLIVersion) is built and validated against. Keep the two
 	// in sync; overriding nodeVersion away from this is unsupported (see the
 	// warning emitted by kind.CreateCluster).
-	DefaultKindNodeVersion = "v1.35.0"
+	DefaultKindNodeVersion = "v1.36.1"
 	DefaultMetalLBVersion  = "v0.16.1"
 )
 

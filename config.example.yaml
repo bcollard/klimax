@@ -45,7 +45,7 @@ kind:
   # ⚠ Matched to the kind CLI bundled in the VM. Changing it to another kindest/node
   # tag is UNSUPPORTED and may cause cluster creation to fail or hang (kubeadm/containerd
   # errors) or behave unexpectedly. 'klimax cluster create' warns when this is overridden.
-  nodeVersion: "v1.35.0"
+  nodeVersion: "v1.36.1"
 
   # MetalLB manifest version installed in every cluster.
   metalLBVersion: "v0.16.1"

@@ -138,7 +138,7 @@ network:
                                      # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
 
 kind:
-  nodeVersion: "v1.35.0"             # kindest/node image tag (default)
+  nodeVersion: "v1.36.1"             # kindest/node image tag (default)
   metalLBVersion: "v0.16.1"          # MetalLB manifest version (default)
   customDnsResolvers:                # per-zone upstream resolvers; resolvers default to 8.8.8.8/8.8.4.4 if omitted
     # - domain: "runlocal.dev"       # example; empty by default in code
@@ -180,7 +180,7 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 3. Install: `jq`, `iptables`, `curl`, `net-tools`, `python3`
 4. Configure Docker socket permissions via `docker.socket.d/override.conf` (`SocketUser=lima` — the guest user is pinned to `lima` via `user.name` in the Lima YAML; by default Lima derives it from the macOS host username, which would break the `SocketUser=lima` assumption on hosts whose username is a valid Linux name)
 5. Install Docker via `get.docker.com`
-6. Install kind CLI `v0.31.0`
+6. Install kind CLI `v0.32.0`
 7. Install kubectl (latest stable)
 
 ### Docker socket forwarding

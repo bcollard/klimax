@@ -43,7 +43,7 @@ spec:
     - name: spoke-a
       dependsOn: [hub]      # created only after "hub" is ready
       # num: 7              # pin the cluster num (1-99); omit to auto-assign a free slot
-      # nodeVersion: v1.35.0  # ⚠ overriding is unsupported; see 'klimax cluster create' warning
+      # nodeVersion: v1.36.1  # ⚠ overriding is unsupported; see 'klimax cluster create' warning
       region: europe-west4
       zone: europe-west4-b
       registries:
