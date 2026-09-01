@@ -20,7 +20,11 @@ jobs:
 
       - uses: actions/setup-go@v7.0.0
         with:
-          go-version-file: go.mod
+          # Track the latest stable Go rather than go.mod's floor: stdlib CVEs are
+          # fixed by patch releases, and pinning the build toolchain to the module's
+          # minimum version means govulncheck flags every new stdlib CVE until the
+          # pin is bumped by hand. go.mod keeps declaring the *minimum* Go we support.
+          go-version: 'stable'
           cache: true
 
       - name: Build
