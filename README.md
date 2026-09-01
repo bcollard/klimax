@@ -4,6 +4,12 @@
 
 <p align="center">
   <a href="https://klimax.dev"><strong>🌐 klimax.dev</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://klimax.dev/docs/"><strong>📚 Documentation</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://klimax.dev/docs/getting-started.html"><strong>🚀 Getting started</strong></a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://klimax.dev/docs/cli-reference.html"><strong>📖 CLI reference</strong></a>
 </p>
 
 _Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._
@@ -14,11 +20,13 @@ Klimax is self-contained, clean, and can work alongside your current Docker setu
 
 ![klimax high-level architecture](docs/KLIMAX-HLD-architecture.png)
 
-For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-architecture.png).
+For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-architecture.png)
+and the [Architecture guide](https://klimax.dev/docs/architecture.html).
 
 ---
 
 ## Table of contents
+- [Documentation](#documentation)
 - [Demo](#demo)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
@@ -27,9 +35,35 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 - [Configuration reference](#configuration-reference)
 - [CLI reference](#cli-reference)
 - [Networking deep-dive](#networking-deep-dive)
-- [Running alongside Rancher Desktop, Colima, or kind-on-lima](#running-alongside-rancher-desktop-colima-or-kind-on-lima)
+- [Running alongside Orbstack, Rancher Desktop, or Colima](#running-alongside-orbstack-rancher-desktop-or-colima)
 - [Project layout](#project-layout)
 
+
+---
+
+## Documentation
+
+This README is the quick tour. The full documentation lives at
+**[klimax.dev/docs](https://klimax.dev/docs/)**:
+
+| Guide | What it covers |
+|---|---|
+| [Getting started](https://klimax.dev/docs/getting-started.html) | Install klimax, bring up the VM, create your first routable kind cluster |
+| [Managing clusters](https://klimax.dev/docs/managing-clusters.html) | Create, list, switch, label, verify, and delete individual clusters |
+| [Fleet management](https://klimax.dev/docs/fleet.html) | Declaratively create and tear down whole fleets from one manifest |
+| [Fleet resource reference](https://klimax.dev/docs/fleet-reference.html) | Every field of the `klimax.dev/v1alpha1` Fleet manifest, with defaults and validation rules |
+| [Configuration](https://klimax.dev/docs/configuration.html) | `~/.klimax/config.yaml` — VM size, bridge CIDR, kind versions, DNS, mirrors |
+| [CLI reference](https://klimax.dev/docs/cli-reference.html) | Every command and flag |
+| [Registry mirrors](https://klimax.dev/docs/registries.html) | Pull-through caches, dodging Docker Hub rate limits, adding your own mirror |
+| [Networking &amp; L3 routing](https://klimax.dev/docs/networking.html) | vzNAT, the host route, `ip_forward`, and the iptables SNAT exemptions |
+| [Helm with klimax](https://klimax.dev/docs/helm.html) | Charts with LoadBalancer services, reachable from your Mac via MetalLB |
+| [Architecture](https://klimax.dev/docs/architecture.html) | How the VM, Docker, kind, MetalLB, CoreDNS, and mirrors fit together |
+| [Upgrading](https://klimax.dev/docs/upgrading.html) | Upgrade without losing your image cache or config |
+| [Reset &amp; reinstall](https://klimax.dev/docs/reset.html) | Three levels, from rebuilding the VM to a full clean install |
+| [Klimax UI](https://klimax.dev/docs/klimax-ui.html) | The native SwiftUI companion app |
+| [Agent Skill](https://klimax.dev/docs/agent-skill.html) | Teach AI coding tools to drive klimax |
+| [klimax vs. other tools](https://klimax.dev/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack |
+| [Changelog](https://klimax.dev/docs/changelog.html) | Release history |
 
 ---
 
@@ -63,6 +97,8 @@ For lower-level design, see [docs/KLIMAX-LLD-architecture.png](docs/KLIMAX-LLD-a
 
 ## Installation
 
+> 📚 Full guide: [Getting started](https://klimax.dev/docs/getting-started.html)
+
 ### Homebrew (recommended)
 
 ```sh
@@ -72,6 +108,8 @@ brew install --cask klimax
 ```
 
 ### Upgrading
+
+> 📚 Full guide: [Upgrading klimax](https://klimax.dev/docs/upgrading.html)
 
 ```sh
 brew upgrade --cask klimax
@@ -115,6 +153,8 @@ klimax completion fish > ~/.config/fish/completions/klimax.fish
 ---
 
 ## Quick start
+
+> 📚 Walkthrough with explanations: [Getting started](https://klimax.dev/docs/getting-started.html)
 
 ```sh
 # 1. Bring up the VM + Docker + networking + registries
@@ -171,6 +211,8 @@ After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the 
 ---
 
 ## Configuration reference
+
+> 📚 Full reference: [Configuration](https://klimax.dev/docs/configuration.html)
 
 The default config path is `~/.klimax/config.yaml`. Use `klimax config edit` to open it in your `$EDITOR`, or copy `config.example.yaml` to get started.
 
@@ -243,6 +285,8 @@ registries:
 
 ## CLI reference
 
+> 📚 Every command and flag: [CLI reference](https://klimax.dev/docs/cli-reference.html)
+
 ```
 klimax [--config ~/.klimax/config.yaml] [--debug] [--lima-log-level <level>] <command>
 ```
@@ -303,6 +347,8 @@ headroom with `klimax shell df -h /`.
 
 ### Reclaiming space
 
+> 📚 See also: [Reset &amp; reinstall](https://klimax.dev/docs/reset.html) for deeper cleanups
+
 ```sh
 klimax prune --dry-run           # show what would go
 klimax prune --downloads         # also clear Lima's shared image download cache
@@ -352,6 +398,8 @@ klimax docker-context --unset      # docker context use default
 > If `DOCKER_HOST` is set it overrides the active Docker context — use one or the other. `klimax docker-context` warns when both are active.
 
 ### Clusters
+
+> 📚 Full guide: [Managing clusters](https://klimax.dev/docs/managing-clusters.html)
 
 ```sh
 # Create
@@ -404,6 +452,8 @@ Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm
 ```
 
 ### Fleets — `klimax fleet`
+
+> 📚 Full guide: [Fleet management](https://klimax.dev/docs/fleet.html) &middot; every manifest field: [Fleet resource reference](https://klimax.dev/docs/fleet-reference.html)
 
 Create and manage several clusters at once from a declarative **Fleet** manifest.
 The minimal manifest lists only names — everything else defaults:
@@ -461,6 +511,8 @@ optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 
 ### Registries
 
+> 📚 Full guide: [Registry mirrors](https://klimax.dev/docs/registries.html)
+
 ```sh
 klimax registry clean-cache   # remove all mirror cache dirs + containers; run 'klimax up' to restart
 ```
@@ -468,6 +520,8 @@ klimax registry clean-cache   # remove all mirror cache dirs + containers; run '
 Mirror cache data is stored at `~/.klimax/registry-cache/<mirror-name>/` by default (`cacheStorage: "host"`), virtiofs-mounted into the VM and bind-mounted into each registry container. Blobs survive `klimax down`/`up` cycles and even `klimax destroy`.
 
 ### AI coding tools (Agent Skill)
+
+> 📚 Full guide: [Agent Skill for AI coding tools](https://klimax.dev/docs/agent-skill.html)
 
 klimax ships an [Agent Skill](https://code.claude.com/docs/en/skills) that teaches AI coding tools how to drive klimax — spinning up ephemeral kind clusters for scripts, demos, and e2e tests. Install it once and every future agent session knows how to use klimax without you explaining it each time:
 
@@ -483,6 +537,8 @@ The skill is embedded in the binary, so no download is needed. Start a new agent
 ---
 
 ## Networking deep-dive
+
+> 📚 Full guide: [Networking &amp; L3 routing](https://klimax.dev/docs/networking.html)
 
 ```
 macOS host
@@ -534,6 +590,8 @@ All mirror containers are attached to the `kind` Docker network so cluster nodes
 
 ## Running alongside Orbstack, Rancher Desktop, or Colima
 
+> 📚 Feature-by-feature comparison: [klimax vs. other tools](https://klimax.dev/docs/comparison.html)
+
 klimax is designed to coexist with other Lima-based tools on the same Mac. Each Lima VM gets
 its own vzNAT interface (`bridge1xx`) and a distinct macOS-assigned IP, so there is no
 IP-level conflict between VMs.
@@ -570,6 +628,8 @@ a detailed comparison with Rancher Desktop, Colima, and kind-on-lima.
 ---
 
 ## Project layout
+
+> 📚 How the runtime pieces fit together: [Architecture](https://klimax.dev/docs/architecture.html)
 
 ```
 klimax/
