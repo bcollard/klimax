@@ -79,7 +79,7 @@ This README is the quick tour. The full documentation lives at
 
 - **macOS 13 Ventura or later** — Apple Virtualization.framework is required (`vmType: vz`)
 - **`sudo` access** — needed only when `klimax up` first adds the macOS route (re-runs skip it if already correct) and for `klimax destroy`; `klimax down` does not require sudo
-- **Go 1.25+** — only if building from source; not needed for the pre-built binary (see `go` in [go.mod](go.mod))
+- **Go 1.25.7+** — only if building from source; not needed for the pre-built binary (the exact floor is the `go` directive in [go.mod](go.mod), which `go mod tidy` derives from the dependency graph)
 - **kubectx** (optional) — for easier kubeconfig context switching, or use `klimax kubeconfig use <name>`
 
 > klimax is self-contained. On first `klimax up` it automatically downloads and caches the Lima guest agent binary. No separate Lima installation required.
