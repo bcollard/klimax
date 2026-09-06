@@ -30,6 +30,7 @@ live clusters regardless of the original manifest.`,
 	cmd.AddCommand(
 		newFleetListCmd(),
 		newFleetDescribeCmd(),
+		newFleetExportCmd(),
 		newFleetCreateCmd(),
 		newFleetAdoptCmd(),
 		newFleetDeleteCmd(),

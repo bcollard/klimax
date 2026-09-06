@@ -303,8 +303,8 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 | `klimax down` | Stop the VM — preserves all clusters and registry cache data |
 | `klimax down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
 | `klimax destroy` | Stop + delete VM, delete all clusters, remove host route |
-| `klimax status` | Show VM state, clusters, route, and iptables rule presence |
-| `klimax doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta) |
+| `klimax status` | Show VM state, clusters, route, and iptables rule presence (`-o text\|json\|yaml`) |
+| `klimax doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta); `--fix` applies what klimax can repair, `-o text\|json\|yaml` |
 | `klimax version` | Print the klimax version |
 | `klimax shell` | Open an interactive SSH session in the VM |
 | `klimax shell <cmd> [args...]` | Run a command in the VM and exit with its exit code |
@@ -474,6 +474,9 @@ spec:
 klimax fleet create -f fleet.yaml         # create the clusters (--dry-run to preview, --max-parallel N)
 klimax fleet list                         # show fleets and their member clusters
 klimax fleet describe dev-fleet           # members with num, ports, node version/readiness, labels
+klimax fleet export dev staging > f.yaml  # capture live clusters as a Fleet manifest
+klimax fleet export -l env=dev            # ...by label selector
+klimax fleet export                       # ...or pick them interactively
 klimax fleet label dev-fleet -l tier=gold # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes       # delete every cluster in the fleet
 klimax fleet delete -f fleet.yaml --yes   # ...or tear down exactly what the manifest lists

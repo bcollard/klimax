@@ -93,8 +93,9 @@ internal/cli/root.go                 cobra root command, persistent flags (--con
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
 internal/cli/down.go                 `klimax down` [--remove-route]
 internal/cli/destroy.go              `klimax destroy`
-internal/cli/status.go               `klimax status`
-internal/cli/doctor.go               `klimax doctor`
+internal/cli/status.go               `klimax status` — collectStatus() → statusReport, rendered as text/json/yaml
+internal/cli/doctor.go               `klimax doctor` — diagnose() → []doctorCheck, `--fix` applies the Fixable ones
+internal/cli/fleet_export.go         `klimax fleet export` — live clusters → Fleet manifest (args, -l selector, or picker)
 internal/cli/version.go              `klimax version`
 internal/cli/shell.go                `klimax shell` — interactive SSH session, or non-interactive command runner (args → remote command, exit code propagated)
 internal/cli/copy.go                 `klimax copy` — scp between host and VM (`vm:`/`<vmName>:` marks the guest side)
@@ -267,7 +268,11 @@ klimax down                            Stop VM (no sudo required)
 klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
 klimax status                          Show VM state, clusters, route, iptables
+  -o text|json|yaml                    Output format (json/yaml for tooling; `clusters.names` is always a list)
 klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state)
+  -o text|json|yaml                    Output format; each check has a stable `id`, `status`, `fixable`
+  --fix                                Apply the repairs klimax can perform: route, iptables, IP forwarding.
+                                       VM creation/start, Rosetta install and hostagent cleanup stay advisory.
 klimax version                         Print version
 klimax shell                           Open interactive SSH session in the VM
 klimax shell <cmd> [args...]           Run a command in the VM (stdin/stdout passed through, exit code propagated)
@@ -326,6 +331,12 @@ klimax fleet create -f <file>          Create clusters from a Fleet manifest (al
 klimax fleet adopt <fleet> <cluster>…  Adopt existing clusters into a fleet (sets their klimax.dev/fleet label)
 klimax fleet list [-o text|json|yaml]  List fleets (grouped by klimax.dev/fleet) and their member clusters
 klimax fleet describe <name>           Show a fleet's members with num, API port, kubeconfig, node count/version/readiness, labels ([-o text|json|yaml])
+klimax fleet export [cluster...]       Write a Fleet manifest for live clusters (reverse of `fleet create -f`)
+  -l, --selector <sel>                 Select by node label selector instead of names
+  --name <fleet>                       metadata.name (default: shared klimax.dev/fleet label, else "exported")
+  --nums                               Record each cluster's num, pinning API ports on re-apply (default true)
+                                       No names and no selector → interactive picker.
+                                       Not captured (not recoverable from live state): dependsOn, registries, addons.
 klimax fleet delete <name>             Delete all clusters in the named fleet (-y to skip prompt)
 klimax fleet delete -f <file>          Delete the clusters listed in a Fleet manifest
 klimax fleet label <name> -l key=value Apply node labels to every cluster in the fleet (key- to remove)
