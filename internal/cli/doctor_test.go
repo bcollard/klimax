@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestReportOK(t *testing.T) {
 	tests := []struct {
@@ -84,5 +88,79 @@ func TestCheckRosettaHostNotRequestedNeverFails(t *testing.T) {
 	// Whatever the host is, not asking for Rosetta must never produce a failure.
 	if got := checkRosettaHost(false); got.Status == checkFail {
 		t.Errorf("vm.rosetta=false should never fail, got %+v", got)
+	}
+}
+
+// processAlive must actually check existence. os.FindProcess — what this
+// replaced — succeeds unconditionally on Unix, so a test that passes with
+// FindProcess would prove nothing; the dead-pid case is the one that matters.
+func TestProcessAlive(t *testing.T) {
+	if !processAlive(os.Getpid()) {
+		t.Error("the test process itself should be reported alive")
+	}
+	if !processAlive(1) {
+		t.Error("pid 1 is alive but owned by root; EPERM must count as alive")
+	}
+	// Above the default pid_max on macOS and Linux, so it cannot be in use.
+	if processAlive(0x7FFFFFFE) {
+		t.Error("an impossible pid must not be reported alive")
+	}
+}
+
+func TestProcessExePathResolvesSelf(t *testing.T) {
+	got, err := processExePath(os.Getpid())
+	if err != nil {
+		t.Fatalf("could not resolve own exe path: %v", err)
+	}
+	if got == "" {
+		t.Fatal("got an empty exe path")
+	}
+	// The test binary's own path should match what the OS reports for us.
+	self, err := os.Executable()
+	if err != nil {
+		t.Skipf("os.Executable unavailable: %v", err)
+	}
+	if !sameFile(got, self) {
+		t.Errorf("processExePath(%d) = %q, os.Executable = %q", os.Getpid(), got, self)
+	}
+}
+
+func TestProcessExePathDeadPid(t *testing.T) {
+	if _, err := processExePath(0x7FFFFFFE); err == nil {
+		t.Error("expected an error for a pid that does not exist")
+	}
+}
+
+// Homebrew installs klimax as a symlink into the Caskroom, and ps and
+// os.Executable disagree about which side of it they report — so a plain string
+// compare produces a false "different binary" warning.
+func TestSameFileFollowsSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "klimax-real")
+	if err := os.WriteFile(real, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "klimax-link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+
+	if !sameFile(real, link) {
+		t.Error("a symlink and its target must compare equal")
+	}
+	if !sameFile(real, real) {
+		t.Error("identical paths must compare equal")
+	}
+
+	other := filepath.Join(dir, "klimax-other")
+	if err := os.WriteFile(other, []byte("binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if sameFile(real, other) {
+		t.Error("distinct files must not compare equal")
+	}
+	// Unresolvable paths must not silently compare equal.
+	if sameFile(filepath.Join(dir, "gone-a"), filepath.Join(dir, "gone-b")) {
+		t.Error("two nonexistent paths must not compare equal")
 	}
 }

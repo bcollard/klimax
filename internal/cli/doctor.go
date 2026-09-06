@@ -3,12 +3,15 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
@@ -409,12 +412,15 @@ func checkRosettaHost(wanted bool) doctorCheck {
 
 // checkHostagent detects a running hostagent whose on-disk binary has been
 // replaced since it was launched — a common cause of "zsh: killed" when running
-// subsequent klimax commands. Returns nil when no hostagent is running.
+// subsequent klimax commands, because macOS amfid refuses the new binary.
+// Returns nil when no pidfile is present.
 //
 // Deliberately not Fixable: the remedy kills a live process and removes its
 // socket, which is too destructive to run without the operator asking.
 func checkHostagent(instanceName string) *doctorCheck {
 	pidFile := filepath.Join(KlimaxHome(), instanceName, "ha.pid")
+	sockFile := filepath.Join(KlimaxHome(), instanceName, "ha.sock")
+
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
 		// No pid file — hostagent not running (or already cleaned up).
@@ -422,33 +428,82 @@ func checkHostagent(instanceName string) *doctorCheck {
 	}
 	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
 	if err != nil || pid <= 0 {
-		return nil
+		return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
+			Message: fmt.Sprintf("hostagent pidfile %s is unreadable", pidFile),
+			Fix:     "rm -f " + pidFile}
 	}
 
-	cleanup := fmt.Sprintf("kill %d && rm -f %s %s", pid,
-		filepath.Join(KlimaxHome(), instanceName, "ha.pid"),
-		filepath.Join(KlimaxHome(), instanceName, "ha.sock"))
+	cleanup := fmt.Sprintf("kill %d && rm -f %s %s", pid, pidFile, sockFile)
 
-	// Check the binary path the process is running from.
-	exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if !processAlive(pid) {
+		return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
+			Message: fmt.Sprintf("stale hostagent pidfile: pid %d is not running", pid),
+			Detail:  "Left behind by a hostagent that exited, or by a PID from a previous boot.",
+			Fix:     fmt.Sprintf("rm -f %s %s", pidFile, sockFile)}
+	}
+
+	exe, err := processExePath(pid)
 	if err != nil {
-		// /proc is Linux; on macOS use the pid file as a proxy.
-		if _, ferr := os.FindProcess(pid); ferr == nil {
-			return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
-				Message: fmt.Sprintf("hostagent is running (pid %d)", pid),
-				Detail:  "If klimax commands fail with 'killed', the binary may have been replaced while hostagent was running.",
-				Fix:     cleanup}
-		}
-		return nil
+		return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
+			Message: fmt.Sprintf("hostagent is running (pid %d)", pid),
+			Detail:  fmt.Sprintf("Could not determine its binary (%v). If klimax commands fail with 'killed', the binary may have been replaced while hostagent was running.", err),
+			Fix:     cleanup}
 	}
 
 	self, _ := os.Executable()
-	if exe != self {
-		return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
-			Message: fmt.Sprintf("hostagent (pid %d) is running a different binary than the current klimax", pid),
-			Detail:  fmt.Sprintf("hostagent binary: %s\n  current binary:   %s", exe, self),
-			Fix:     "klimax down  (or: " + cleanup + ")"}
+	if sameFile(exe, self) {
+		return &doctorCheck{ID: checkIDHostagent, Status: checkOK,
+			Message: fmt.Sprintf("hostagent is running (pid %d)", pid)}
 	}
-	return &doctorCheck{ID: checkIDHostagent, Status: checkOK,
-		Message: fmt.Sprintf("hostagent is running (pid %d)", pid)}
+	return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
+		Message: fmt.Sprintf("hostagent (pid %d) is running a different binary than the current klimax", pid),
+		Detail:  fmt.Sprintf("hostagent binary: %s\n  current binary:   %s", exe, self),
+		Fix:     "klimax down  (or: " + cleanup + ")"}
+}
+
+// processAlive reports whether pid is a live process.
+//
+// os.FindProcess is NOT usable here: on every Unix it succeeds unconditionally,
+// without checking that the process exists. Signal 0 performs the existence
+// check without delivering anything; EPERM means the process is alive but owned
+// by another user, which still counts as running.
+func processAlive(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}
+
+// processExePath returns the on-disk path of the binary backing pid.
+//
+// /proc is Linux-only, so on macOS — the only platform klimax supports — it is
+// never available, and the binary-replacement check this function exists for
+// would silently never run. Fall back to ps, which reports the executable path
+// on darwin.
+func processExePath(pid int) (string, error) {
+	if exe, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid)); err == nil {
+		return exe, nil
+	}
+	out, err := exec.Command("ps", "-p", strconv.Itoa(pid), "-o", "comm=").Output()
+	if err != nil {
+		return "", fmt.Errorf("ps: %w", err)
+	}
+	path := strings.TrimSpace(string(out))
+	if path == "" {
+		return "", errors.New("ps returned no command for the pid")
+	}
+	return path, nil
+}
+
+// sameFile compares two executable paths, resolving symlinks first: Homebrew
+// installs klimax as /opt/homebrew/bin/klimax -> ../Caskroom/klimax/<ver>/klimax,
+// and ps and os.Executable do not agree on which side of that link they report.
+func sameFile(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra, err1 := filepath.EvalSymlinks(a)
+	rb, err2 := filepath.EvalSymlinks(b)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return ra == rb
 }
