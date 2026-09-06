@@ -1,13 +1,13 @@
 module github.com/bcollard/klimax
 
-go 1.25.7
+go 1.26.0
 
 require (
 	github.com/docker/go-units v0.5.0
 	github.com/lima-vm/lima/v2 v2.2.0
 	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/cobra v1.10.2
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/term v0.45.0
 	gopkg.in/yaml.v3 v3.0.1
 )
