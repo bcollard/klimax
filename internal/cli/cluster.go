@@ -232,7 +232,7 @@ func runClusterDeleteInteractive(ctx context.Context) error {
 		items[i] = pickerItem{name: n, apiPort: 7000 + numByName[n]}
 	}
 
-	selected, err := runPicker(items)
+	selected, err := runPicker("Delete kind clusters", "delete", items)
 	if err != nil || len(selected) == 0 {
 		return err
 	}
@@ -259,8 +259,9 @@ type pickerItem struct {
 }
 
 // runPicker renders a keyboard-driven multi-select list in raw terminal mode.
+// title is the header line; verb completes "press Enter to <verb>".
 // Returns the names of selected items, or nil if cancelled.
-func runPicker(items []pickerItem) ([]string, error) {
+func runPicker(title, verb string, items []pickerItem) ([]string, error) {
 	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
 	if err != nil {
 		return nil, fmt.Errorf("enabling raw terminal mode: %w", err)
@@ -278,7 +279,7 @@ func runPicker(items []pickerItem) ([]string, error) {
 		}
 		firstDraw = false
 
-		fmt.Print("\033[2KDelete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm · q quit)\r\n")
+		fmt.Printf("\033[2K%s (↑/↓ navigate · Space toggle · a=all · Enter confirm · q quit)\r\n", title)
 		fmt.Print("\033[2K\r\n")
 		for i, item := range items {
 			check := "[ ]"
@@ -305,7 +306,7 @@ func runPicker(items []pickerItem) ([]string, error) {
 		if n == 0 {
 			fmt.Print("\033[2K  nothing selected\r\n")
 		} else {
-			fmt.Printf("\033[2K  %d cluster(s) selected — press Enter to delete\r\n", n)
+			fmt.Printf("\033[2K  %d cluster(s) selected — press Enter to %s\r\n", n, verb)
 		}
 	}
 

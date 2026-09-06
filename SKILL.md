@@ -82,6 +82,8 @@ klimax fleet create -f fleet.yaml             # create the missing clusters (exi
 klimax fleet create -f fleet.yaml --dry-run   # preview the plan (nums, order, options); creates nothing
 klimax fleet list                             # fleets and their member clusters
 klimax fleet describe dev-fleet               # members with num, ports, node version/readiness, labels
+klimax fleet export dev staging > fleet.yaml  # capture live clusters as a Fleet manifest
+klimax fleet export                           # ...or pick them interactively
 klimax fleet label dev-fleet -l tier=gold     # label every cluster in the fleet (key- to remove)
 klimax fleet delete dev-fleet --yes           # delete every cluster in the fleet; ALWAYS pass --yes in scripts (else it prompts and hangs a non-interactive agent)
 klimax fleet delete -f fleet.yaml --yes       # ...or delete exactly what the manifest lists
@@ -159,7 +161,10 @@ Public images pull transparently through the built-in pull-through mirrors (dock
 
 ```bash
 klimax doctor              # Diagnose route, iptables, VPN conflicts, hostagent collisions, etc.
+klimax doctor --fix        # Apply what klimax can repair (route, iptables, IP forwarding).
+klimax doctor -o json      # Machine-readable checks: stable id, status, fixable.
 klimax status              # VM state, clusters, route, iptables snapshot.
+klimax status -o json      # Same, machine-readable — prefer this when scripting.
 klimax shell <cmd>         # Run a diagnostic command in the VM, e.g. klimax shell iptables -t nat -L POSTROUTING -n
 klimax sudoers --check     # Are the passwordless host-route rules in effect?
 ```
