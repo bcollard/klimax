@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/bcollard/klimax/internal/fleet"
@@ -190,5 +191,41 @@ func TestAssembleFleetRoundTripsThroughParse(t *testing.T) {
 	}
 	if parsed.Metadata.Name != "mesh" {
 		t.Errorf("round-trip lost fleet name: got %q", parsed.Metadata.Name)
+	}
+}
+
+// An exported manifest is something a human then edits, so it must not be
+// littered with the zero values of every optional field. The original version
+// emitted `strategy: ""`, `maxParallel: 0`, `registries: null` and a fully
+// empty `defaults:` block, which reads as configuration that was deliberately
+// set. Round-tripping through Parse does not catch this — the noise is valid
+// YAML — so assert on the emitted text.
+func TestExportedManifestOmitsEmptyFields(t *testing.T) {
+	infos := map[string]*kind.ClusterInfo{
+		"smoke": info("v1.36.1", map[string]string{
+			"topology.kubernetes.io/region": "europe-west1",
+		}),
+	}
+	out, err := yaml.Marshal(assembleFleet([]string{"smoke"}, map[string]int{"smoke": 1}, infos, "", true))
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(out)
+
+	for _, unwanted := range []string{
+		"strategy:", "maxParallel:", "defaults:",
+		"registries:", "addons:", "dependsOn:",
+		`""`, "null", "{}", "[]",
+	} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("exported manifest should not contain %q:\n%s", unwanted, got)
+		}
+	}
+
+	// The fields that *are* set must still be there.
+	for _, wanted := range []string{"name: smoke", "num: 1", "nodeVersion: v1.36.1", "region: europe-west1"} {
+		if !strings.Contains(got, wanted) {
+			t.Errorf("exported manifest missing %q:\n%s", wanted, got)
+		}
 	}
 }

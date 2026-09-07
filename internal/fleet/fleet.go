@@ -59,37 +59,37 @@ type Metadata struct {
 
 type Spec struct {
 	// MaxParallel caps concurrent cluster creations. 0 or 1 means fully sequential.
-	MaxParallel int `yaml:"maxParallel"`
+	MaxParallel int `yaml:"maxParallel,omitempty"`
 	// Strategy is FailFast (default) or ContinueOnError.
-	Strategy string `yaml:"strategy"`
+	Strategy string `yaml:"strategy,omitempty"`
 	// Defaults are applied to every cluster that does not set the field itself.
-	Defaults Defaults `yaml:"defaults"`
+	Defaults Defaults `yaml:"defaults,omitempty"`
 	// Clusters is the fleet. Each entry may be a bare name string or an object.
 	Clusters []ClusterEntry `yaml:"clusters"`
 }
 
 // Defaults holds field values inherited by every cluster entry.
 type Defaults struct {
-	NodeVersion string            `yaml:"nodeVersion"`
-	Region      string            `yaml:"region"`
-	Zone        string            `yaml:"zone"`
-	Registries  *RegistrySelect   `yaml:"registries"`
-	Addons      *Addons           `yaml:"addons"`
-	Labels      map[string]string `yaml:"labels"`
+	NodeVersion string            `yaml:"nodeVersion,omitempty"`
+	Region      string            `yaml:"region,omitempty"`
+	Zone        string            `yaml:"zone,omitempty"`
+	Registries  *RegistrySelect   `yaml:"registries,omitempty"`
+	Addons      *Addons           `yaml:"addons,omitempty"`
+	Labels      map[string]string `yaml:"labels,omitempty"`
 }
 
 // ClusterEntry is one cluster in the set. It unmarshals from either a bare
 // string (just the name) or a mapping with options.
 type ClusterEntry struct {
 	Name        string            `yaml:"name"`
-	DependsOn   []string          `yaml:"dependsOn"`
-	Num         int               `yaml:"num"`
-	NodeVersion string            `yaml:"nodeVersion"`
-	Region      string            `yaml:"region"`
-	Zone        string            `yaml:"zone"`
-	Registries  *RegistrySelect   `yaml:"registries"`
-	Addons      *Addons           `yaml:"addons"`
-	Labels      map[string]string `yaml:"labels"`
+	DependsOn   []string          `yaml:"dependsOn,omitempty"`
+	Num         int               `yaml:"num,omitempty"`
+	NodeVersion string            `yaml:"nodeVersion,omitempty"`
+	Region      string            `yaml:"region,omitempty"`
+	Zone        string            `yaml:"zone,omitempty"`
+	Registries  *RegistrySelect   `yaml:"registries,omitempty"`
+	Addons      *Addons           `yaml:"addons,omitempty"`
+	Labels      map[string]string `yaml:"labels,omitempty"`
 }
 
 // UnmarshalYAML accepts either a scalar (the cluster name) or a full mapping.
