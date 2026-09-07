@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
@@ -452,6 +453,16 @@ func checkHostagent(instanceName string) *doctorCheck {
 
 	self, _ := os.Executable()
 	if sameFile(exe, self) {
+		// Same path — but the file at that path may have been replaced since the
+		// hostagent started, in which case it is running code that no longer
+		// exists on disk. Path comparison cannot see this; timestamps can.
+		if replaced, mtime, start := binaryReplacedSinceLaunch(exe, pid); replaced {
+			return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
+				Message: fmt.Sprintf("hostagent (pid %d) is running a binary that has since been replaced", pid),
+				Detail: fmt.Sprintf("%s was modified at %s, after the hostagent started at %s.\n  It is still running the old code; klimax execs may fail with 'killed'.",
+					exe, mtime.Format(time.RFC3339), start.Format(time.RFC3339)),
+				Fix: "klimax down && klimax up  (or: " + cleanup + ")"}
+		}
 		return &doctorCheck{ID: checkIDHostagent, Status: checkOK,
 			Message: fmt.Sprintf("hostagent is running (pid %d)", pid)}
 	}
@@ -506,4 +517,32 @@ func sameFile(a, b string) bool {
 		return false
 	}
 	return ra == rb
+}
+
+// binaryReplacedSinceLaunch reports whether the file at path was modified after
+// the process started — i.e. the running process is executing code that path no
+// longer contains.
+//
+// This is the case plain path comparison cannot see. `make dev-install` does
+// `sudo cp` over /usr/local/bin/klimax, overwriting the file underneath the
+// running hostagent, which is what makes macOS amfid kill subsequent execs. Both
+// sides of a path comparison still read the same string, so only the timestamps
+// give it away.
+//
+// A Homebrew upgrade is different — it writes a new file into the Caskroom and
+// re-points the symlink, so the running process keeps its own inode and amfid is
+// not upset. That still trips this check, and rightly so: the hostagent is
+// running an older klimax and the VM wants rebuilding either way. Hence a
+// warning, never a failure — and mtime is a heuristic, so a rebuild producing
+// identical content would also trip it.
+func binaryReplacedSinceLaunch(path string, pid int) (replaced bool, mtime, start time.Time) {
+	start, err := processStartTime(pid)
+	if err != nil {
+		return false, time.Time{}, time.Time{} // cannot tell — stay quiet
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false, time.Time{}, time.Time{}
+	}
+	return fi.ModTime().After(start), fi.ModTime(), start
 }
