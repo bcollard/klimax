@@ -19,6 +19,11 @@ vm:
   # Empty/unset = disabled (image store lives on the VM root disk).
   # WARNING: only takes effect on new VMs (klimax destroy && klimax up).
   # imageDisk: "10GiB"
+  #
+  # NOTE: this size applies only when the disk is first created. Raising it later
+  # does not grow an existing disk — resize that explicitly, which keeps the
+  # cached images instead of re-pulling them:
+  #   klimax down && klimax disk resize-image 30GiB && klimax up
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

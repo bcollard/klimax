@@ -112,17 +112,24 @@ real=$(readlink -f "${DEV}")
 
 mkdir -p "${TARGET}"
 
-# Already mounted from the right device? Nothing to do. Mounted from anything
-# else (e.g. the root filesystem) — unmount before taking over.
+# Already mounted from the right device? Just make sure the filesystem fills
+# the block device (a no-op unless 'klimax disk resize-image' grew it since
+# last boot — resize2fs is safe to run online and safe to run when there's
+# nothing to grow). Mounted from anything else (e.g. the root filesystem) —
+# unmount before taking over.
 if mountpoint -q "${TARGET}"; then
   have=$(findmnt -no SOURCE "${TARGET}")
   case "${have}" in
-    "${real}"*) exit 0 ;;
+    "${real}"*)
+      resize2fs "${real}"
+      exit 0
+      ;;
   esac
   umount "${TARGET}"
 fi
 
 mount "${DEV}" "${TARGET}"
+resize2fs "${real}"
 `, diskName)
 
 	unit := `[Unit]

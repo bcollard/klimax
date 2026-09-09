@@ -16,6 +16,7 @@ import (
 	"github.com/bcollard/klimax/internal/registry"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
+	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -57,9 +58,11 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	// The image-store disk must exist before the instance starts: Lima fails to
 	// start an instance whose additionalDisks reference a missing disk.
 	if cfg.VM.ImageDisk != "" {
-		if err := vm.EnsureImageDisk(ctx, config.ImageDiskName(cfg.VM.Name), cfg.VM.ImageDisk); err != nil {
+		diskName := config.ImageDiskName(cfg.VM.Name)
+		if err := vm.EnsureImageDisk(ctx, diskName, cfg.VM.ImageDisk); err != nil {
 			return fmt.Errorf("image disk: %w", err)
 		}
+		warnImageDiskDrift(diskName, cfg.VM.ImageDisk)
 	}
 
 	inst, err := mgr.EnsureRunning(ctx, cfg, showVMLogs)
@@ -193,4 +196,31 @@ func loadAndValidate() (*config.Config, error) {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 	return cfg, nil
+}
+
+// warnImageDiskDrift reports a mismatch between the configured vm.imageDisk size
+// and the disk that actually exists.
+//
+// EnsureImageDisk only *creates* the disk; it never resizes one that is already
+// there. So raising vm.imageDisk in the config has no effect on an existing VM,
+// silently — which is exactly how a disk ends up full while the config claims it
+// is much larger. Say so, and point at the command that fixes it.
+func warnImageDiskDrift(diskName, want string) {
+	wantBytes, err := units.RAMInBytes(want)
+	if err != nil {
+		return // config validation already reports a bad size
+	}
+	liveBytes, exists, err := vm.ImageDiskSize(diskName)
+	if err != nil || !exists {
+		return // nothing to compare against
+	}
+	switch {
+	case liveBytes < wantBytes:
+		slog.Warn("Image disk is smaller than vm.imageDisk in the config — the size in the config only applies when the disk is first created",
+			"live", units.BytesSize(float64(liveBytes)), "configured", want,
+			"fix", "klimax down && klimax disk resize-image "+want+" && klimax up")
+	case liveBytes > wantBytes:
+		slog.Warn("Image disk is larger than vm.imageDisk in the config — the config value is stale and would apply only to a freshly created disk",
+			"live", units.BytesSize(float64(liveBytes)), "configured", want)
+	}
 }

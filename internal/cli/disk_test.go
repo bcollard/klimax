@@ -125,3 +125,60 @@ func TestRewriteLimaDiskIgnoresNestedDiskKeys(t *testing.T) {
 		t.Errorf("top-level disk not updated:\n%s", s)
 	}
 }
+
+func TestRewriteImageDisk(t *testing.T) {
+	const in = `vm:
+  name: "klimax"
+  disk: "60GiB"
+  imageDisk: "10GiB"   # persistent container image store
+`
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(p, []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rewriteImageDisk(p, "30GiB"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(p)
+	want := `vm:
+  name: "klimax"
+  disk: "60GiB"
+  imageDisk: "30GiB"   # persistent container image store
+`
+	if string(got) != want {
+		t.Errorf("got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// vm.disk and vm.imageDisk sit next to each other; each rewriter must leave the
+// other alone.
+func TestRewriteImageDiskLeavesVMDiskAlone(t *testing.T) {
+	const in = "vm:\n  disk: \"60GiB\"\n  imageDisk: \"10GiB\"\n"
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(p, []byte(in), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rewriteImageDisk(p, "30GiB"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(p)
+	if !strings.Contains(string(got), `disk: "60GiB"`) {
+		t.Errorf("vm.disk was clobbered:\n%s", got)
+	}
+	if !strings.Contains(string(got), `imageDisk: "30GiB"`) {
+		t.Errorf("imageDisk not updated:\n%s", got)
+	}
+}
+
+func TestRewriteImageDiskMissingLine(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(p, []byte("vm:\n  disk: \"60GiB\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := rewriteImageDisk(p, "30GiB"); err == nil {
+		t.Error("expected an error when there is no imageDisk line to rewrite")
+	}
+}
