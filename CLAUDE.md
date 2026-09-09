@@ -101,6 +101,7 @@ internal/cli/shell.go                `klimax shell` — interactive SSH session,
 internal/cli/copy.go                 `klimax copy` — scp between host and VM (`vm:`/`<vmName>:` marks the guest side)
 internal/cli/sudoers.go              `klimax sudoers` — emits/checks the NOPASSWD rules for the two /sbin/route commands
 internal/cli/disk.go                 `klimax disk resize` — grows vm.disk + the Lima instance config (applied on next start)
+                                     `klimax disk resize-image` — grows the vm.imageDisk data disk in place (VM must be stopped)
 internal/cli/prune.go                `klimax prune` — removes superseded guest agents, orphaned registry caches, (opt-in) Lima download cache
 internal/cli/autostart.go            `klimax autostart` — launchd agent (dev.klimax.autostart) running `klimax up` at login
 internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
@@ -282,6 +283,11 @@ klimax copy <src>... <dst>             Copy files host↔VM; prefix the VM side 
 klimax config edit                     Open config in $VISUAL / $EDITOR / nano / vi
 
 klimax disk resize <size>              Grow the VM disk (e.g. 80GiB); rewrites vm.disk + instance lima.yaml, applied on next start
+klimax disk resize-image <size>        Grow the persistent image-cache disk (vm.imageDisk), preserving the cached images.
+                                       VM must be stopped: the backing file cannot be resized while attached.
+                                       Lima's own boot script grows the partition + ext4 on the next start.
+                                       ⚠ vm.imageDisk in the config applies only at disk *creation* — EnsureImageDisk
+                                       never resizes an existing disk, so `up` warns when the two drift.
 klimax prune                           Remove reclaimable caches (superseded guest agents, orphaned registry-cache dirs)
   --dry-run                            Report without removing
   --downloads                          Also clear Lima's shared image download cache (~/Library/Caches/lima/download)

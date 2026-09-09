@@ -155,6 +155,7 @@ Public images pull transparently through the built-in pull-through mirrors (dock
 - To run anything inside the VM (kind, ctr, iptables, docker), use `klimax shell <cmd> [args...]` — it is non-interactive, passes stdin/stdout through, and exits with the remote command's exit code. Bare `klimax shell` opens an interactive session and **will hang a non-interactive agent**. Put `--` before the command if its flags could be mistaken for klimax's: `klimax shell -- bash -c '...'`.
 - Move files with `klimax copy ./file vm:/tmp/file` (and back with `klimax copy vm:/tmp/file ./file`); `-r` for directories.
 - Disk filling up (kind node images are ~2.7GB each): `klimax shell df -h /` to check, `klimax prune --dry-run` to find reclaimable caches, `klimax disk resize 80GiB` + `klimax down && klimax up` to grow it.
+- Image store full (`/var/lib/containerd`, the `vm.imageDisk` data disk — this is where OCI layers actually live, not the root disk): `klimax shell df -h /var/lib/containerd`, then `klimax down && klimax disk resize-image 30GiB && klimax up`. Editing `vm.imageDisk` in the config alone does nothing to a disk that already exists.
 - If `klimax up` prompts for a sudo password (it needs root only for the macOS host route), install the rules once with `klimax sudoers | sudo tee /etc/sudoers.d/klimax >/dev/null && sudo chmod 0440 /etc/sudoers.d/klimax`. Required for `klimax autostart`, since launchd cannot answer a prompt.
 
 ## Troubleshooting

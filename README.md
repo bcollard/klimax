@@ -311,6 +311,7 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 | `klimax copy <src>... <dst>` | Copy files between host and VM (`vm:` marks the VM side; `-r` for directories) |
 | `klimax config edit` | Open the config file in `$VISUAL` / `$EDITOR` |
 | `klimax disk resize <size>` | Grow the VM disk (e.g. `80GiB`) — applied on the next VM start |
+| `klimax disk resize-image <size>` | Grow the persistent image-cache disk (`vm.imageDisk`) in place, keeping the cached images |
 | `klimax prune` | Remove reclaimable cached files (`--dry-run`, `--downloads`, `-y`) |
 | `klimax sudoers` | Print a sudoers snippet so `klimax up` never prompts for the host route (`--check`) |
 | `klimax autostart install\|uninstall\|status` | Manage a launchd agent that starts the VM at login |
@@ -339,6 +340,13 @@ klimax copy -r ./manifests vm:/tmp/manifests    # directories
 
 ```sh
 klimax disk resize 80GiB      # updates vm.disk and the Lima instance config
+
+# Grow the persistent image-cache disk (vm.imageDisk). Raising imageDisk in the
+# config only affects a disk that does not exist yet — an existing one must be
+# resized explicitly, which keeps the cached images rather than re-pulling them:
+klimax down
+klimax disk resize-image 30GiB
+klimax up
 klimax down && klimax up      # Lima expands the image; the guest FS grows on boot
 ```
 

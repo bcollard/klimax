@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/docker/go-units"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
@@ -20,6 +21,7 @@ func newDiskCmd() *cobra.Command {
 		Short: "Manage the klimax VM disk",
 	}
 	cmd.AddCommand(newDiskResizeCmd())
+	cmd.AddCommand(newDiskResizeImageCmd())
 	return cmd
 }
 
@@ -95,6 +97,82 @@ func runDiskResize(ctx context.Context, size string) error {
 		fmt.Printf("\nStart the VM to apply the new size:\n  klimax up\n")
 	}
 	return nil
+}
+
+func newDiskResizeImageCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "resize-image <size>",
+		Short: "Grow the persistent image-cache disk (e.g. 30GiB)",
+		Long: `Grows the klimax VM's persistent image-cache disk (imageDisk in the config,
+mounted over /var/lib/containerd in the guest).
+
+Unlike 'klimax disk resize' (the VM's root disk), this disk survives
+'klimax destroy' by design — it holds the container image store so images
+don't need re-pulling after a VM recreate. Resizing it in place preserves
+that cache, instead of deleting and recreating the disk at a new size.
+
+The VM must be stopped first (klimax down) — the backing disk file cannot be
+resized while attached to a running VM. The guest filesystem is grown
+automatically on the next boot, so apply with:
+
+  klimax down
+  klimax disk resize-image <size>
+  klimax up
+
+Shrinking is not supported.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDiskResizeImage(cmd.Context(), args[0])
+		},
+	}
+}
+
+func runDiskResizeImage(ctx context.Context, size string) error {
+	cfg, err := loadAndValidate()
+	if err != nil {
+		return err
+	}
+	if cfg.VM.ImageDisk == "" {
+		return fmt.Errorf("imageDisk is not set in %s — nothing to resize", configFile)
+	}
+
+	diskName := config.ImageDiskName(cfg.VM.Name)
+	if err := vm.ResizeImageDisk(ctx, diskName, size); err != nil {
+		return err
+	}
+
+	// Keep the config in sync so a future disk recreation (or another machine
+	// applying this config) uses the same size. It may already say `size` — the
+	// config is what someone edits first when they want a bigger disk, only to
+	// find it had no effect on the existing one.
+	if cfg.VM.ImageDisk == size {
+		fmt.Printf("imageDisk in %s already reads %s — left unchanged.\n", configFile, size)
+	} else {
+		if err := rewriteImageDisk(configFile, size); err != nil {
+			return fmt.Errorf("updating imageDisk in %s: %w", configFile, err)
+		}
+		fmt.Printf("Updated imageDisk in %s: %s → %s\n", configFile, cfg.VM.ImageDisk, size)
+	}
+	fmt.Printf("\nStart the VM to mount the grown disk:\n  klimax up\n")
+	return nil
+}
+
+// imageDiskRE matches the klimax config's `vm.imageDisk` line (2-space
+// nested, value optionally quoted, optional trailing comment).
+var imageDiskRE = regexp.MustCompile(`(?m)^(\s+imageDisk:\s*)("?[^"\s#]+"?)(\s*(#.*)?)$`)
+
+// rewriteImageDisk rewrites imageDisk in the klimax config file in place,
+// preserving indentation and any trailing inline comment.
+func rewriteImageDisk(path, size string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	out, ok := replaceFirst(imageDiskRE, data, []byte(`${1}"`+size+`"${3}`))
+	if !ok {
+		return fmt.Errorf("no imageDisk line found — set it manually to %q", size)
+	}
+	return os.WriteFile(path, out, 0o600)
 }
 
 // vmDiskRE matches the klimax config's `vm.disk` line (2-space nested, value
