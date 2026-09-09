@@ -149,10 +149,20 @@ type RegistryMirror struct {
 
 // defaults applied when fields are zero-valued.
 const (
-	DefaultVMName   = "klimax"
-	DefaultCPUs     = 4
-	DefaultMemory   = "10GiB"
-	DefaultDisk     = "40GiB"
+	DefaultVMName = "klimax"
+	DefaultCPUs   = 8
+	DefaultMemory = "20GiB"
+	// DefaultDisk is the VM root disk. It is deliberately smaller than it used
+	// to be: with DefaultImageDisk set, container images live on their own disk
+	// (mounted over /var/lib/containerd), so the root disk only carries the OS,
+	// Docker metadata and volumes. Both are sparse — the apparent size is not
+	// what they consume on the Mac.
+	DefaultDisk = "20GiB"
+	// DefaultImageDisk enables the persistent container image store by default.
+	// It survives `klimax destroy`, so recreating the VM no longer re-pulls
+	// every image — and a locally built image, which no registry mirror can
+	// restore, is no longer lost.
+	DefaultImageDisk = "30GiB"
 	DefaultKindCIDR = "172.30.0.0/16"
 	// DefaultKindNodeVersion is the kindest/node image the bundled kind CLI
 	// (limatemplate.KindCLIVersion) is built and validated against. Keep the two
@@ -198,6 +208,9 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.VM.Disk == "" {
 		cfg.VM.Disk = DefaultDisk
+	}
+	if cfg.VM.ImageDisk == "" {
+		cfg.VM.ImageDisk = DefaultImageDisk
 	}
 	if cfg.Network.KindBridgeCIDR == "" {
 		cfg.Network.KindBridgeCIDR = DefaultKindCIDR

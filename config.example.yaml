@@ -5,9 +5,11 @@
 # ── VM ──────────────────────────────────────────────────────────────────────
 vm:
   name: "klimax"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
-  cpus: 4
-  memory: "10GiB"
-  disk: "40GiB"       # grow later without recreating the VM: klimax disk resize 80GiB
+  cpus: 8             # default; klimax warns on `up` if this exceeds the Mac's cores
+  memory: "20GiB"     # default; klimax warns on `up` if this exceeds the Mac's RAM
+  disk: "20GiB"       # default. Only the OS, Docker metadata and volumes live here —
+                      # images go on imageDisk below. Sparse: it costs what it holds.
+                      # Grow later without recreating the VM: klimax disk resize 40GiB
   # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
   # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
   # rosetta: false
@@ -16,9 +18,10 @@ vm:
   # /var/lib/containerd in the guest, so kindest/node, registry:2 and any
   # locally built images survive `klimax destroy`. A locally built image is the
   # only kind no registry mirror can restore.
-  # Empty/unset = disabled (image store lives on the VM root disk).
+  # Defaults to "30GiB". Set to "" to disable, putting the image store back on
+  # the VM root disk (in which case raise vm.disk to match).
   # WARNING: only takes effect on new VMs (klimax destroy && klimax up).
-  # imageDisk: "10GiB"
+  imageDisk: "30GiB"
   #
   # NOTE: this size applies only when the disk is first created. Raising it later
   # does not grow an existing disk — resize that explicitly, which keeps the

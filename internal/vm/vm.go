@@ -227,7 +227,7 @@ func startHeartbeat(ctx context.Context) func() {
 				elapsed := time.Since(started).Round(time.Second)
 				if first {
 					slog.Info("Still starting the VM — a first boot downloads the image and runs cloud-init",
-						"elapsed", elapsed, "detail", "klimax up --show-vm-logs --debug")
+						"elapsed", elapsed, "detail", "klimax up --show-vm-logs")
 					first = false
 					continue
 				}

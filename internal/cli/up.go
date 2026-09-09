@@ -17,6 +17,7 @@ import (
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/docker/go-units"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -27,10 +28,13 @@ func newUpCmd() *cobra.Command {
 		Use:   "up",
 		Short: "Create/start the VM, provision Docker, create kind clusters, set up routing",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if showVMLogs {
+				raiseLimaLogLevelForVMLogs(cmd)
+			}
 			return runUp(cmd.Context(), showVMLogs)
 		},
 	}
-	cmd.Flags().BoolVar(&showVMLogs, "show-vm-logs", false, "Stream Lima host-agent logs and cloud-init progress to stderr during startup")
+	cmd.Flags().BoolVar(&showVMLogs, "show-vm-logs", false, "Stream Lima host-agent logs and cloud-init boot progress to stderr during startup (implies --lima-log-level info)")
 	return cmd
 }
 
@@ -43,6 +47,8 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return err
 	}
 	slog.Info("Using config", "path", configFile)
+
+	warnOverCommittedResources(cfg)
 
 	// 1. Ensure VM is running.
 	mgr := vm.New(cfg.VM.Name, KlimaxHome())
@@ -224,5 +230,39 @@ func warnImageDiskDrift(diskName, want string) {
 	case liveBytes > wantBytes:
 		slog.Warn("Image disk is larger than vm.imageDisk in the config — the config value is stale and would apply only to a freshly created disk",
 			"live", units.BytesSize(float64(liveBytes)), "configured", want)
+	}
+}
+
+// warnOverCommittedResources reports where the config asks the Mac for more than
+// it has. Advisory only: the VM may still work (disks are sparse, and macOS will
+// swap rather than refuse), and refusing to start over a heuristic would be worse
+// than a slow VM. Each warning carries the specific key to change.
+func warnOverCommittedResources(cfg *config.Config) {
+	res := vm.ReadHostResources(KlimaxHome())
+	warnings := vm.CheckResources(res, cfg.VM.CPUs, cfg.VM.Memory, cfg.VM.Disk, cfg.VM.ImageDisk)
+	if len(warnings) == 0 {
+		return
+	}
+	for _, w := range warnings {
+		slog.Warn(w.Message, "hint", w.Hint)
+	}
+	fmt.Printf("  Adjust with: klimax config edit   (reference: %s)\n\n", config.ConfigDocsURL)
+}
+
+// raiseLimaLogLevelForVMLogs makes --show-vm-logs do what its name says.
+//
+// The flag enables Lima's cloud-init progress reporting, but Lima emits those
+// lines through logrus at Info, and klimax deliberately quiets logrus to Error
+// (see resolveLimaLogLevel). So on its own the flag turned the reporting on and
+// then swallowed it — you also had to pass --debug, which nobody would guess.
+//
+// An explicit --lima-log-level still wins: someone who named a level meant it,
+// including a quieter one.
+func raiseLimaLogLevelForVMLogs(cmd *cobra.Command) {
+	if f := cmd.Root().PersistentFlags().Lookup("lima-log-level"); f != nil && f.Changed {
+		return
+	}
+	if logrus.GetLevel() < logrus.InfoLevel {
+		logrus.SetLevel(logrus.InfoLevel)
 	}
 }
