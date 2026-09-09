@@ -234,6 +234,16 @@ func applyDefaults(cfg *Config) {
 
 // WriteDefaultConfig writes a default config file to path with sensible defaults.
 // The directory must already exist or be created by the caller.
+// Documentation URLs surfaced in CLI output. The example config is not present
+// on a Homebrew install — only in the repo — so point at the hosted copy rather
+// than a filename the user cannot open.
+const (
+	// ExampleConfigURL is the annotated reference config.
+	ExampleConfigURL = "https://github.com/bcollard/klimax/blob/main/config.example.yaml"
+	// ConfigDocsURL is the configuration reference on the docs site.
+	ConfigDocsURL = "https://klimax.dev/docs/configuration.html"
+)
+
 func WriteDefaultConfig(path string) error {
 	cfg := &Config{}
 	applyDefaults(cfg)
@@ -254,7 +264,7 @@ func WriteDefaultConfig(path string) error {
 		"  # behaviour. 'klimax cluster create' logs a warning when this is overridden.\n"
 	body := strings.Replace(buf.String(), "  nodeVersion:", note+"  nodeVersion:", 1)
 
-	header := "# klimax configuration — edit to customise, then re-run 'klimax up'\n# See https://github.com/bcollard/klimax for full documentation.\n\n"
+	header := "# klimax configuration — edit to customise, then re-run 'klimax up'\n# Reference: " + ConfigDocsURL + "\n\n"
 	return os.WriteFile(path, []byte(header+body), 0o600)
 }
 

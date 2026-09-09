@@ -121,8 +121,10 @@ func reviewConfigBeforeCreate(cfg *config.Config) error {
 	// 1. New options available but not set (config likely predates this version).
 	if raw, err := os.ReadFile(configFile); err == nil {
 		if missing, err := config.MissingKeys(raw); err == nil && len(missing) > 0 {
-			fmt.Printf("Note: %s does not set these options available in this klimax version (defaults apply):\n  %s\nSee config.example.yaml for what's new.\n\n",
-				configFile, strings.Join(missing, ", "))
+			fmt.Printf("Note: %s does not set these options available in this klimax version (defaults apply):\n  %s\n"+
+				"  What each option does: %s\n"+
+				"  Annotated example:     %s\n\n",
+				configFile, strings.Join(missing, ", "), config.ConfigDocsURL, config.ExampleConfigURL)
 		}
 	}
 
