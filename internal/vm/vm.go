@@ -66,6 +66,17 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config, showLog
 		return nil, fmt.Errorf("guest agent: %w", err)
 	}
 
+	// StartWithPaths blocks until the guest is reachable — image download plus
+	// first boot plus cloud-init, which is minutes with no output of its own.
+	// Lima does report progress, but through logrus, which klimax quiets to
+	// error by default (resolveLimaLogLevel), so the default path shows nothing
+	// at all between here and "VM is running" and looks hung. Skip the heartbeat
+	// when showLogs is on: that path is already noisy.
+	if !showLogs {
+		stopHeartbeat := startHeartbeat(ctx)
+		defer stopHeartbeat()
+	}
+
 	if err := instance.StartWithPaths(ctx, inst, false, showLogs, "", guestAgent); err != nil {
 		return nil, fmt.Errorf("starting instance %q: %w", m.name, err)
 	}
@@ -186,4 +197,48 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 	_ = os.WriteFile(limaVerFile, []byte(limaModuleVersion()), 0o444)
 
 	return inst, nil
+}
+
+
+// heartbeatInterval is how often a long VM start reports that it is still going.
+// A variable so tests can shorten it.
+var heartbeatInterval = 15 * time.Second
+
+// startHeartbeat logs periodic progress while the VM starts, so a multi-minute
+// wait does not look like a hang. The returned function stops it and is safe to
+// call more than once.
+//
+// The first tick carries the flags that produce real detail — repeating that on
+// every tick would be noise, and by then the user has already read it.
+func startHeartbeat(ctx context.Context) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	started := time.Now()
+	go func() {
+		defer close(done)
+		t := time.NewTicker(heartbeatInterval)
+		defer t.Stop()
+		first := true
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				elapsed := time.Since(started).Round(time.Second)
+				if first {
+					slog.Info("Still starting the VM — a first boot downloads the image and runs cloud-init",
+						"elapsed", elapsed, "detail", "klimax up --show-vm-logs --debug")
+					first = false
+					continue
+				}
+				slog.Info("Still starting the VM", "elapsed", elapsed)
+			}
+		}
+	}()
+	// Wait for the goroutine to finish, so no heartbeat can land after the
+	// caller has moved on and logged something else.
+	return func() {
+		cancel()
+		<-done
+	}
 }
