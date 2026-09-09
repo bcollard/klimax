@@ -87,7 +87,9 @@ internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima
 internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
-internal/vm/disk.go                  EnsureImageDisk — creates the persistent Lima data disk for the container image store
+internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
+internal/vm/hostres.go               ReadHostResources + CheckResources — warns on `up` when the config over-commits the Mac
+internal/vm/hostmem_darwin.go        hostMemoryBytes via sysctl hw.memsize (build-tagged; internal/vm still builds for linux)
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
@@ -126,13 +128,16 @@ Cluster lifecycle is **not** in the config file. The config drives infrastructur
 ```yaml
 vm:
   name: "klimax"         # Lima instance name; socket at ~/.<name>.docker.sock
-  cpus: 4
-  memory: "10GiB"
-  disk: "40GiB"
+  cpus: 8                # default
+  memory: "20GiB"        # default
+  disk: "20GiB"          # default. Root disk only carries the OS, Docker metadata
+                         # and volumes — images live on imageDisk. Both are sparse.
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
-  imageDisk: ""          # e.g. "10GiB": persistent Lima data disk mounted over
+  imageDisk: "30GiB"     # default: persistent Lima data disk mounted over
                          # /var/lib/containerd so the image store survives `destroy`.
-                         # Empty = disabled. ⚠ VM-level: new VMs only.
+                         # "" = disabled (image store on the root disk).
+                         # ⚠ VM-level: new VMs only. Resize an existing one with
+                         # `klimax disk resize-image`.
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet
@@ -378,6 +383,7 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 ## Safety and idempotency
 
 - `klimax up` is safe to run repeatedly — every step checks before acting.
+- **Host over-commit check** (`warnOverCommittedResources` in `up.go` → `vm.CheckResources`): warns when `vm.cpus` exceeds the Mac's cores, when `vm.memory` exceeds its RAM (or passes 75% of it — a softer, differently-worded warning), or when `vm.disk + vm.imageDisk` exceeds free space. Advisory only: it never blocks, because the disks are sparse and macOS swaps rather than refusing. Host facts that cannot be read are skipped rather than guessed.
 - iptables rules are inserted only if not already present (`-C` check before `-I`).
 - Registry containers are started only if not already running.
 - `kind create cluster` only runs for clusters that don't exist.

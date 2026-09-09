@@ -220,11 +220,11 @@ The default config path is `~/.klimax/config.yaml`. Use `klimax config edit` to 
 # ── VM ──────────────────────────────────────────────────────────────────────
 vm:
   name: "klimax"         # Lima instance name; Docker socket at ~/.<name>.docker.sock
-  cpus: 4
-  memory: "10GiB"
-  disk: "40GiB"       # grow later with: klimax disk resize 80GiB
-  # rosetta: false       # enable Rosetta 2 for amd64 containers (ARM64 only)
-  # imageDisk: "10GiB"   # persistent image store disk; survives `klimax destroy`
+  cpus: 8             # default
+  memory: "20GiB"     # default
+  disk: "20GiB"       # default; grow later with: klimax disk resize 40GiB
+  imageDisk: "30GiB"  # default; persistent image store, survives `klimax destroy`
+  # rosetta: false      # enable Rosetta 2 for amd64 containers (ARM64 only)
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:

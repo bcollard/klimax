@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
 )
 
 func TestRewriteNodeVersion(t *testing.T) {
@@ -53,4 +56,55 @@ func TestRewriteNodeVersionMissingLine(t *testing.T) {
 	if err := rewriteNodeVersion(p, "v1.35.0"); err == nil {
 		t.Error("expected an error when no nodeVersion line is present")
 	}
+}
+
+// --show-vm-logs must raise Lima's log level itself: it turns on Lima's
+// cloud-init reporting, which klimax would otherwise swallow by quieting logrus
+// to Error.
+func TestRaiseLimaLogLevelForVMLogs(t *testing.T) {
+	newCmd := func(explicit string) *cobra.Command {
+		root := &cobra.Command{Use: "klimax"}
+		root.PersistentFlags().String("lima-log-level", "", "")
+		child := &cobra.Command{Use: "up"}
+		root.AddCommand(child)
+		if explicit != "" {
+			if err := root.PersistentFlags().Set("lima-log-level", explicit); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return child
+	}
+
+	t.Run("raises from the quiet default", func(t *testing.T) {
+		prev := logrus.GetLevel()
+		t.Cleanup(func() { logrus.SetLevel(prev) })
+		logrus.SetLevel(logrus.ErrorLevel)
+
+		raiseLimaLogLevelForVMLogs(newCmd(""))
+		if got := logrus.GetLevel(); got != logrus.InfoLevel {
+			t.Errorf("got %v, want info", got)
+		}
+	})
+
+	t.Run("an explicit --lima-log-level wins", func(t *testing.T) {
+		prev := logrus.GetLevel()
+		t.Cleanup(func() { logrus.SetLevel(prev) })
+		logrus.SetLevel(logrus.WarnLevel)
+
+		raiseLimaLogLevelForVMLogs(newCmd("warn"))
+		if got := logrus.GetLevel(); got != logrus.WarnLevel {
+			t.Errorf("explicit level should be left alone, got %v", got)
+		}
+	})
+
+	t.Run("never lowers an already-verbose level", func(t *testing.T) {
+		prev := logrus.GetLevel()
+		t.Cleanup(func() { logrus.SetLevel(prev) })
+		logrus.SetLevel(logrus.DebugLevel)
+
+		raiseLimaLogLevelForVMLogs(newCmd(""))
+		if got := logrus.GetLevel(); got != logrus.DebugLevel {
+			t.Errorf("debug should survive, got %v", got)
+		}
+	})
 }
