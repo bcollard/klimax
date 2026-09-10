@@ -1,6 +1,6 @@
 //go:build !darwin
 
-package vm
+package hostres
 
 import "errors"
 

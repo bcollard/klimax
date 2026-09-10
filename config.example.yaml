@@ -5,8 +5,14 @@
 # ── VM ──────────────────────────────────────────────────────────────────────
 vm:
   name: "klimax"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
-  cpus: 8             # default; klimax warns on `up` if this exceeds the Mac's cores
-  memory: "20GiB"     # default; klimax warns on `up` if this exceeds the Mac's RAM
+  # cpus and memory default to a share of THIS Mac, so the same config suits a
+  # 16GiB Air and a 64GiB Studio. Set them to pin a value instead; klimax warns
+  # on `up` if what you pin exceeds the machine.
+  #   cpus:   3/4 of the cores      (10-core M1 Pro -> 8)
+  #   memory: half the RAM, or all but 12GiB, whichever is larger, capped at 75%
+  #           (16GiB -> 8GiB, 32GiB -> 20GiB, 64GiB -> 48GiB)
+  # cpus: 8
+  # memory: "20GiB"
   disk: "20GiB"       # default. Only the OS, Docker metadata and volumes live here —
                       # images go on imageDisk below. Sparse: it costs what it holds.
                       # Grow later without recreating the VM: klimax disk resize 40GiB

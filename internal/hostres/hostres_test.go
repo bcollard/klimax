@@ -1,4 +1,4 @@
-package vm
+package hostres
 
 import (
 	"strings"
@@ -103,12 +103,102 @@ func TestCheckResourcesIgnoresUnsetImageDisk(t *testing.T) {
 	}
 }
 
-func TestReadHostResourcesReturnsSomething(t *testing.T) {
-	res := ReadHostResources(t.TempDir())
+func TestReadForReturnsSomething(t *testing.T) {
+	res := ReadFor(t.TempDir())
 	if res.CPUs < 1 {
 		t.Errorf("expected at least one CPU, got %d", res.CPUs)
 	}
 	if res.FreeDisk == 0 {
 		t.Error("expected non-zero free disk for a temp dir")
+	}
+}
+
+const gib = uint64(1) << 30
+
+func TestDefaultCPUs(t *testing.T) {
+	tests := []struct{ cores, want int }{
+		{0, 0},   // unknown — caller falls back
+		{1, 1},   // floor is 2, but never more than the host has
+		{2, 2},
+		{4, 3},
+		{8, 6},
+		{10, 8}, // M1 Pro 10-core
+		{12, 9},
+		{16, 12},
+	}
+	for _, tt := range tests {
+		if got := DefaultCPUs(tt.cores); got != tt.want {
+			t.Errorf("DefaultCPUs(%d) = %d, want %d", tt.cores, got, tt.want)
+		}
+	}
+}
+
+func TestDefaultMemoryBytes(t *testing.T) {
+	tests := []struct {
+		ramGiB  uint64
+		wantGiB uint64
+		why     string
+	}{
+		{0, 0, "unknown — caller falls back"},
+		{8, 4, "small Mac: the half floor protects macOS"},
+		{16, 8, "half"},
+		{24, 12, "half — reserve gives the same here"},
+		{32, 20, "above the reserve, so more than half"},
+		{36, 24, "all but the 12GiB reserve"},
+		{64, 48, "capped at 75% rather than 52"},
+		{128, 96, "capped at 75%"},
+	}
+	for _, tt := range tests {
+		got := DefaultMemoryBytes(tt.ramGiB * gib)
+		if got != tt.wantGiB*gib {
+			t.Errorf("DefaultMemoryBytes(%dGiB) = %v, want %dGiB (%s)",
+				tt.ramGiB, RoundedGiB(got), tt.wantGiB, tt.why)
+		}
+	}
+}
+
+// The VM must never be handed more than the machine has, at any size.
+func TestDefaultsNeverExceedTheHost(t *testing.T) {
+	for cores := 1; cores <= 64; cores++ {
+		if got := DefaultCPUs(cores); got > cores {
+			t.Fatalf("DefaultCPUs(%d) = %d, more than the host has", cores, got)
+		}
+	}
+	for ram := uint64(1); ram <= 256; ram++ {
+		got := DefaultMemoryBytes(ram * gib)
+		if got > ram*gib {
+			t.Fatalf("DefaultMemoryBytes(%dGiB) = %v, more than the host has", ram, RoundedGiB(got))
+		}
+		if float64(got) > float64(ram*gib)*0.75+1 {
+			t.Fatalf("DefaultMemoryBytes(%dGiB) = %v, above the 75%% cap", ram, RoundedGiB(got))
+		}
+	}
+}
+
+// The computed default must not trip the over-commit warning it ships beside.
+func TestComputedDefaultsDoNotWarn(t *testing.T) {
+	for _, ram := range []uint64{8, 16, 24, 32, 64} {
+		for _, cores := range []int{4, 8, 10, 16} {
+			res := HostResources{CPUs: cores, MemoryBytes: ram * gib, FreeDisk: 500 * gib}
+			mem := RoundedGiB(DefaultMemoryBytes(ram * gib))
+			if w := CheckResources(res, DefaultCPUs(cores), mem, "20GiB", "30GiB"); len(w) != 0 {
+				t.Errorf("%d cores / %dGiB: computed defaults warn:\n%s", cores, ram, msgs(w))
+			}
+		}
+	}
+}
+
+func TestRoundedGiB(t *testing.T) {
+	for _, tt := range []struct {
+		in   uint64
+		want string
+	}{
+		{20 * gib, "20GiB"},
+		{20*gib + 512*1024*1024, "20GiB"}, // truncates rather than showing 20.5
+		{0, "1GiB"},                       // never zero
+	} {
+		if got := RoundedGiB(tt.in); got != tt.want {
+			t.Errorf("RoundedGiB(%d) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }

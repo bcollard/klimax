@@ -12,6 +12,7 @@ import (
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/docker"
 	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/klimax/internal/hostres"
 	"github.com/bcollard/klimax/internal/limatemplate"
 	"github.com/bcollard/klimax/internal/registry"
 	"github.com/bcollard/klimax/internal/routing"
@@ -238,8 +239,8 @@ func warnImageDiskDrift(diskName, want string) {
 // swap rather than refuse), and refusing to start over a heuristic would be worse
 // than a slow VM. Each warning carries the specific key to change.
 func warnOverCommittedResources(cfg *config.Config) {
-	res := vm.ReadHostResources(KlimaxHome())
-	warnings := vm.CheckResources(res, cfg.VM.CPUs, cfg.VM.Memory, cfg.VM.Disk, cfg.VM.ImageDisk)
+	res := hostres.ReadFor(KlimaxHome())
+	warnings := hostres.CheckResources(res, cfg.VM.CPUs, cfg.VM.Memory, cfg.VM.Disk, cfg.VM.ImageDisk)
 	if len(warnings) == 0 {
 		return
 	}

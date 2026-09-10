@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bcollard/klimax/internal/hostres"
 	"gopkg.in/yaml.v3"
 )
 
@@ -150,8 +151,11 @@ type RegistryMirror struct {
 // defaults applied when fields are zero-valued.
 const (
 	DefaultVMName = "klimax"
-	DefaultCPUs   = 8
-	DefaultMemory = "20GiB"
+	// FallbackCPUs and FallbackMemory apply only when the host's CPU count or
+	// RAM cannot be read. Normally both are scaled to the machine — see
+	// hostres.DefaultCPUs / DefaultMemoryBytes.
+	FallbackCPUs   = 4
+	FallbackMemory = "8GiB"
 	// DefaultDisk is the VM root disk. It is deliberately smaller than it used
 	// to be: with DefaultImageDisk set, container images live on their own disk
 	// (mounted over /var/lib/containerd), so the root disk only carries the OS,
@@ -163,7 +167,7 @@ const (
 	// every image — and a locally built image, which no registry mirror can
 	// restore, is no longer lost.
 	DefaultImageDisk = "30GiB"
-	DefaultKindCIDR = "172.30.0.0/16"
+	DefaultKindCIDR  = "172.30.0.0/16"
 	// DefaultKindNodeVersion is the kindest/node image the bundled kind CLI
 	// (limatemplate.KindCLIVersion) is built and validated against. Keep the two
 	// in sync; overriding nodeVersion away from this is unsupported (see the
@@ -200,11 +204,22 @@ func applyDefaults(cfg *Config) {
 	if cfg.VM.Name == "" {
 		cfg.VM.Name = DefaultVMName
 	}
+	// CPUs and memory scale to the machine: a fixed default either wastes a big
+	// Mac or over-commits a small one. Explicit config values always win.
+	host := hostres.Read()
 	if cfg.VM.CPUs == 0 {
-		cfg.VM.CPUs = DefaultCPUs
+		if n := hostres.DefaultCPUs(host.CPUs); n > 0 {
+			cfg.VM.CPUs = n
+		} else {
+			cfg.VM.CPUs = FallbackCPUs
+		}
 	}
 	if cfg.VM.Memory == "" {
-		cfg.VM.Memory = DefaultMemory
+		if b := hostres.DefaultMemoryBytes(host.MemoryBytes); b > 0 {
+			cfg.VM.Memory = hostres.RoundedGiB(b)
+		} else {
+			cfg.VM.Memory = FallbackMemory
+		}
 	}
 	if cfg.VM.Disk == "" {
 		cfg.VM.Disk = DefaultDisk
