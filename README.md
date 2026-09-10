@@ -220,8 +220,10 @@ The default config path is `~/.klimax/config.yaml`. Use `klimax config edit` to 
 # ── VM ──────────────────────────────────────────────────────────────────────
 vm:
   name: "klimax"         # Lima instance name; Docker socket at ~/.<name>.docker.sock
-  cpus: 8             # default
-  memory: "20GiB"     # default
+  # cpus and memory default to a share of this Mac — 3/4 of the cores, and
+  # half the RAM (more on large machines). Set them to pin a value.
+  # cpus: 8           # 10-core M1 Pro -> 8
+  # memory: "20GiB"   # 16GiB -> 8GiB, 32GiB -> 20GiB, 64GiB -> 48GiB
   disk: "20GiB"       # default; grow later with: klimax disk resize 40GiB
   imageDisk: "30GiB"  # default; persistent image store, survives `klimax destroy`
   # rosetta: false      # enable Rosetta 2 for amd64 containers (ARM64 only)

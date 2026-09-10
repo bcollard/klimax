@@ -1,4 +1,4 @@
-package vm
+package hostres
 
 import (
 	"fmt"
@@ -16,17 +16,25 @@ type HostResources struct {
 	FreeDisk    uint64 // free bytes on the filesystem holding the klimax home
 }
 
-// ReadHostResources gathers the host's CPU count, physical memory and free disk.
+// Read gathers the host's CPU count, physical memory and free disk.
 // Memory or disk may be zero when unavailable; callers skip the corresponding
 // check rather than guessing.
-func ReadHostResources(klimaxHome string) HostResources {
+func Read() HostResources {
+	return ReadFor("")
+}
+
+// ReadFor is Read, additionally reporting free space on the filesystem holding
+// klimaxHome. Pass "" to skip the disk lookup.
+func ReadFor(klimaxHome string) HostResources {
 	res := HostResources{CPUs: runtime.NumCPU()}
 	if mem, err := hostMemoryBytes(); err == nil {
 		res.MemoryBytes = mem
 	}
-	var st unix.Statfs_t
-	if err := unix.Statfs(klimaxHome, &st); err == nil {
-		res.FreeDisk = uint64(st.Bavail) * uint64(st.Bsize)
+	if klimaxHome != "" {
+		var st unix.Statfs_t
+		if err := unix.Statfs(klimaxHome, &st); err == nil {
+			res.FreeDisk = uint64(st.Bavail) * uint64(st.Bsize)
+		}
 	}
 	return res
 }
@@ -96,4 +104,78 @@ func CheckResources(res HostResources, cpus int, memory, disk, imageDisk string)
 	}
 
 	return out
+}
+
+// Sizing rules for the defaults klimax picks when a config leaves a value unset.
+const (
+	// cpuShare is the fraction of the Mac's cores given to the VM.
+	cpuShare = 0.75
+	// minCPUs keeps a usable VM on very small machines.
+	minCPUs = 2
+
+	// memShare is the floor: never less than this fraction of RAM.
+	memShare = 0.5
+	// hostReserve is what macOS wants for itself. It is roughly fixed rather
+	// than proportional — a 64 GiB Mac does not need 32 GiB for the desktop —
+	// so on larger machines this lets the VM take more than half.
+	hostReserve = 12 << 30 // 12 GiB
+	// memCap stops the VM starving the host no matter how much RAM there is.
+	memCap = 0.75
+)
+
+// DefaultCPUs returns the core count to give the VM: three quarters of the
+// host's, rounded to nearest, never below minCPUs.
+//
+// Returns 0 when cores is unknown, so the caller can fall back to a constant.
+func DefaultCPUs(cores int) int {
+	if cores < 1 {
+		return 0
+	}
+	n := int(float64(cores)*cpuShare + 0.5)
+	if n < minCPUs {
+		n = minCPUs
+	}
+	if n > cores {
+		n = cores
+	}
+	return n
+}
+
+// DefaultMemoryBytes returns the RAM to give the VM: half the host's, or
+// everything above a fixed reserve for macOS, whichever is larger — capped so
+// the host always keeps a quarter.
+//
+// Half alone under-provisions a big Mac (32 GiB would yield 16); the reserve
+// alone starves a small one (16 GiB would yield 4). Taking the larger gives 8
+// of 16 and 20 of 32, which is the shape wanted.
+//
+// Returns 0 when total is unknown, so the caller can fall back to a constant.
+func DefaultMemoryBytes(total uint64) uint64 {
+	if total == 0 {
+		return 0
+	}
+	half := uint64(float64(total) * memShare)
+	var aboveReserve uint64
+	if total > hostReserve {
+		aboveReserve = total - hostReserve
+	}
+	want := half
+	if aboveReserve > want {
+		want = aboveReserve
+	}
+	if cap := uint64(float64(total) * memCap); want > cap {
+		want = cap
+	}
+	return want
+}
+
+// RoundedGiB renders bytes as a whole-GiB size string ("20GiB"), which is what
+// a config file should contain — nobody wants `memory: "19.6GiB"`.
+func RoundedGiB(b uint64) string {
+	const gib = 1 << 30
+	n := b / gib
+	if n < 1 {
+		n = 1
+	}
+	return fmt.Sprintf("%dGiB", n)
 }

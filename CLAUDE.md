@@ -88,8 +88,10 @@ internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
 internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
-internal/vm/hostres.go               ReadHostResources + CheckResources — warns on `up` when the config over-commits the Mac
-internal/vm/hostmem_darwin.go        hostMemoryBytes via sysctl hw.memsize (build-tagged; internal/vm still builds for linux)
+internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), DefaultCPUs + DefaultMemoryBytes (host-scaled
+                                     defaults), CheckResources (over-commit warnings). Its own package because
+                                     internal/vm imports internal/config, so config cannot import vm.
+internal/hostres/hostmem_darwin.go   hostMemoryBytes via sysctl hw.memsize (build-tagged; the package still builds for linux)
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
@@ -128,8 +130,9 @@ Cluster lifecycle is **not** in the config file. The config drives infrastructur
 ```yaml
 vm:
   name: "klimax"         # Lima instance name; socket at ~/.<name>.docker.sock
-  cpus: 8                # default
-  memory: "20GiB"        # default
+  cpus: 8                # default: 3/4 of the host's cores, min 2 (10-core -> 8)
+  memory: "20GiB"        # default: max(RAM/2, RAM-12GiB), capped at 75% of RAM
+                         # (16GiB -> 8GiB, 32GiB -> 20GiB, 64GiB -> 48GiB)
   disk: "20GiB"          # default. Root disk only carries the OS, Docker metadata
                          # and volumes — images live on imageDisk. Both are sparse.
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
