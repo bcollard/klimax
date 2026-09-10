@@ -226,6 +226,8 @@ vm:
   # memory: "16GiB"   # 16GiB -> 8GiB, 32GiB -> 16GiB, 64GiB -> 32GiB
   disk: "20GiB"       # default; grow later with: klimax disk resize 40GiB
   imageDisk: "30GiB"  # default; persistent image store, survives `klimax destroy`
+  # caCerts:            # extra CAs — TLS-intercepting proxy, private registry
+  #   files: ["~/corp-root-ca.pem"]
   # rosetta: false      # enable Rosetta 2 for amd64 containers (ARM64 only)
 
   # Host directories shared into the guest over virtiofs. Empty by default.

@@ -24,9 +24,9 @@ const (
 
 // EnsureRegistries idempotently starts all configured pull-through mirrors in
 // the guest VM, connecting them to the kind network.
-func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryConfig, proxyEnv map[string]string) error {
+func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryConfig, proxyEnv map[string]string, trustHostCA bool) error {
 	for _, m := range cfg.Mirrors {
-		if err := ensureMirror(ctx, g, m, cfg.CacheStorage, proxyEnv); err != nil {
+		if err := ensureMirror(ctx, g, m, cfg.CacheStorage, proxyEnv, trustHostCA); err != nil {
 			return fmt.Errorf("mirror %q: %w", m.Name, err)
 		}
 	}
@@ -34,7 +34,7 @@ func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryC
 }
 
 // ensureMirror starts a pull-through cache container for the given mirror config.
-func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror, cacheStorage string, proxyEnv map[string]string) error {
+func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror, cacheStorage string, proxyEnv map[string]string, trustHostCA bool) error {
 	slog.Info("Ensuring registry mirror", "name", m.Name, "port", m.Port, "remote", m.RemoteURL)
 	running, err := isContainerRunning(ctx, g, m.Name)
 	if err != nil {
@@ -45,7 +45,7 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror,
 		// proxy added or changed in the config would never reach it. Recreate
 		// only when it actually differs — the cache lives in a volume, so a
 		// recreate costs nothing but the container.
-		stale, err := mirrorProxyIsStale(ctx, g, m.Name, proxyEnv)
+		stale, err := mirrorNeedsRecreate(ctx, g, m.Name, proxyEnv, trustHostCA)
 		if err != nil {
 			return err
 		}
@@ -53,7 +53,7 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror,
 			slog.Info("Registry mirror already running", "name", m.Name)
 			return connectToKindNetwork(ctx, g, m.Name)
 		}
-		slog.Info("Recreating registry mirror to apply changed proxy settings", "name", m.Name)
+		slog.Info("Recreating registry mirror to apply changed proxy or trust settings", "name", m.Name)
 	}
 	// Remove a stopped container if present.
 	if _, err := g.Run(ctx, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", m.Name)); err != nil {
@@ -84,10 +84,10 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror,
 			" -v %s:/etc/docker/registry/config.yml"+
 			" -v %s:/var/lib/registry"+
 			" -p %d:%d"+
-			"%s"+
+			"%s%s"+
 			" --name %s"+
 			" %s:%s",
-		configPath, cacheDir, m.Port, m.Port, dockerEnvArgs(proxyEnv), m.Name, registryImage, registryTag,
+		configPath, cacheDir, m.Port, m.Port, dockerEnvArgs(proxyEnv), caMountArg(trustHostCA), m.Name, registryImage, registryTag,
 	)
 	if _, err := g.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("starting mirror %q: %w", m.Name, err)
@@ -234,12 +234,46 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// hostCABundle is the guest trust store, which update-ca-certificates rewrites
+// to include klimax's extra anchors. Debian and Alpine both read this path, so
+// mounting it into the mirror covers the registry image whatever it is based on.
+const hostCABundle = "/etc/ssl/certs/ca-certificates.crt"
+
+// caMountArg mounts the guest trust store into the mirror, read-only, so a
+// pull-through cache can verify an intercepting proxy's certificate.
+func caMountArg(trustHostCA bool) string {
+	if !trustHostCA {
+		return ""
+	}
+	return fmt.Sprintf(" -v %s:%s:ro", hostCABundle, hostCABundle)
+}
+
+// mirrorNeedsRecreate reports whether a running mirror's proxy environment or
+// CA mount differs from what the config now asks for.
+//
+// Only what klimax manages is compared: the container carries plenty of other
+// environment (PATH, the registry image's own defaults) that must not trigger a
+// recreate.
+func mirrorNeedsRecreate(ctx context.Context, g *guest.Client, name string, want map[string]string, trustHostCA bool) (bool, error) {
+	mounted, err := g.Run(ctx, fmt.Sprintf(
+		"docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' %s 2>/dev/null || true", name))
+	if err != nil {
+		return false, err
+	}
+	hasCA := false
+	for _, line := range strings.Fields(mounted) {
+		if line == hostCABundle {
+			hasCA = true
+		}
+	}
+	if hasCA != trustHostCA {
+		return true, nil
+	}
+	return mirrorProxyIsStale(ctx, g, name, want)
+}
+
 // mirrorProxyIsStale reports whether a running mirror's proxy environment
 // differs from what the config now asks for.
-//
-// Only the proxy variables are compared: the container carries plenty of other
-// environment (PATH and the registry image's own defaults) that has nothing to
-// do with klimax and must not trigger a recreate.
 func mirrorProxyIsStale(ctx context.Context, g *guest.Client, name string, want map[string]string) (bool, error) {
 	out, err := g.Run(ctx, fmt.Sprintf(
 		"docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' %s 2>/dev/null || true", name))

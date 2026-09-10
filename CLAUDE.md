@@ -464,6 +464,56 @@ drop-in.
 
 ---
 
+## CA certificates (`vm.caCerts`)
+
+For a proxy that terminates TLS, or a private registry with a self-signed chain.
+Without them every pull fails with `x509: certificate signed by unknown
+authority` even when `network.proxy` is correct — the proxy is reachable, its
+certificate simply is not trusted.
+
+**Three separate trust stores** have to be reached, which is the whole
+complication:
+
+| Consumer | How it gets the CA |
+|---|---|
+| The VM (dockerd) | Lima `caCerts` → cloud-init `ca_certs` at first boot; `cli.reconcileCACerts` on later `up` runs |
+| Registry mirrors | The guest bundle `/etc/ssl/certs/ca-certificates.crt` is bind-mounted read-only (Debian and Alpine both read that path) |
+| kind nodes | `kind.configureCACerts` writes the PEM into each node and runs `update-ca-certificates`, then restarts containerd — a node is a container with its own store |
+
+Lima's `caCerts` is required rather than merely convenient: cloud-init installs
+Docker from `get.docker.com` during first boot, which fails TLS verification
+behind an intercepting proxy before any klimax provisioning runs.
+
+`config.CACerts.Load` validates the PEM up front and refuses a file containing a
+private key — pointing at the wrong file otherwise surfaces much later as a pull
+failure that looks like a network problem.
+
+### Loopback proxies and containers
+
+A proxy on the VM's loopback is unreachable from inside a container, where
+`127.0.0.1` is the container's own. `config.ContainerProxyEnv` rewrites a
+loopback proxy host to the kind bridge gateway for container-facing consumers;
+dockerd and guest shells keep the literal value, since they run in the VM's
+network namespace. Lima does the same rewrite for the guest.
+
+This matters more than it sounds: `registry:2` **panics at startup** when its
+upstream is unreachable, and with `--restart=always` that becomes a crash loop
+across every mirror.
+
+### Why klimax's own env block is stripped before inheriting
+
+`network.proxy` is written into a `#KLIMAX-START`/`#KLIMAX-END` block in the
+guest's `/etc/environment`, so `kind create cluster` (and therefore every node)
+and in-guest `kubectl apply -f https://…` see it — Lima's block only ever
+carries what macOS system settings say.
+
+`cli.guestEnvironmentProxy` strips that block before reading the file for the
+`inheritFromHost` path. Without it, a configured proxy becomes self-sustaining:
+the next run re-inherits the previous run's value, and removing `network.proxy`
+never takes effect.
+
+---
+
 ## Host mounts vs. disks — two different mechanisms
 
 `mountType: virtiofs` in `limatemplate.Build()` governs **`y.Mounts` only** — the

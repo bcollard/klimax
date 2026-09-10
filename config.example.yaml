@@ -15,6 +15,13 @@ vm:
   disk: "20GiB"       # default. Only the OS, Docker metadata and volumes live here —
                       # images go on imageDisk below. Sparse: it costs what it holds.
                       # Grow later without recreating the VM: klimax disk resize 40GiB
+  # Extra certificate authorities to trust — a proxy that terminates TLS
+  # (corporate interception), or a private registry with a self-signed chain.
+  # Installed in the VM, in every registry mirror, and in every kind node:
+  # each has its own trust store.
+  # caCerts:
+  #   files: ["~/corp-root-ca.pem"]
+
   # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
   # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
   # rosetta: false

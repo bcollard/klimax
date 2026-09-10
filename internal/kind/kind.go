@@ -28,7 +28,7 @@ import (
 //  4. Exports the kubeconfig to ~/.kube/klimax/<name>.kubeconfig on the host,
 //     with the API server address set to the VM's lima0 IP (direct mode, the
 //     default when useDirectIP is true) or 127.0.0.1 (loopback mode).
-func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, kindCIDR string, useDirectIP bool) error {
+func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, caCerts map[string]string, kindCIDR string, useDirectIP bool) error {
 	// Apply locality defaults based on num.
 	if cl.Region == "" {
 		cl.Region = fmt.Sprintf("europe-west%d", cl.Num)
@@ -120,6 +120,11 @@ echo "kind cluster %s created"
 		return fmt.Errorf("creating kind cluster %q: %w", cl.Name, err)
 	}
 
+	// Before the mirrors: a node that cannot verify TLS cannot use them either.
+	if err := configureCACerts(ctx, g, cl.Name, caCerts); err != nil {
+		return fmt.Errorf("installing CA certificates for cluster %q: %w", cl.Name, err)
+	}
+
 	if err := configureRegistryMirrors(ctx, g, cl.Name, regCfg); err != nil {
 		return fmt.Errorf("configuring registry mirrors for cluster %q: %w", cl.Name, err)
 	}
@@ -198,6 +203,36 @@ func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName 
 	sb.WriteString("done\n")
 
 	return g.RunScript(ctx, fmt.Sprintf("configure registry mirrors on cluster %q", clusterName), sb.String())
+}
+
+// configureCACerts installs extra trust anchors into every node of a cluster.
+//
+// A kind node is a container with its own trust store, so the certificates
+// cloud-init put in the VM do not reach it. Without this, containerd inside the
+// node fails every pull through a TLS-intercepting proxy with an x509 error,
+// even though dockerd on the VM is perfectly happy.
+//
+// containerd reads the trust store when it starts, so it is restarted after —
+// this runs immediately after cluster creation, before any workload exists.
+func configureCACerts(ctx context.Context, g *guest.Client, clusterName string, certs map[string]string) error {
+	if len(certs) == 0 {
+		return nil
+	}
+	slog.Info("Installing CA certificates on cluster nodes", "cluster", clusterName, "certs", len(certs))
+
+	var sb strings.Builder
+	sb.WriteString("#!/bin/bash\nset -euo pipefail\n")
+	fmt.Fprintf(&sb, "for node in $(kind get nodes --name %s); do\n", clusterName)
+	sb.WriteString("  docker exec \"$node\" mkdir -p /usr/local/share/ca-certificates\n")
+	for _, name := range config.SortedNames(certs) {
+		fmt.Fprintf(&sb, "  docker exec -i \"$node\" tee %q >/dev/null <<'CERT_EOF'\n%s\nCERT_EOF\n",
+			"/usr/local/share/ca-certificates/"+name, strings.TrimRight(certs[name], "\n"))
+	}
+	sb.WriteString("  docker exec \"$node\" update-ca-certificates --fresh >/dev/null\n")
+	sb.WriteString("  docker exec \"$node\" systemctl restart containerd\n")
+	sb.WriteString("done\n")
+
+	return g.RunScript(ctx, fmt.Sprintf("install CA certificates on cluster %q", clusterName), sb.String())
 }
 
 // applyNodeLabels labels every node in the cluster at creation. It always applies

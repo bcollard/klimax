@@ -88,3 +88,41 @@ func TestParseEnvironmentProxyEmptyWhenNoProxySet(t *testing.T) {
 		t.Errorf("empty value should be ignored, got %v", got)
 	}
 }
+
+// klimax writes its own block into /etc/environment. Reading it back as "the
+// host's proxy" would make a configured proxy self-sustaining: removing
+// network.proxy would never take effect.
+func TestStripKlimaxEnvBlock(t *testing.T) {
+	const content = `PATH="/usr/bin"
+#LIMA-START
+http_proxy=http://host-proxy:3128
+#LIMA-END
+#KLIMAX-START
+http_proxy=http://klimax-configured:8888
+https_proxy=http://klimax-configured:8888
+#KLIMAX-END
+`
+	got := parseEnvironmentProxy(stripKlimaxEnvBlock(content))
+	if got["http_proxy"] != "http://host-proxy:3128" {
+		t.Errorf("should keep Lima's value, got %q", got["http_proxy"])
+	}
+	if strings.Contains(got["http_proxy"], "klimax-configured") {
+		t.Error("klimax's own block was re-inherited")
+	}
+}
+
+func TestStripKlimaxEnvBlockNoBlock(t *testing.T) {
+	const content = "PATH=\"/usr/bin\"\n#LIMA-START\nhttp_proxy=http://p:3128\n#LIMA-END\n"
+	if got := stripKlimaxEnvBlock(content); got != content {
+		t.Errorf("content without a klimax block should be unchanged:\n%s", got)
+	}
+}
+
+// With only a klimax block and no host proxy, nothing is inherited — which is
+// what lets removal work.
+func TestStripKlimaxEnvBlockLeavesNothingToInherit(t *testing.T) {
+	const content = "PATH=\"/usr/bin\"\n#KLIMAX-START\nhttp_proxy=http://x:1\n#KLIMAX-END\n"
+	if got := parseEnvironmentProxy(stripKlimaxEnvBlock(content)); len(got) != 0 {
+		t.Errorf("expected nothing inheritable, got %v", got)
+	}
+}
