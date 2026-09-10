@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
@@ -23,9 +24,9 @@ const (
 
 // EnsureRegistries idempotently starts all configured pull-through mirrors in
 // the guest VM, connecting them to the kind network.
-func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryConfig) error {
+func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryConfig, proxyEnv map[string]string) error {
 	for _, m := range cfg.Mirrors {
-		if err := ensureMirror(ctx, g, m, cfg.CacheStorage); err != nil {
+		if err := ensureMirror(ctx, g, m, cfg.CacheStorage, proxyEnv); err != nil {
 			return fmt.Errorf("mirror %q: %w", m.Name, err)
 		}
 	}
@@ -33,15 +34,26 @@ func EnsureRegistries(ctx context.Context, g *guest.Client, cfg config.RegistryC
 }
 
 // ensureMirror starts a pull-through cache container for the given mirror config.
-func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror, cacheStorage string) error {
+func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror, cacheStorage string, proxyEnv map[string]string) error {
 	slog.Info("Ensuring registry mirror", "name", m.Name, "port", m.Port, "remote", m.RemoteURL)
 	running, err := isContainerRunning(ctx, g, m.Name)
 	if err != nil {
 		return err
 	}
 	if running {
-		slog.Info("Registry mirror already running", "name", m.Name)
-		return connectToKindNetwork(ctx, g, m.Name)
+		// A running container keeps the environment it was created with, so a
+		// proxy added or changed in the config would never reach it. Recreate
+		// only when it actually differs — the cache lives in a volume, so a
+		// recreate costs nothing but the container.
+		stale, err := mirrorProxyIsStale(ctx, g, m.Name, proxyEnv)
+		if err != nil {
+			return err
+		}
+		if !stale {
+			slog.Info("Registry mirror already running", "name", m.Name)
+			return connectToKindNetwork(ctx, g, m.Name)
+		}
+		slog.Info("Recreating registry mirror to apply changed proxy settings", "name", m.Name)
 	}
 	// Remove a stopped container if present.
 	if _, err := g.Run(ctx, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", m.Name)); err != nil {
@@ -63,14 +75,19 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror,
 		return fmt.Errorf("creating cache dir %q: %w", cacheDir, err)
 	}
 
+	// A pull-through cache reaches its upstream registry itself, so it needs the
+	// proxy as much as dockerd does — and no_proxy so it does not send traffic
+	// for its sibling mirrors or the cluster network to a proxy that cannot
+	// route it.
 	cmd := fmt.Sprintf(
 		"docker run -d --restart=always"+
 			" -v %s:/etc/docker/registry/config.yml"+
 			" -v %s:/var/lib/registry"+
 			" -p %d:%d"+
+			"%s"+
 			" --name %s"+
 			" %s:%s",
-		configPath, cacheDir, m.Port, m.Port, m.Name, registryImage, registryTag,
+		configPath, cacheDir, m.Port, m.Port, dockerEnvArgs(proxyEnv), m.Name, registryImage, registryTag,
 	)
 	if _, err := g.Run(ctx, cmd); err != nil {
 		return fmt.Errorf("starting mirror %q: %w", m.Name, err)
@@ -190,4 +207,69 @@ func connectToKindNetwork(ctx context.Context, g *guest.Client, containerName st
 		"docker network connect %s %s 2>/dev/null || true", kindNetworkName, containerName,
 	))
 	return err
+}
+
+// dockerEnvArgs renders an env map as `docker run -e` arguments, sorted so the
+// command is identical run to run.
+func dockerEnvArgs(env map[string]string) string {
+	if len(env) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	for _, k := range keys {
+		fmt.Fprintf(&b, " -e %s", shellQuote(k+"="+env[k]))
+	}
+	return b.String()
+}
+
+// shellQuote wraps a value in single quotes for the guest shell. Proxy URLs and
+// no_proxy lists contain characters (&, ?, *) that would otherwise be
+// interpreted before docker ever sees them.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// mirrorProxyIsStale reports whether a running mirror's proxy environment
+// differs from what the config now asks for.
+//
+// Only the proxy variables are compared: the container carries plenty of other
+// environment (PATH and the registry image's own defaults) that has nothing to
+// do with klimax and must not trigger a recreate.
+func mirrorProxyIsStale(ctx context.Context, g *guest.Client, name string, want map[string]string) (bool, error) {
+	out, err := g.Run(ctx, fmt.Sprintf(
+		"docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' %s 2>/dev/null || true", name))
+	if err != nil {
+		return false, err
+	}
+	have := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		k, v, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if ok && isProxyVar(k) {
+			have[k] = v
+		}
+	}
+	if len(have) != len(want) {
+		return true, nil
+	}
+	for k, v := range want {
+		if have[k] != v {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// isProxyVar reports whether an environment variable name is one klimax manages
+// for proxying, in either spelling.
+func isProxyVar(k string) bool {
+	switch strings.ToLower(k) {
+	case "http_proxy", "https_proxy", "no_proxy":
+		return true
+	}
+	return false
 }

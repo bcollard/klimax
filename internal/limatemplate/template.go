@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
+	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
@@ -35,6 +37,7 @@ func buildProvision(cfg *config.Config) []limatype.Provision {
 	if cfg.VM.ImageDisk != "" {
 		provisions = append(provisions, imageDiskProvisions(config.ImageDiskName(cfg.VM.Name))...)
 	}
+	provisions = append(provisions, proxyProvisions(cfg)...)
 	return append(provisions, limatype.Provision{
 		Mode:   limatype.ProvisionModeSystem,
 		Script: &provisionScript,
@@ -182,6 +185,16 @@ const KindCLIVersion = "v0.32.0"
 // installs kind + kubectl binaries.
 var provisionScript = `#!/bin/bash
 set -eux -o pipefail
+
+# Lima writes the host's proxy settings into /etc/environment, but boot.sh does
+# not export them, so this script would otherwise install Docker with a direct
+# connection and fail behind a proxy. Sourcing it also covers the case where the
+# proxy comes from macOS system settings rather than the klimax config.
+if [ -f /etc/environment ]; then
+  set -a
+  . /etc/environment
+  set +a
+fi
 
 # Increase inotify limits for kind
 sysctl -w fs.inotify.max_user_watches=524288
@@ -424,4 +437,49 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 	}
 
 	return y
+}
+
+// DockerProxyDropInPath is the systemd drop-in that gives dockerd the proxy.
+const DockerProxyDropInPath = "/etc/systemd/system/docker.service.d/30-klimax-proxy.conf"
+
+// DockerProxyDropIn renders the drop-in contents for a config, or "" when no
+// explicit proxy is set.
+//
+// A drop-in is required because systemd services do not read /etc/environment —
+// that file is applied by pam_env, which only covers login sessions. dockerd is
+// what pulls kindest/node and registry:2, so without this klimax fails at the
+// first image pull behind a proxy while `curl` from a shell works, which is a
+// thoroughly confusing way to fail.
+func DockerProxyDropIn(cfg *config.Config, lima0IP string) string {
+	env := cfg.ProxyEnv(lima0IP)
+	if env == nil {
+		return ""
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // deterministic, so drift detection sees real changes only
+
+	var b strings.Builder
+	b.WriteString("# Managed by klimax. Edits are overwritten on `klimax up`.\n[Service]\n")
+	for _, k := range keys {
+		fmt.Fprintf(&b, "Environment=%q\n", k+"="+env[k])
+	}
+	return b.String()
+}
+
+// proxyProvisions installs the dockerd drop-in as a data file, which boot.sh
+// applies before the provision scripts run — so it is in place before Docker is
+// installed, and systemd picks it up when docker.service first appears.
+func proxyProvisions(cfg *config.Config) []limatype.Provision {
+	// lima0 IP is unknowable at creation; `klimax up` rewrites the drop-in with
+	// it once the VM is running (see cli.reconcileDockerProxy).
+	content := DockerProxyDropIn(cfg, "")
+	if content == "" {
+		return nil
+	}
+	return []limatype.Provision{
+		dataFile(DockerProxyDropInPath, content, "0644"),
+	}
 }

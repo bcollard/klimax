@@ -89,6 +89,7 @@ internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
 internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
 internal/vm/mounts.go                Read/WriteInstanceMounts (yaml-node surgery on the instance config), NormalizeMounts, MountsEqual — vm.mounts reconciliation
+internal/config/proxy.go             ProxyConfig, NoProxy/NoProxyString/ProxyEnv — the computed no_proxy list
 internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), DefaultCPUs + DefaultMemoryBytes (host-scaled
                                      defaults), CheckResources (over-commit warnings). Its own package because
                                      internal/vm imports internal/config, so config cannot import vm.
@@ -407,6 +408,59 @@ klimax completion bash|zsh|fish|powershell   Print shell completion script
 Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <level>`
 
 **Logging:** klimax's own logs use `log/slog`; Lima's library logs use `logrus`. By default klimax raises logrus to `error` so only klimax logs (and genuine Lima errors) show — the noisy `INFO[…]`/`WARN[…]` Lima lines are hidden. `--debug` surfaces Lima at `info` (and klimax at debug); `--lima-log-level trace|debug|info|warn|error|off` overrides explicitly (`off`→panic-only). Set in `root.go` `PersistentPreRunE` (`resolveLimaLogLevel`). The `hostagent` subcommand re-sets logrus to debug/JSON in `initHostagentLogrus`, so quieting the parent never affects VM readiness detection.
+
+---
+
+## HTTP proxy support
+
+`network.proxy` configures dockerd, the registry mirrors, and (indirectly) the
+kind nodes. Most of the chain already exists upstream; klimax fills two gaps.
+
+**What Lima and kind already do:**
+
+- Lima reads the Mac's system proxy (`propagateProxyEnv`, on by default) and
+  writes it into the guest's `/etc/environment` `#LIMA-START` block.
+- klimax's SSH commands inherit it: `/etc/pam.d/sshd` has `session required
+  pam_env.so` and sshd runs with `UsePAM yes`.
+- So `kind create cluster`, run over SSH, sees the proxy — and kind injects
+  `ENV HTTP_PROXY/HTTPS_PROXY/NO_PROXY` into every node it creates. The node
+  side is free.
+
+**What klimax must add:**
+
+1. **A dockerd systemd drop-in** (`30-klimax-proxy.conf`). `/etc/environment` is
+   applied by `pam_env`, which covers login sessions only — systemd services
+   never read it. dockerd is what pulls `kindest/node` and `registry:2`, so
+   without the drop-in a proxied host fails at the first pull while `curl` from
+   a shell works.
+2. **Proxy env on the mirror containers.** A pull-through cache reaches its
+   upstream itself. `ensureMirror` compares the running container's proxy vars
+   against the config and recreates it when they differ — a running container
+   keeps the environment it was created with, so a config change would otherwise
+   never reach it.
+
+**The computed `no_proxy`** (`config.NoProxy`) is the part that makes this worth
+building in: the user does not know the bridge CIDR, the mirror names, or the
+subnets kind will allocate, and sending cluster-internal traffic to a corporate
+proxy turns every in-cluster call into a timeout. It always contains
+`localhost`, `127.0.0.1`, `::1`, `.svc`, `.cluster.local`, `10.0.0.0/8`
+(service + pod subnets), `network.kindBridgeCIDR`, a `/24` derived from the live
+lima0 IP, and every mirror name — then the user's own `noProxy` entries.
+
+> `10.0.0.0/8` is deliberate. klimax allocates `10.<num>.0.0/16` and
+> `10.1<num>.0.0/16` per cluster, so enumerating them is impractical. On a
+> corporate network that also uses 10/8 those hosts bypass the proxy too, which
+> is normally correct — and the alternative breaks every cluster.
+
+`inheritFromHost` (default true) is resolved by reading the values back out of
+the guest's `/etc/environment` rather than re-running `scutil --proxy` on the
+host: Lima also rewrites loopback proxy addresses to a gateway the guest can
+reach, and re-deriving them would lose that.
+
+Reconciled on every `klimax up` (`cli.reconcileDockerProxy`), like `vm.mounts`
+and unlike `vm.imageDisk` — a drop-in has no state beyond the file, so changing
+the proxy never needs the VM recreated. Removing `network.proxy` removes the
+drop-in.
 
 ---
 

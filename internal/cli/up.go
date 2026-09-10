@@ -99,28 +99,34 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("guest SSH: %w", err)
 	}
 
-	// 3. Ensure kind Docker network.
-	if err := docker.EnsureKindNetwork(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
-		return fmt.Errorf("docker network: %w", err)
-	}
-
-	// 4. Ensure pull-through mirrors.
-	if err := registry.EnsureRegistries(ctx, g, cfg.Registries); err != nil {
-		return fmt.Errorf("registries: %w", err)
-	}
-
-	// 5. Detect lima0 IP (needed for routing).
+	// 3. Detect lima0 IP. Resolved before anything pulls an image: it completes
+	// the no_proxy list, and dockerd must have the proxy before step 5.
 	lima0IP, err := routing.Lima0IP(ctx, g)
 	if err != nil {
 		return fmt.Errorf("detecting lima0 IP: %w", err)
 	}
 
-	// 6. Install no-NAT rules + systemd persistence in guest.
+	// 4. Give dockerd the proxy, if one is configured.
+	if err := reconcileDockerProxy(ctx, g, cfg, lima0IP); err != nil {
+		return fmt.Errorf("docker proxy: %w", err)
+	}
+
+	// 5. Ensure kind Docker network.
+	if err := docker.EnsureKindNetwork(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
+		return fmt.Errorf("docker network: %w", err)
+	}
+
+	// 6. Ensure pull-through mirrors.
+	if err := registry.EnsureRegistries(ctx, g, cfg.Registries, cfg.ProxyEnv(lima0IP)); err != nil {
+		return fmt.Errorf("registries: %w", err)
+	}
+
+	// 7. Install no-NAT rules + systemd persistence in guest.
 	if err := routing.InstallNoNat(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
 		return fmt.Errorf("routing rules: %w", err)
 	}
 
-	// 7. Add macOS route for kind CIDR → lima0.
+	// 8. Add macOS route for kind CIDR → lima0.
 	if err := routing.EnsureRoute(cfg.Network.KindBridgeCIDR, lima0IP); err != nil {
 		return fmt.Errorf("macOS route: %w", err)
 	}
@@ -377,4 +383,112 @@ func raiseLimaLogLevelForVMLogs(cmd *cobra.Command) {
 	if logrus.GetLevel() < logrus.InfoLevel {
 		logrus.SetLevel(logrus.InfoLevel)
 	}
+}
+
+// reconcileDockerProxy writes the dockerd proxy drop-in and restarts Docker when
+// it changed. Called on every `klimax up`, so editing network.proxy takes effect
+// without recreating the VM — the drop-in has no on-disk or guest-side state
+// beyond the file itself.
+//
+// Removing the proxy from the config removes the drop-in, rather than leaving
+// dockerd pointed at a proxy that is no longer there.
+func reconcileDockerProxy(ctx context.Context, g *guest.Client, cfg *config.Config, lima0IP string) error {
+	effective, err := effectiveProxy(ctx, g, cfg)
+	if err != nil {
+		return err
+	}
+	want := limatemplate.DockerProxyDropIn(effective, lima0IP)
+
+	// `cat` of a missing file is an error, which is the "not present" case.
+	have, _ := g.Run(ctx, "cat "+limatemplate.DockerProxyDropInPath+" 2>/dev/null")
+	if strings.TrimSpace(have) == strings.TrimSpace(want) {
+		return nil
+	}
+
+	if want == "" {
+		slog.Info("Removing Docker proxy configuration (network.proxy is no longer set)")
+		if _, err := g.Run(ctx, "sudo rm -f "+limatemplate.DockerProxyDropInPath); err != nil {
+			return err
+		}
+	} else {
+		slog.Info("Configuring Docker proxy",
+			"http", effective.Network.Proxy.HTTP,
+			"https", effective.Network.Proxy.HTTPS,
+			"source", proxySource(cfg))
+		if err := g.WriteFile(ctx, limatemplate.DockerProxyDropInPath, want); err != nil {
+			return err
+		}
+	}
+
+	// A drop-in only takes effect after a daemon-reload plus a restart of the
+	// unit itself; systemd does not re-read Environment= on its own.
+	_, err = g.Run(ctx, "sudo systemctl daemon-reload && sudo systemctl restart docker")
+	return err
+}
+
+// effectiveProxy resolves the proxy klimax should apply, returning a copy of cfg
+// with network.proxy filled in.
+//
+// An explicit http/https in the config wins. Otherwise, when inheritFromHost is
+// on (the default), the values come from the guest's /etc/environment, which
+// Lima has already populated from the Mac's system proxy settings. Reading them
+// back is better than re-deriving them here: Lima also rewrites loopback proxy
+// addresses to the gateway the guest can actually reach, which a fresh reading
+// of `scutil --proxy` on the host would miss.
+func effectiveProxy(ctx context.Context, g *guest.Client, cfg *config.Config) (*config.Config, error) {
+	if cfg.Network.Proxy.Enabled() || !cfg.Network.Proxy.InheritsFromHost() {
+		return cfg, nil
+	}
+	env, err := guestEnvironmentProxy(ctx, g)
+	if err != nil || len(env) == 0 {
+		return cfg, err
+	}
+	out := *cfg
+	out.Network.Proxy.HTTP = env["http_proxy"]
+	out.Network.Proxy.HTTPS = env["https_proxy"]
+	return &out, nil
+}
+
+// guestEnvironmentProxy reads the proxy variables Lima wrote into the guest's
+// /etc/environment. Values there are KEY=value, optionally quoted.
+func guestEnvironmentProxy(ctx context.Context, g *guest.Client) (map[string]string, error) {
+	out, err := g.Run(ctx, "cat /etc/environment 2>/dev/null || true")
+	if err != nil {
+		return nil, err
+	}
+	return parseEnvironmentProxy(out), nil
+}
+
+// parseEnvironmentProxy extracts the proxy variables from /etc/environment
+// content. Entries are KEY=value, optionally quoted, and either spelling of the
+// name may appear.
+func parseEnvironmentProxy(content string) map[string]string {
+	env := map[string]string{}
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.ToLower(strings.TrimSpace(k))
+		if k != "http_proxy" && k != "https_proxy" {
+			continue
+		}
+		if v = strings.Trim(strings.TrimSpace(v), `"'`); v != "" {
+			env[k] = v
+		}
+	}
+	return env
+}
+
+// proxySource names where the applied proxy came from, so the log line explains
+// a proxy the user did not put in their config.
+func proxySource(cfg *config.Config) string {
+	if cfg.Network.Proxy.Enabled() {
+		return "config"
+	}
+	return "macOS system settings (via Lima)"
 }
