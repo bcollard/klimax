@@ -125,6 +125,15 @@ internal/cli/hostagent.go            `klimax hostagent` — hidden; Lima spawns 
 
 ## Configuration schema (`config.yaml`)
 
+> **Defaults are applied on every load, not baked into the file.**
+> `config.applyDefaults` runs inside `LoadConfig`, so any key *absent* from the
+> file is recomputed each run — which is what lets `vm.cpus`/`vm.memory` scale to
+> whichever Mac reads it. A key *present* in the file always wins and is never
+> recomputed. `WriteDefaultConfig` (used when no config exists) is the exception:
+> it computes once and writes the numbers in as literal values, so a generated
+> config is a **pinned** config and does not adapt if copied to another machine.
+
+
 Cluster lifecycle is **not** in the config file. The config drives infrastructure only.
 
 ```yaml
@@ -218,6 +227,26 @@ Lima writes a `lima-version` file (mode `0o444`) into the instance dir during `i
 ### hostagent subprocess
 
 Lima's `instance.StartWithPaths()` spawns `os.Executable() hostagent INSTANCE --socket ... --guestagent ...` as a detached daemon. `internal/cli/hostagent.go` implements this hidden subcommand (ports Lima's `cmd/limactl/hostagent.go`). It must configure **logrus JSON formatter** — Lima's event watcher parses JSON log lines to detect VM readiness. `runtime.LockOSThread()` is required when `--run-gui` is set (VZ on macOS).
+
+### Building locally: the binary must be codesigned
+
+`go build` alone produces a binary that **cannot start a VM**. Virtualization.framework
+refuses it with a misleading error that says nothing about signing:
+
+```
+Error Domain=VZErrorDomain Code=2 "Invalid virtual machine configuration.
+The process doesn't have the com.apple.security.virtualization entitlement."
+```
+
+`make build` handles this; a bare `go build -o /tmp/klimax ./cmd/klimax` does not:
+
+```sh
+codesign --sign - --entitlements entitlements.plist --force <binary>
+```
+
+Read-only commands (`status`, `doctor`, `cluster list`, `fleet export`,
+`disk resize-image`) work fine unsigned, so an unsigned build can look healthy
+right up until it tries to boot the VM.
 
 ### Binary replacement safety
 
@@ -381,6 +410,15 @@ Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gc
 
 > Changing `cacheStorage` after instance creation requires `klimax destroy && klimax up`.
 
+### Growing the image disk — Lima does the guest half
+
+`klimax disk resize-image` only grows the **host-side** backing file. Do not add
+`growpart`/`resize2fs` to klimax's mount unit: Lima's own
+`05-lima-disks.sh` already runs both for additional disks, and it runs *before*
+klimax's `klimax-image-disk.service`. Verified end to end — a 10GiB → 30GiB
+resize surfaced as a 30GiB ext4 in the guest with no klimax-side partition work.
+The `resize2fs` in the mount script is belt-and-braces only.
+
 ---
 
 ## Safety and idempotency
@@ -430,6 +468,8 @@ Verify behavior end-to-end against the live VM before cutting a release (see the
 - Triggered by pushing a `vX.Y.Z` tag (`.github/workflows/release.yml`); default bump is a patch on the latest tag.
 - **Tags must be annotated** — `git tag -a vX.Y.Z -m "..."`. A lightweight `git tag vX.Y.Z` fails with `fatal: no tag message?` (repo is configured to require annotated tags).
 - Homebrew distribution is a **Cask**, not a Formula: `bcollard/homebrew-klimax` → `Casks/klimax.rb`. goreleaser bumps it automatically on release. Users install/upgrade with `brew upgrade --cask klimax` (or `brew reinstall --cask klimax`).
+- **Ship the website changelog *before* pushing the tag.** `../klimax-website` needs a `docs/changelog.html` entry (plus any page whose documented defaults or commands changed) per its own `CLAUDE.md`. Merging that first means the docs are live when the binaries appear, instead of briefly describing a version nobody can install.
+- A tag pushed by mistake can be recalled if you are quick: `gh run cancel <id>`, then `git push --delete origin vX.Y.Z && git tag -d vX.Y.Z`. Check `gh release view` and the Cask version first — once goreleaser has published, retagging is no longer clean and the fix is a new patch release.
 
 ### Supply chain / SBOM
 
