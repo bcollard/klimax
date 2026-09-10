@@ -65,6 +65,21 @@ vm:
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
+  # HTTP(S) proxy for everything klimax runs in the VM: dockerd, the registry
+  # mirrors, and the containerd inside every kind node.
+  #
+  # Leave this out on a normal network. klimax already picks up the Mac's system
+  # proxy settings on its own — this block is only for pointing at a different
+  # proxy, or for a proxy macOS does not know about.
+  #
+  # klimax computes no_proxy itself (the kind bridge CIDR, the cluster subnets,
+  # the mirror names, the host<->VM subnet); noProxy below is appended to that.
+  # proxy:
+  #   http:  "http://proxy.corp:3128"
+  #   https: "http://proxy.corp:3128"
+  #   noProxy: ["*.corp.example"]
+  #   inheritFromHost: true   # default; use macOS settings when http/https are unset
+
   # Subnet for the Docker bridge network named "kind".
   # macOS routes this CIDR → VM's lima0 IP for pure L3 access (no SNAT).
   kindBridgeCIDR: "172.30.0.0/16"

@@ -239,6 +239,10 @@ vm:
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # routed from macOS → VM; no SNAT
+  # proxy:                          # optional; macOS system proxy is used by default
+  #   http:  "http://proxy.corp:3128"
+  #   https: "http://proxy.corp:3128"
+  #   noProxy: ["*.corp.example"]   # appended to the list klimax computes
 
   # Defaults to true: Lima's TCP port mirroring is disabled, so klimax coexists with
   # other Lima VMs (kind-on-lima, Rancher Desktop) that also manage kind clusters —

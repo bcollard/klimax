@@ -139,6 +139,10 @@ type NetworkConfig struct {
 	// nil = default (true).
 	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
 	DisablePortMirroring *bool `yaml:"disablePortMirroring"`
+	// Proxy configures an HTTP(S) proxy for dockerd, the registry mirrors and
+	// the kind nodes. Leave it unset to use the Mac's system proxy settings,
+	// which Lima propagates into the guest on its own.
+	Proxy ProxyConfig `yaml:"proxy,omitempty"`
 }
 
 // CustomDNSResolver forwards a DNS zone to one or more upstream resolvers via CoreDNS.

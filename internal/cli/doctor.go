@@ -16,6 +16,7 @@ import (
 
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/klimax/internal/limatemplate"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
@@ -41,6 +42,7 @@ const (
 	checkIDIPTables    = "iptables"
 	checkIDIPForward   = "ip-forward"
 	checkIDRosettaVM   = "rosetta-vm"
+	checkIDProxy       = "proxy"
 )
 
 // doctorCheck is one diagnosis. Fixable marks the checks `--fix` can repair
@@ -251,6 +253,11 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 			Fixable: true,
 		})
 	}
+
+	// Proxy. Reported rather than judged: klimax cannot tell a misconfigured
+	// proxy from a correct one, but "which proxy is dockerd actually using"
+	// is the first question when pulls fail on a corporate network.
+	rep.Checks = append(rep.Checks, checkProxy(ctx, g, cfg))
 
 	// Rosetta inside the VM.
 	rosettaActive := false
@@ -545,4 +552,35 @@ func binaryReplacedSinceLaunch(path string, pid int) (replaced bool, mtime, star
 		return false, time.Time{}, time.Time{}
 	}
 	return fi.ModTime().After(start), fi.ModTime(), start
+}
+
+// checkProxy reports the proxy dockerd is actually running with, and flags the
+// case where one is in the guest environment but never reached dockerd — which
+// looks like "curl works, docker pull hangs".
+func checkProxy(ctx context.Context, g *guest.Client, cfg *config.Config) doctorCheck {
+	dropIn, _ := g.Run(ctx, "cat "+limatemplate.DockerProxyDropInPath+" 2>/dev/null")
+	hasDropIn := strings.Contains(dropIn, "Environment=")
+
+	envOut, _ := g.Run(ctx, "cat /etc/environment 2>/dev/null || true")
+	guestProxy := parseEnvironmentProxy(envOut)
+
+	switch {
+	case !hasDropIn && len(guestProxy) == 0:
+		return doctorCheck{ID: checkIDProxy, Status: checkOK,
+			Message: "No proxy configured (none in the config, none inherited from macOS)"}
+
+	case !hasDropIn && len(guestProxy) > 0:
+		return doctorCheck{ID: checkIDProxy, Status: checkWarn,
+			Message: "A proxy is set in the guest environment but dockerd is not using it",
+			Detail:  "Shell commands would work while image pulls fail. dockerd is a systemd service and does not read /etc/environment.",
+			Fix:     "klimax up   (writes the dockerd drop-in)"}
+
+	default:
+		src := "config"
+		if !cfg.Network.Proxy.Enabled() {
+			src = "macOS system settings"
+		}
+		return doctorCheck{ID: checkIDProxy, Status: checkOK,
+			Message: fmt.Sprintf("dockerd is using a proxy (from %s)", src)}
+	}
 }
