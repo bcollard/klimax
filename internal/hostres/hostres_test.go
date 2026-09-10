@@ -140,13 +140,14 @@ func TestDefaultMemoryBytes(t *testing.T) {
 		why     string
 	}{
 		{0, 0, "unknown — caller falls back"},
-		{8, 4, "small Mac: the half floor protects macOS"},
+		{2, 2, "floor: half would be 1GiB"},
+		{8, 4, "half"},
 		{16, 8, "half"},
-		{24, 12, "half — reserve gives the same here"},
-		{32, 20, "above the reserve, so more than half"},
-		{36, 24, "all but the 12GiB reserve"},
-		{64, 48, "capped at 75% rather than 52"},
-		{128, 96, "capped at 75%"},
+		{24, 12, "half"},
+		{32, 16, "half"},
+		{36, 18, "half"},
+		{64, 32, "half"},
+		{128, 64, "half — no cap, the host keeps the other half"},
 	}
 	for _, tt := range tests {
 		got := DefaultMemoryBytes(tt.ramGiB * gib)
@@ -169,8 +170,9 @@ func TestDefaultsNeverExceedTheHost(t *testing.T) {
 		if got > ram*gib {
 			t.Fatalf("DefaultMemoryBytes(%dGiB) = %v, more than the host has", ram, RoundedGiB(got))
 		}
-		if float64(got) > float64(ram*gib)*0.75+1 {
-			t.Fatalf("DefaultMemoryBytes(%dGiB) = %v, above the 75%% cap", ram, RoundedGiB(got))
+		// Half, except on machines so small the floor applies.
+		if ram >= 4 && got != ram*gib/2 {
+			t.Fatalf("DefaultMemoryBytes(%dGiB) = %v, want half", ram, RoundedGiB(got))
 		}
 	}
 }

@@ -113,14 +113,11 @@ const (
 	// minCPUs keeps a usable VM on very small machines.
 	minCPUs = 2
 
-	// memShare is the floor: never less than this fraction of RAM.
+	// memShare is the fraction of the Mac's RAM given to the VM. Half, flat:
+	// macOS keeps the rest, and the VM reserves this whether or not it uses it.
 	memShare = 0.5
-	// hostReserve is what macOS wants for itself. It is roughly fixed rather
-	// than proportional — a 64 GiB Mac does not need 32 GiB for the desktop —
-	// so on larger machines this lets the VM take more than half.
-	hostReserve = 12 << 30 // 12 GiB
-	// memCap stops the VM starving the host no matter how much RAM there is.
-	memCap = 0.75
+	// minMemoryBytes keeps the VM usable on a very small machine.
+	minMemoryBytes = 2 << 30 // 2 GiB
 )
 
 // DefaultCPUs returns the core count to give the VM: three quarters of the
@@ -141,30 +138,22 @@ func DefaultCPUs(cores int) int {
 	return n
 }
 
-// DefaultMemoryBytes returns the RAM to give the VM: half the host's, or
-// everything above a fixed reserve for macOS, whichever is larger — capped so
-// the host always keeps a quarter.
-//
-// Half alone under-provisions a big Mac (32 GiB would yield 16); the reserve
-// alone starves a small one (16 GiB would yield 4). Taking the larger gives 8
-// of 16 and 20 of 32, which is the shape wanted.
+// DefaultMemoryBytes returns the RAM to give the VM: half the host's, leaving
+// the other half to macOS. 16 GiB -> 8 GiB, 32 GiB -> 16 GiB, 64 GiB -> 32 GiB.
 //
 // Returns 0 when total is unknown, so the caller can fall back to a constant.
 func DefaultMemoryBytes(total uint64) uint64 {
 	if total == 0 {
 		return 0
 	}
-	half := uint64(float64(total) * memShare)
-	var aboveReserve uint64
-	if total > hostReserve {
-		aboveReserve = total - hostReserve
+	want := uint64(float64(total) * memShare)
+	if want < minMemoryBytes {
+		// Only reachable on a machine too small to run klimax well anyway; the
+		// over-commit check still warns if this exceeds what is there.
+		want = minMemoryBytes
 	}
-	want := half
-	if aboveReserve > want {
-		want = aboveReserve
-	}
-	if cap := uint64(float64(total) * memCap); want > cap {
-		want = cap
+	if want > total {
+		want = total
 	}
 	return want
 }

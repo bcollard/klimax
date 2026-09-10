@@ -131,8 +131,8 @@ Cluster lifecycle is **not** in the config file. The config drives infrastructur
 vm:
   name: "klimax"         # Lima instance name; socket at ~/.<name>.docker.sock
   cpus: 8                # default: 3/4 of the host's cores, min 2 (10-core -> 8)
-  memory: "20GiB"        # default: max(RAM/2, RAM-12GiB), capped at 75% of RAM
-                         # (16GiB -> 8GiB, 32GiB -> 20GiB, 64GiB -> 48GiB)
+  memory: "20GiB"        # default: half the host's RAM, min 2GiB
+                         # (16GiB -> 8GiB, 32GiB -> 16GiB, 64GiB -> 32GiB)
   disk: "20GiB"          # default. Root disk only carries the OS, Docker metadata
                          # and volumes — images live on imageDisk. Both are sparse.
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
