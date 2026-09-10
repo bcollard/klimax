@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/docker/go-units"
+	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -51,13 +53,26 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 
 	warnOverCommittedResources(cfg)
 
+	// A share of a directory that isn't there fails deep inside Lima's VM start,
+	// so check the paths while there is still a config key to blame.
+	if err := checkMountLocations(cfg); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
 	// 1. Ensure VM is running.
 	mgr := vm.New(cfg.VM.Name, KlimaxHome())
 
-	// If the VM doesn't exist yet, this `up` will create it — review the config
-	// for evolution (new options) and node-version drift before baking anything in.
-	if existing, ierr := mgr.Inspect(ctx); ierr == nil && existing == nil {
-		if err := reviewConfigBeforeCreate(cfg); err != nil {
+	// An Inspect failure is not fatal here: both branches below are advisory
+	// pre-flight work, and EnsureRunning re-inspects and reports properly.
+	if existing, ierr := mgr.Inspect(ctx); ierr == nil {
+		if existing == nil {
+			// The VM doesn't exist yet, so this `up` will create it — review the
+			// config for evolution (new options) and node-version drift before
+			// baking anything in.
+			if err := reviewConfigBeforeCreate(cfg); err != nil {
+				return err
+			}
+		} else if err := reconcileMounts(ctx, mgr, existing, cfg); err != nil {
 			return err
 		}
 	}
@@ -117,6 +132,102 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		"dockerSocket", "~/."+cfg.VM.Name+".docker.sock",
 	)
 	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n\n")
+	return nil
+}
+
+// checkMountLocations rejects a vm.mounts entry whose host directory is not
+// there.
+//
+// Lima only warns about a non-existent mount location and carries on, handing
+// Virtualization.framework a share for a path that does not exist. That surfaces
+// much later as an opaque VM start failure rather than as "you typed the path
+// wrong", so klimax refuses up front, naming the config key.
+func checkMountLocations(cfg *config.Config) error {
+	var errs []error
+	for i, m := range cfg.VM.Mounts {
+		expanded, err := m.Expand()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q: %w", i, m.Location, err))
+			continue
+		}
+		st, err := os.Stat(expanded.Location)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q does not exist — create it or remove the entry", i, expanded.Location))
+		case err != nil:
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q is not readable: %w", i, expanded.Location, err))
+		case !st.IsDir():
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q is not a directory", i, expanded.Location))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// reconcileMounts brings an existing VM's host-directory shares in line with
+// vm.mounts.
+//
+// Mounts are the one Lima instance setting worth reconciling in place. Adding a
+// directory is a casual, frequent thing to want, and the alternative — the
+// `klimax destroy && klimax up` that vm.imageDisk and disablePortMirroring
+// require — throws away every kind cluster on the VM in order to share a folder.
+// A mount has no on-disk state and no guest-side migration either: Lima reads
+// the list when it starts, so a stopped VM plus an edited instance config is the
+// entire change.
+//
+// Nothing is written while the VM runs. Lima would ignore the edit until a
+// restart, and a half-applied config that disagrees with the running VM is worse
+// than one that plainly says "restart to apply".
+func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instance, cfg *config.Config) error {
+	limaYAML := vm.InstanceYAMLPath(inst.Dir)
+	live, err := vm.ReadInstanceMounts(limaYAML)
+	if err != nil {
+		slog.Warn("Could not read mounts from the instance config — leaving them unchanged",
+			"path", limaYAML, "err", err)
+		return nil
+	}
+	desired := limatemplate.BuildMounts(cfg)
+	if vm.MountsEqual(live, desired) {
+		return nil
+	}
+
+	fmt.Printf("\nvm.mounts differs from the VM's current shares:\n  on the VM:\n%s\n  in %s:\n%s\n",
+		vm.DescribeMounts(live), configFile, vm.DescribeMounts(desired))
+
+	if inst.Status != limatype.StatusRunning {
+		if err := vm.WriteInstanceMounts(limaYAML, desired); err != nil {
+			return fmt.Errorf("updating mounts in %s: %w", limaYAML, err)
+		}
+		fmt.Printf("Applied — the VM is stopped, so the new shares take effect as it starts.\n\n")
+		return nil
+	}
+
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		slog.Warn("Non-interactive: leaving the VM's mounts unchanged",
+			"apply", "klimax down && klimax up")
+		fmt.Println()
+		return nil
+	}
+
+	fmt.Printf("Applying this needs a VM restart, which stops every kind cluster on it.\nRestart the VM now? [y/N] ")
+	var answer string
+	_, _ = fmt.Scanln(&answer)
+	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
+		fmt.Printf("Left unchanged. Apply later with: klimax down && klimax up\n\n")
+		return nil
+	}
+
+	if err := mgr.Stop(ctx); err != nil {
+		return fmt.Errorf("stopping the VM to apply mounts: %w", err)
+	}
+	if err := vm.WriteInstanceMounts(limaYAML, desired); err != nil {
+		// The VM is stopped and the config is untouched, so the next `klimax up`
+		// starts it exactly as it was. Say so rather than leaving the user
+		// wondering what state they are in.
+		return fmt.Errorf("updating mounts in %s (the VM is stopped; 'klimax up' restarts it unchanged): %w", limaYAML, err)
+	}
+	// EnsureRunning re-inspects, finds the VM stopped, and starts it with the
+	// new mounts.
+	fmt.Printf("Mounts updated — restarting the VM.\n\n")
 	return nil
 }
 

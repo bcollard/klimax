@@ -88,6 +88,7 @@ internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
 
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
 internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
+internal/vm/mounts.go                Read/WriteInstanceMounts (yaml-node surgery on the instance config), NormalizeMounts, MountsEqual — vm.mounts reconciliation
 internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), DefaultCPUs + DefaultMemoryBytes (host-scaled
                                      defaults), CheckResources (over-commit warnings). Its own package because
                                      internal/vm imports internal/config, so config cannot import vm.
@@ -97,7 +98,7 @@ internal/cli/root.go                 cobra root command, persistent flags (--con
 internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
 internal/cli/down.go                 `klimax down` [--remove-route]
 internal/cli/destroy.go              `klimax destroy`
-internal/cli/status.go               `klimax status` — collectStatus() → statusReport, rendered as text/json/yaml
+internal/cli/status.go               `klimax status` — collectStatus() → statusReport, rendered as text/json/yaml (host mounts read from the instance config, so they show on a stopped VM)
 internal/cli/doctor.go               `klimax doctor` — diagnose() → []doctorCheck, `--fix` applies the Fixable ones
 internal/cli/fleet_export.go         `klimax fleet export` — live clusters → Fleet manifest (args, -l selector, or picker)
 internal/cli/version.go              `klimax version`
@@ -150,6 +151,14 @@ vm:
                          # "" = disabled (image store on the root disk).
                          # ⚠ VM-level: new VMs only. Resize an existing one with
                          # `klimax disk resize-image`.
+  mounts: []             # host dirs shared into the guest over virtiofs; empty by default.
+                         # Each appears at the SAME absolute path in the VM, which is
+                         # what makes a host-path `docker -v` bind resolve.
+                         #   - location: "~/projects"   ("~" expanded; must exist)
+                         #     writable: true           (default false, matching Lima)
+                         #     mountPoint: "/srv/x"     (optional; differing guest path
+                         #                               breaks `-v <host path>`)
+                         # NOT VM-level: `klimax up` offers a restart to apply.
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet
@@ -305,7 +314,7 @@ klimax up                              Start VM + infra (idempotent)
 klimax down                            Stop VM (no sudo required)
 klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
-klimax status                          Show VM state, clusters, route, iptables
+klimax status                          Show VM state, host mounts, clusters, route, iptables
   -o text|json|yaml                    Output format (json/yaml for tooling; `clusters.names` is always a list)
 klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state)
   -o text|json|yaml                    Output format; each check has a stable `id`, `status`, `fixable`
@@ -401,6 +410,58 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 
 ---
 
+## Host mounts vs. disks — two different mechanisms
+
+`mountType: virtiofs` in `limatemplate.Build()` governs **`y.Mounts` only** — the
+host-directory shares. It has nothing to do with storage:
+
+| klimax config | Lima field | Guest | Mechanism |
+|---|---|---|---|
+| `vm.disk` | `disk` | `/dev/vda1` → `/` | virtio-blk block device, ext4 |
+| `vm.imageDisk` | `additionalDisks` | `/dev/vdb1` → `/var/lib/containerd` | virtio-blk block device, ext4 |
+| `registries.cacheStorage: host` | `mounts[]` | same absolute path | **virtiofs** |
+| `vm.mounts` | `mounts[]` | same absolute path (or `mountPoint`) | **virtiofs** |
+
+So `vm.mounts` is purely additive to `y.Mounts` and cannot interact with the
+image-disk machinery. `limatemplate.BuildMounts()` builds the whole list —
+registry cache first, then user mounts — and is exported so `klimax up` can
+compute the desired set without regenerating the rest of the instance YAML.
+
+### Why `vm.mounts` reconciles in place instead of needing `destroy && up`
+
+`vm.imageDisk` and `network.disablePortMirroring` are baked in at instance
+creation because they have on-disk or guest-side consequences. Mounts have
+neither: Lima reads the list when the VM starts, so a stopped VM plus an edited
+`lima.yaml` *is* the whole change. Making people pay a `klimax destroy` — which
+throws away every kind cluster — to share a folder would be absurd.
+
+`cli.reconcileMounts` therefore:
+
+1. reads the live `mounts:` out of the instance `lima.yaml` (not
+   `limatype.Instance.Config`, which has Lima's defaults filled in);
+2. compares against `limatemplate.BuildMounts(cfg)` via `vm.MountsEqual`, which
+   normalizes Lima's defaulting (`mountPoint` defaults to `location`, `writable`
+   to `false`);
+3. writes the new list only when the VM is **stopped** — running, it prints the
+   diff and offers a restart (declining, or a non-interactive run, changes
+   nothing). `EnsureRunning` then restarts it.
+
+`vm.WriteInstanceMounts` edits the parsed **yaml.Node tree**, not the struct: the
+instance config carries provisioning scripts the guest has already run, and
+regenerating the file from `Build()` would mean a klimax upgrade silently changed
+how a live guest is provisioned. `mounts_test.go` pins that the embedded literal
+block scalars survive the re-encode byte for byte.
+
+Locations are `~`-expanded in `BuildMounts` rather than left to Lima, so the
+value written to the instance config is exactly what drift detection reads back.
+
+> `klimax up` refuses a `vm.mounts` location that does not exist
+> (`cli.checkMountLocations`). Lima only warns, then hands Virtualization.framework
+> a share for a missing path, which surfaces much later as an opaque VM start
+> failure.
+
+---
+
 ## Registry cache persistence
 
 Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gcrio`, `registry-us-docker-pkgdev`, `registry-us-central1-docker-pkgdev`) are started with `-v <cacheDir>:/var/lib/registry`. The cache dir location depends on `registries.cacheStorage`:
@@ -447,6 +508,7 @@ The `resize2fs` in the mount script is belt-and-braces only.
 - `DOCKER_HOST` env var overrides the active Docker context — use one mechanism or the other, not both.
 - Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
 - **Mirror names must not be hostnames.** A mirror container joins the shared `kind` Docker network; a name like `quay.io` makes Docker's embedded DNS resolve `quay.io` to the container itself, so the pull-through proxy (whose `remoteurl` is `https://quay.io`) resolves upstream to itself → connection refused → `404 manifest unknown` → containerd silently falls back to slow, unauthenticated **direct** pulls (no cache, docker.io throttling). `config.Validate` now rejects mirror names containing `.` or `:`. Renaming a mirror also requires recreating its container (`docker rm -f` the old one, then `klimax up`) since the old-named container keeps its port.
+- **The host filesystem is not shared by default.** Only `~/.klimax/registry-cache` is, plus whatever `vm.mounts` lists. Because dockerd runs in the guest and resolves bind sources there, `docker run -v <unshared host path>:/x` does not fail — it creates the path in the guest and the container gets an empty directory. `klimax up` refuses a `vm.mounts` location that doesn't exist, but it cannot catch a bind for a path nobody listed.
 - `klimax down` does **not** remove the macOS host route by default (stale route is harmless; `klimax up` refreshes it). Use `--remove-route` to remove it explicitly.
 - `network.disablePortMirroring` defaults to **true** — kubeconfigs use the VM's `lima0` IP, which is assigned dynamically by macOS and may change on VM restart; re-run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may block TCP connections to vzNAT IPs — set `disablePortMirroring: false` (loopback/127.0.0.1 mode) in that case.
 

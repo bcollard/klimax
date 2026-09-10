@@ -291,6 +291,48 @@ func buildPortForwards(cfg *config.Config) []limatype.PortForward {
 	return fwds
 }
 
+// BuildMounts returns the full set of host directories shared into the guest,
+// in the order Lima should see them: klimax's own registry cache first, then the
+// user's vm.mounts.
+//
+// Split out of Build so `klimax up` can compute the desired mount set for an
+// existing VM and reconcile it against the live instance config without
+// regenerating the rest of the Lima YAML (which would rewrite provisioning
+// scripts a running guest has already applied).
+//
+// Locations are expanded here rather than left to Lima: the live instance config
+// stores absolute paths, and drift detection compares the two directly.
+// A location that fails to expand is dropped — config.Validate already rejects
+// those, and Build has no way to report an error.
+func BuildMounts(cfg *config.Config) []limatype.Mount {
+	var mounts []limatype.Mount
+
+	// The registry cache is bind-mounted into each registry container at
+	// /var/lib/registry, so the guest must be able to write to it.
+	if cfg.Registries.CacheStorage == "host" {
+		home, _ := os.UserHomeDir()
+		cacheDir := filepath.Join(home, ".klimax", "registry-cache")
+		mounts = append(mounts, limatype.Mount{Location: cacheDir, Writable: ptr.Of(true)})
+	}
+
+	for _, m := range cfg.VM.Mounts {
+		expanded, err := m.Expand()
+		if err != nil {
+			slog.Warn("Skipping unexpandable vm.mounts entry", "location", m.Location, "err", err)
+			continue
+		}
+		lm := limatype.Mount{Location: expanded.Location, Writable: ptr.Of(m.Writable)}
+		// Leave mountPoint unset for the common case: Lima then defaults it to
+		// the location, which is what makes a host-path `docker -v` bind resolve
+		// inside the guest.
+		if m.MountPoint != "" {
+			lm.MountPoint = ptr.Of(m.MountPoint)
+		}
+		mounts = append(mounts, lm)
+	}
+	return mounts
+}
+
 // Build constructs a limatype.LimaYAML from a klimax config.
 // The result can be marshaled to YAML and passed to instance.Create().
 func Build(cfg *config.Config) *limatype.LimaYAML {
@@ -363,16 +405,7 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 		}
 	}
 
-	// For host cache storage, mount ~/.klimax/registry-cache into the guest via virtiofs
-	// so Docker registry containers can bind-mount it at /var/lib/registry.
-	// Lima mounts at the same absolute path on both sides (virtiofs convention).
-	if cfg.Registries.CacheStorage == "host" {
-		home, _ := os.UserHomeDir()
-		cacheDir := filepath.Join(home, ".klimax", "registry-cache")
-		y.Mounts = []limatype.Mount{
-			{Location: cacheDir, Writable: ptr.Of(true)},
-		}
-	}
+	y.Mounts = BuildMounts(cfg)
 
 	if cfg.VM.Rosetta {
 		if runtime.GOARCH != "arm64" {

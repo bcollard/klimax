@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/bcollard/klimax/internal/hostres"
+	"github.com/lima-vm/lima/v2/pkg/localpathutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,6 +39,58 @@ type VMConfig struct {
 	// Empty = disabled (the image store lives on the VM's root disk).
 	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
 	ImageDisk string `yaml:"imageDisk"`
+	// Mounts are host directories shared into the guest over virtiofs.
+	// Empty by default: klimax shares nothing but its own registry cache.
+	// Changing this list is applied by `klimax up` (see vm.ReconcileMounts) —
+	// unlike imageDisk, it does not need the VM recreated.
+	Mounts []Mount `yaml:"mounts"`
+}
+
+// Mount shares a host directory with the guest over virtiofs.
+//
+// Lima mounts the directory at the *same absolute path* inside the VM unless
+// MountPoint overrides it, and that convention is what makes `docker run -v`
+// work with host paths: the Docker daemon runs in the guest and resolves a bind
+// source there, so the path has to exist on both sides.
+//
+// Nothing is shared unless it is listed here. Without a matching entry, a bind
+// like `-v /Users/you/conf:/etc/app` does not fail — dockerd simply creates the
+// missing source path in the guest and the container sees an EMPTY directory.
+type Mount struct {
+	// Location is the host directory to share. A leading "~" is expanded;
+	// relative paths are rejected.
+	Location string `yaml:"location"`
+	// MountPoint is the guest path. Defaults to Location, which is the only
+	// value that makes host-path `-v` binds resolve — set it only when the
+	// guest deliberately needs the directory somewhere else.
+	// There is no "~" expansion for guest paths.
+	MountPoint string `yaml:"mountPoint,omitempty"`
+	// Writable lets the guest, and any container binding this path, write back
+	// to the host directory. Defaults to false, matching Lima: a read-only
+	// share is the safer thing to hand a container by accident.
+	Writable bool `yaml:"writable,omitempty"`
+}
+
+// Expand resolves a leading "~" in Location and makes it absolute.
+// MountPoint is left untouched: it names a guest path, which the host home
+// directory has nothing to do with.
+func (m Mount) Expand() (Mount, error) {
+	loc, err := localpathutil.Expand(m.Location)
+	if err != nil {
+		return m, err
+	}
+	m.Location = filepath.Clean(loc)
+	return m, nil
+}
+
+// GuestPath is where the mount appears inside the VM.
+// Call it on an Expanded mount: with no explicit MountPoint the guest path is
+// the host path, so an unexpanded "~/projects" would answer literally that.
+func (m Mount) GuestPath() string {
+	if m.MountPoint != "" {
+		return m.MountPoint
+	}
+	return m.Location
 }
 
 // maxLimaDiskNameLen is the longest Lima disk name that survives round-tripping
@@ -318,6 +373,64 @@ func sanitizeMirrorName(s string) string {
 	return b.String()
 }
 
+// reservedGuestPaths are guest paths a mount must not land on. The first group
+// is Lima's own list (limayaml.Validate rejects them outright); klimax adds the
+// image-store mountpoint, where a host share would hide the container images the
+// vm.imageDisk data disk exists to preserve.
+var reservedGuestPaths = []string{
+	"/", "/bin", "/dev", "/etc", "/home", "/opt", "/sbin", "/tmp", "/usr", "/var",
+	"/var/lib/containerd",
+}
+
+// validateMounts checks vm.mounts for the mistakes that are cheap to catch here
+// and expensive to debug later. It deliberately does no filesystem I/O — that a
+// location actually exists is checked at `up` time, where the filesystem is real
+// (see cli.checkMountLocations).
+func validateMounts(mounts []Mount) []error {
+	var errs []error
+	seen := make(map[string]int, len(mounts))
+
+	for i, m := range mounts {
+		if strings.TrimSpace(m.Location) == "" {
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location must not be empty", i))
+			continue
+		}
+		// Reject relative paths *before* expansion. localpathutil.Expand would
+		// happily resolve "projects" against the current working directory, so
+		// the same config would mean different things depending on where klimax
+		// was run from.
+		if !filepath.IsAbs(m.Location) && !localpathutil.IsTildePath(m.Location) {
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q must be an absolute path or start with \"~/\"", i, m.Location))
+			continue
+		}
+		expanded, err := m.Expand()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q cannot be expanded: %w", i, m.Location, err))
+			continue
+		}
+		if m.MountPoint != "" && !filepath.IsAbs(m.MountPoint) {
+			// Lima does not tilde-expand guest paths, so "~/x" would become a
+			// literal directory named "~" in the guest.
+			errs = append(errs, fmt.Errorf("vm.mounts[%d].mountPoint %q must be an absolute guest path (no \"~\" expansion in the guest)", i, m.MountPoint))
+			continue
+		}
+
+		guest := filepath.Clean(expanded.GuestPath())
+		if slices.Contains(reservedGuestPaths, guest) {
+			errs = append(errs, fmt.Errorf("vm.mounts[%d] would mount over the guest system path %q — pick a different mountPoint", i, guest))
+			continue
+		}
+		if prev, dup := seen[guest]; dup {
+			// Lima silently merges same-mountPoint entries, last writable wins.
+			// Two entries claiming one guest path is always a config mistake.
+			errs = append(errs, fmt.Errorf("vm.mounts[%d] and vm.mounts[%d] both mount at guest path %q", prev, i, guest))
+			continue
+		}
+		seen[guest] = i
+	}
+	return errs
+}
+
 // Validate checks the config for correctness.
 func Validate(cfg *Config) error {
 	var errs []error
@@ -328,6 +441,8 @@ func Validate(cfg *Config) error {
 	if cfg.VM.Name == "" {
 		errs = append(errs, errors.New("vm.name must not be empty"))
 	}
+
+	errs = append(errs, validateMounts(cfg.VM.Mounts)...)
 
 	if _, _, err := net.ParseCIDR(cfg.Network.KindBridgeCIDR); err != nil {
 		errs = append(errs, fmt.Errorf("network.kindBridgeCIDR %q is not a valid CIDR: %w", cfg.Network.KindBridgeCIDR, err))

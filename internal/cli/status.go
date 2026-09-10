@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/klimax/internal/limatemplate"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
@@ -21,8 +23,31 @@ import (
 type statusReport struct {
 	VM       statusVM        `json:"vm"                 yaml:"vm"`
 	Route    statusRoute     `json:"route"              yaml:"route"`
+	Mounts   *statusMounts   `json:"mounts,omitempty"   yaml:"mounts,omitempty"`
 	Clusters *statusClusters `json:"clusters,omitempty" yaml:"clusters,omitempty"`
 	IPTables *statusIPTables `json:"iptables,omitempty" yaml:"iptables,omitempty"`
+}
+
+// statusMounts reports the host directories shared into the guest over virtiofs.
+// It reads the Lima instance config rather than the guest, so it works on a
+// stopped VM — which is exactly when someone is checking whether an edit landed.
+//
+// This covers host-directory shares only. The VM's root disk (vm.disk) and the
+// image store (vm.imageDisk) are virtio-blk block devices, not mounts, and do
+// not appear here.
+type statusMounts struct {
+	// Shares is what the VM has, or will have on its next start.
+	Shares []statusMount `json:"shares"          yaml:"shares"`
+	// PendingRestart is set when vm.mounts in the klimax config no longer
+	// matches Shares — `klimax up` offers to restart the VM and apply it.
+	PendingRestart bool   `json:"pendingRestart"  yaml:"pendingRestart"`
+	Error          string `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+type statusMount struct {
+	HostPath  string `json:"hostPath"  yaml:"hostPath"`
+	GuestPath string `json:"guestPath" yaml:"guestPath"`
+	Writable  bool   `json:"writable"  yaml:"writable"`
 }
 
 type statusVM struct {
@@ -117,6 +142,10 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 		rep.Route.Gateway = gw
 	}
 
+	if inst != nil {
+		rep.Mounts = collectMounts(inst, cfg)
+	}
+
 	// Clusters and iptables need a running VM.
 	if inst == nil || inst.Status != limatype.StatusRunning {
 		return rep, nil
@@ -146,6 +175,29 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 	return rep, nil
 }
 
+// collectMounts reads the instance's host-directory shares and compares them
+// with what the config asks for.
+func collectMounts(inst *limatype.Instance, cfg *config.Config) *statusMounts {
+	// Shares is always a slice, never nil: -o json should show [] for "shares
+	// nothing" rather than null.
+	out := &statusMounts{Shares: []statusMount{}}
+
+	live, err := vm.ReadInstanceMounts(vm.InstanceYAMLPath(inst.Dir))
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	for _, m := range vm.NormalizeMounts(live) {
+		out.Shares = append(out.Shares, statusMount{
+			HostPath:  m.HostPath,
+			GuestPath: m.GuestPath,
+			Writable:  m.Writable,
+		})
+	}
+	out.PendingRestart = !vm.MountsEqual(live, limatemplate.BuildMounts(cfg))
+	return out
+}
+
 // printStatusText renders the human-readable report. The wording is deliberately
 // unchanged from before the machine-readable formats were added.
 func printStatusText(rep *statusReport) {
@@ -164,6 +216,34 @@ func printStatusText(rep *statusReport) {
 		fmt.Printf("  %s → present (via %s)\n", rep.Route.CIDR, rep.Route.Gateway)
 	} else {
 		fmt.Printf("  %s → MISSING\n", rep.Route.CIDR)
+	}
+
+	// Printed before the sections that need a running VM, because the mount list
+	// is readable either way — and a stopped VM is when you check whether an
+	// edit landed.
+	fmt.Println("\n=== Host Mounts (virtiofs) ===")
+	switch {
+	case rep.Mounts == nil:
+		fmt.Println("  (VM is not created)")
+	case rep.Mounts.Error != "":
+		fmt.Printf("  error: %v\n", rep.Mounts.Error)
+	case len(rep.Mounts.Shares) == 0:
+		fmt.Println("  (none)")
+	default:
+		for _, m := range rep.Mounts.Shares {
+			mode := "ro"
+			if m.Writable {
+				mode = "rw"
+			}
+			if m.GuestPath == m.HostPath {
+				fmt.Printf("  %s (%s)\n", m.HostPath, mode)
+			} else {
+				fmt.Printf("  %s → %s (%s)\n", m.HostPath, m.GuestPath, mode)
+			}
+		}
+	}
+	if rep.Mounts != nil && rep.Mounts.PendingRestart {
+		fmt.Println("  ⚠ vm.mounts in the config differs — apply with: klimax up")
 	}
 
 	fmt.Println("\n=== Kind Clusters ===")

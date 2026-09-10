@@ -33,6 +33,36 @@ vm:
   # cached images instead of re-pulling them:
   #   klimax down && klimax disk resize-image 30GiB && klimax up
 
+  # Host directories shared into the guest over virtiofs. Empty by default:
+  # klimax shares nothing of yours, only its own registry cache.
+  #
+  # Each directory appears in the VM at the SAME absolute path, and that is what
+  # makes a host-path bind work from macOS:
+  #
+  #   docker run -v ~/projects/conf:/etc/app ...
+  #
+  # The Docker daemon runs inside the VM and resolves the bind source there, so
+  # the path has to exist on both sides. WITHOUT a matching entry here that bind
+  # does not fail — dockerd creates the missing path in the guest and the
+  # container sees an EMPTY directory.
+  #
+  # writable defaults to false (matching Lima). A read-only share is the safer
+  # thing to hand a container by accident, so opt in per directory.
+  #
+  # Unlike imageDisk and disablePortMirroring, this list does NOT need the VM
+  # recreated: `klimax up` spots the change and offers to restart the VM
+  # (`klimax status` shows the VM's current shares and flags a pending change).
+  # A restart still stops every kind cluster on the VM.
+  mounts: []
+  # mounts:
+  #   - location: "~/projects"     # host path; "~" is expanded
+  #     writable: true             # default false
+  #   - location: "~/data"
+  #     mountPoint: "/srv/data"    # optional: a different guest path.
+  #                                # Leave it out unless you mean it — a guest
+  #                                # path that differs from the host path is the
+  #                                # one case where `-v <host path>` stops working.
+
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
   # Subnet for the Docker bridge network named "kind".

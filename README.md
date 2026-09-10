@@ -228,6 +228,14 @@ vm:
   imageDisk: "30GiB"  # default; persistent image store, survives `klimax destroy`
   # rosetta: false      # enable Rosetta 2 for amd64 containers (ARM64 only)
 
+  # Host directories shared into the guest over virtiofs. Empty by default.
+  # Each appears in the VM at the same absolute path, which is what makes a
+  # host-path `docker run -v ~/projects/conf:/etc/app` bind resolve.
+  mounts: []
+  # mounts:
+  #   - location: "~/projects"
+  #     writable: true          # default false
+
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # routed from macOS → VM; no SNAT
@@ -305,7 +313,7 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 | `klimax down` | Stop the VM — preserves all clusters and registry cache data |
 | `klimax down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
 | `klimax destroy` | Stop + delete VM, delete all clusters, remove host route |
-| `klimax status` | Show VM state, clusters, route, and iptables rule presence (`-o text\|json\|yaml`) |
+| `klimax status` | Show VM state, host mounts, clusters, route, and iptables rule presence (`-o text\|json\|yaml`) |
 | `klimax doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta); `--fix` applies what klimax can repair, `-o text\|json\|yaml` |
 | `klimax version` | Print the klimax version |
 | `klimax shell` | Open an interactive SSH session in the VM |
@@ -406,6 +414,39 @@ klimax docker-context --unset      # docker context use default
 ```
 
 > If `DOCKER_HOST` is set it overrides the active Docker context — use one or the other. `klimax docker-context` warns when both are active.
+
+### Sharing host directories (`vm.mounts`)
+
+The Docker daemon runs **inside the VM**, so it resolves a bind-mount source inside the VM. klimax shares nothing of yours by default, and a bind for an unshared path does not fail — dockerd creates the missing directory in the guest and the container sees an **empty** directory:
+
+```sh
+# Without a matching vm.mounts entry, /etc/app is empty in the container.
+docker run -v ~/projects/conf:/etc/app alpine ls /etc/app
+```
+
+List the directories you want shared, and they appear in the VM at the **same absolute path** — which is exactly what makes a host-path `-v` work:
+
+```yaml
+vm:
+  mounts:
+    - location: "~/projects"
+      writable: true
+```
+
+```sh
+klimax up      # spots the change and offers to restart the VM
+klimax status  # shows the VM's current shares
+```
+
+| | |
+|---|---|
+| `location` | Host directory. `~` is expanded. Must exist — `klimax up` refuses a path that doesn't, rather than letting it fail deep inside the VM start. |
+| `writable` | Defaults to `false`, matching Lima. Opt in per directory. |
+| `mountPoint` | Optional guest path. Leave it out unless you mean it: a guest path that differs from the host path is the one case where `-v <host path>` stops working. |
+
+Unlike `vm.imageDisk` and `network.disablePortMirroring`, this list does **not** need the VM recreated. `klimax up` compares it against the VM's current shares and offers to restart — a restart still stops every kind cluster on the VM, so it asks first, and does nothing when run non-interactively.
+
+> **Mounts are host-directory shares only.** The VM's root disk (`vm.disk`) and the image store (`vm.imageDisk`) are virtio-blk block devices, not virtiofs mounts, and `mountType` has no bearing on them.
 
 ### Clusters
 
