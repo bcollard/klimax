@@ -8,9 +8,8 @@ vm:
   # cpus and memory default to a share of THIS Mac, so the same config suits a
   # 16GiB Air and a 64GiB Studio. Set them to pin a value instead; klimax warns
   # on `up` if what you pin exceeds the machine.
-  #   cpus:   3/4 of the cores      (10-core M1 Pro -> 8)
-  #   memory: half the RAM, or all but 12GiB, whichever is larger, capped at 75%
-  #           (16GiB -> 8GiB, 32GiB -> 20GiB, 64GiB -> 48GiB)
+  #   cpus:   3/4 of the cores  (10-core M1 Pro -> 8)
+  #   memory: half the RAM      (16GiB -> 8GiB, 32GiB -> 16GiB, 64GiB -> 32GiB)
   # cpus: 8
   # memory: "20GiB"
   disk: "20GiB"       # default. Only the OS, Docker metadata and volumes live here —
