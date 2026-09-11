@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -150,10 +151,13 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("registries: %w", err)
 	}
 
-	// 8. Point dockerd at the Hub mirror, so `docker pull` and `docker compose`
-	// on the host benefit from the cache too — not just cluster pulls.
+	// 8. Route dockerd's own pulls through the mirrors, so `docker pull` and
+	// `docker compose` benefit from the cache too — not just cluster pulls.
 	if err := reconcileDockerDaemonConfig(ctx, g, cfg); err != nil {
 		return fmt.Errorf("docker daemon config: %w", err)
+	}
+	if err := reconcileDockerRegistryHosts(ctx, g, cfg); err != nil {
+		return fmt.Errorf("docker registry hosts: %w", err)
 	}
 
 	// 9. Install no-NAT rules + systemd persistence in guest.
@@ -677,11 +681,15 @@ func extractKlimaxEnvBlock(content string) string {
 // reconcileDockerDaemonConfig points dockerd at the Docker Hub pull-through
 // cache, and restarts Docker when the file changes.
 //
-// Cluster pulls already use every mirror: kind nodes read
-// /etc/containerd/certs.d, which supports per-registry mirrors. dockerd does
-// not read certs.d and its own mirror setting covers Docker Hub only, so this
-// closes the most valuable part of the gap — Hub is where rate limits bite —
-// and cannot close the rest.
+// This is the fallback path. daemon.json's registry-mirrors applies to Docker
+// Hub alone (moby's lookupV2Endpoints consults mirrors only when the hostname
+// is docker.io), and is used when dockerd runs the classic graphdriver image
+// store. With the containerd image store — the default since Docker 28 —
+// reconcileDockerRegistryHosts installs per-registry mirrors instead, and moby
+// skips the legacy merge once hosts.toml supplies more than one host.
+//
+// Both are written, because which one applies depends on the image store, and
+// a user can switch stores without klimax running again.
 //
 // klimax only owns the registry-mirrors key. An existing daemon.json with other
 // settings is left alone apart from that one field.
@@ -715,4 +723,79 @@ func reconcileDockerDaemonConfig(ctx context.Context, g *guest.Client, cfg *conf
 	}
 	_, err = g.Run(ctx, "sudo systemctl restart docker")
 	return err
+}
+
+// reconcileDockerRegistryHosts installs a hosts.toml per configured mirror
+// under dockerd's own certs.d, so `docker pull quay.io/...` is served by the
+// cache rather than going direct.
+//
+// dockerd reads this tree through containerd's config.ConfigureHosts
+// (moby daemon/hosts.go → registry.CertsDir(), i.e. /etc/docker/certs.d). It is
+// a different tree from the /etc/containerd/certs.d that the kind nodes use,
+// and neither daemon reads the other's — which is why this is separate from
+// kind.configureRegistryMirrors rather than sharing its output.
+//
+// No Docker restart: RegistryHosts is resolved per pull, so a new file applies
+// to the next `docker pull` immediately.
+//
+// Only effective with the containerd image store, which moby has defaulted to
+// since Docker 28. On the classic graphdriver store the files are inert and
+// daemon.json's Hub-only mirror still applies, so writing them either way costs
+// nothing and survives a user switching stores.
+func reconcileDockerRegistryHosts(ctx context.Context, g *guest.Client, cfg *config.Config) error {
+	hosts := registry.DockerdRegistryHosts(cfg.Registries)
+
+	want := make(map[string]string, len(hosts))
+	for _, h := range hosts {
+		want[h.Host] = h.DockerHostsTOML()
+	}
+
+	// Remove files for mirrors that are no longer configured. Only klimax's own
+	// hosts.toml is deleted, never the directory's other contents: the same
+	// path is where a user drops a registry CA (ca.crt, client certs), and
+	// taking those out with it would break pulls in a way that looks unrelated.
+	existing, err := g.Run(ctx, "sudo ls -1 "+registry.DockerCertsDir+" 2>/dev/null || true")
+	if err != nil {
+		return err
+	}
+	for _, host := range strings.Fields(existing) {
+		if _, keep := want[host]; keep {
+			continue
+		}
+		p := registry.DockerHostsPath(host)
+		out, err := g.Run(ctx, "sudo head -1 "+p+" 2>/dev/null || true")
+		if err != nil {
+			return err
+		}
+		if !strings.Contains(out, "Managed by klimax") {
+			continue // someone else's file
+		}
+		slog.Info("Removing the dockerd mirror for a registry no longer configured", "registry", host)
+		if _, err := g.Run(ctx, "sudo rm -f "+p+" && sudo rmdir --ignore-fail-on-non-empty "+
+			registry.DockerCertsDir+"/"+host); err != nil {
+			return err
+		}
+	}
+
+	for _, h := range hosts {
+		p := registry.DockerHostsPath(h.Host)
+		current, err := g.Run(ctx, "sudo cat "+p+" 2>/dev/null || true")
+		if err != nil {
+			return err
+		}
+		// guest.Run trims, and WriteFile appends a newline; compare trimmed or
+		// every run rewrites a file that has not changed.
+		if strings.TrimSpace(current) == strings.TrimSpace(want[h.Host]) {
+			continue
+		}
+		slog.Info("Pointing dockerd at a pull-through cache", "registry", h.Host, "endpoint", h.Endpoint)
+		// WriteFile does not create parent directories.
+		if _, err := g.Run(ctx, "sudo mkdir -p "+path.Dir(p)); err != nil {
+			return err
+		}
+		if err := g.WriteFile(ctx, p, want[h.Host]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

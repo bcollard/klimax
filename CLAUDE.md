@@ -78,6 +78,8 @@ internal/vm/vm.go                    Manager: EnsureRunning, Stop, Delete, Inspe
 internal/guest/guest.go              SSH Client: Run, RunScript, RunScriptStream, WriteFile, SSHArgs
 internal/docker/network.go           EnsureKindNetwork (idempotent, CIDR comparison)
 internal/registry/registry.go        EnsureRegistries, RegistryHosts (pull-through mirrors → containerd certs.d hosts.toml + cache volumes)
+internal/registry/daemon.go          HubMirrorEndpoint, MergeDaemonConfig — dockerd's Hub-only registry-mirrors (classic image store)
+internal/registry/dockerhosts.go     DockerdRegistryHosts, DockerHostsTOML — per-registry mirrors for dockerd via /etc/docker/certs.d
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
 internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
@@ -414,30 +416,68 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 
 ## Registry mirrors reach dockerd and the clusters differently
 
-Cluster pulls and `docker pull` take completely different paths, and only one of
-them can use every mirror.
+Cluster pulls and `docker pull` take different paths. Both can use every
+mirror, but through separate, non-interchangeable config trees.
 
-| Consumer | Mechanism | Which mirrors it can use |
+| Consumer | Mechanism | Written by |
 |---|---|---|
-| kind nodes (cluster pulls) | `/etc/containerd/certs.d/<host>/hosts.toml`, written per node by `kind.configureRegistryMirrors` | **all of them** — containerd supports per-registry mirrors |
-| dockerd (`docker pull`, `docker compose`) | `registry-mirrors` in `/etc/docker/daemon.json`, written by `cli.reconcileDockerDaemonConfig` | **Docker Hub only** |
+| kind nodes (cluster pulls) | `/etc/containerd/certs.d/<host>/hosts.toml` on each node | `kind.configureRegistryMirrors` |
+| dockerd, containerd image store | `/etc/docker/certs.d/<host>/hosts.toml` in the VM | `cli.reconcileDockerRegistryHosts` |
+| dockerd, classic graphdriver store | `registry-mirrors` in `/etc/docker/daemon.json` | `cli.reconcileDockerDaemonConfig` |
 
-`registry-mirrors` has always been Hub-specific; there is no per-registry
-equivalent. So `docker pull quay.io/...` on the VM goes direct, while the same
-image pulled by a cluster is cached. Hub is where rate limits actually bite, so
-the partial fix is still worth having — but do not document it as if it covered
-everything.
+**`certs.d` is a per-registry config directory, not just TLS material.** The
+name is historical — Docker used it for `ca.crt`/`client.cert` from 2015 — but
+containerd 1.5 added `hosts.toml` to the same layout, and that file is what
+declares mirrors. Both daemons now read both kinds of file from their own tree.
 
-> **containerd's `certs.d` is not a way around this.** dockerd resolves
-> registries with its own client and never reads it, even with the containerd
-> snapshotter enabled. Verified on Docker 29: a `certs.d` entry for `quay.io`
-> on the VM left `docker pull quay.io/...` going direct, with zero bytes added
-> to the mirror cache.
+**The two trees are separate and neither daemon reads the other's.**
+`/etc/containerd/certs.d` is the CRI plugin's (kubelet, so the kind nodes);
+`/etc/docker/certs.d` is dockerd's, hardcoded as `registry.CertsDir()` in
+moby's `daemon/pkg/registry/config.go`. They share a file format only because
+dockerd calls containerd's loader — `hostconfig.ConfigureHosts` in moby's
+`daemon/hosts.go`.
+
+> **This was documented backwards until v0.1.62.** An earlier note claimed
+> dockerd could not do per-registry mirrors at all and that `certs.d` was "not
+> a way around this". That conclusion came from testing
+> `/etc/containerd/certs.d` — the wrong tree — and seeing `docker pull` ignore
+> it. `/etc/docker/certs.d/quay.io/hosts.toml` works: verified on Docker 29.8.0
+> by pulling an uncached gcr.io image and watching the mirror cache grow from
+> 0 to 1 MB.
+
+### Both dockerd mechanisms are written, deliberately
+
+`registry-mirrors` is Hub-only and genuinely cannot be otherwise: moby's
+`lookupV2Endpoints` (`daemon/pkg/registry/service_v2.go`) consults mirrors only
+when the hostname is `docker.io`, returning a single endpoint for anything else.
+
+Which mechanism applies depends on the **image store**:
+
+- **containerd image store** (default since Docker 28) — `daemon.RegistryHosts`
+  reads `/etc/docker/certs.d`. Wired in only under `usesSnapshotter`
+  (`daemon/daemon.go`). Per-registry mirrors work.
+- **classic graphdriver store** — `lookupV2Endpoints`. Hub only.
+
+Since a user can switch stores without klimax running again, `klimax up` writes
+both. When `hosts.toml` supplies more than one host, moby skips the legacy
+merge itself, so they never conflict.
+
+`hosts.toml` needs **no Docker restart** — `RegistryHosts` is resolved per pull.
+`daemon.json` does, which is why only the latter restarts dockerd.
+
+The `server = "<upstream>"` line matters: containerd tries the `[host.…]`
+entries first and falls back to `server`, so a mirror that is down degrades to
+a direct pull instead of failing it.
+
+Files carry a `# Managed by klimax` first line. Pruning a removed mirror checks
+for that marker and deletes only `hosts.toml`, never the directory's other
+contents — the same path is where a user drops a registry CA.
 
 ### The endpoint must be 127.0.0.1, not the container name
 
-`registry.HubMirrorEndpoint` returns `http://127.0.0.1:<port>`, deliberately not
-the `registry-dockerio` name the kind nodes use. A kind node is a container on
+`registry.HubMirrorEndpoint` and `registry.DockerdRegistryHosts` both return
+`http://127.0.0.1:<port>`, deliberately not the container names the kind nodes
+use. A kind node is a container on
 the `kind` network, where Docker's embedded DNS resolves that name; **dockerd
 runs in the VM's host namespace, where it does not resolve at all**. Measured:
 `curl registry-dockerio:5030` from the VM returns nothing, `127.0.0.1:5030`
