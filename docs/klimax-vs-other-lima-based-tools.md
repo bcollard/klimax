@@ -151,10 +151,17 @@ With `disablePortMirroring: true`:
 
 ## What about Docker Desktop, OrbStack, and Podman Desktop?
 
-**Docker Desktop** does not use Lima. It runs a proprietary Linux VM using Apple
-Virtualization.framework directly, and uses its own port-forwarding mechanism. It cannot
-coexist conflicts with Lima VMs in terms of the vzNAT bridge network, but its own port
-mappings (for Kubernetes) can still overlap with Lima-forwarded ports on `127.0.0.1`.
+**Docker Desktop** does not use Lima. It runs its own Linux VM on Apple
+Virtualization.framework with its own port-forwarding mechanism, so there is no vzNAT
+bridge conflict with a Lima VM. What *can* collide is `127.0.0.1`: Docker Desktop's port
+mappings (including its Kubernetes API server) and Lima's port mirroring both land there.
+`disablePortMirroring: true` — the klimax default — removes that risk from klimax's side.
+
+Feature-wise, Docker Desktop gives you a polished GUI, a single-node Kubernetes toggle,
+and organisation policy controls. klimax has none of those and is not trying to: it is a
+provisioner for multi-cluster kind labs, and it can also serve as a plain Docker host
+(see [using klimax as a Docker host](https://klimax.dev/docs/docker-host.html)) if you
+would rather not install Docker Desktop at all.
 
 **OrbStack** also uses Apple Virtualization.framework (not Lima). It runs its own VM with a
 custom network stack. OrbStack's event-based port forwarding is independent of Lima's hostagent,

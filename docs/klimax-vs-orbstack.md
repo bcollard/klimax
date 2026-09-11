@@ -200,6 +200,40 @@ on `127.0.0.1`. This does not affect OrbStack, which does not use Lima port mirr
 
 ---
 
+## What OrbStack does that klimax does not
+
+Worth stating plainly, because the sections above are mostly framed the other
+way round.
+
+**`*.orb.local` DNS, with no setup.** Every container and Kubernetes Service
+gets a working hostname immediately — no domain, no DNS provider, no
+`/etc/hosts`. OrbStack can do this because it owns its whole network stack.
+klimax's answer is real DNS via [ExternalDNS](external-dns.md): more capable
+(publicly trusted TLS, names that work from other machines and survive the VM)
+but it needs a domain you control and a setup session. On "friction to the first
+working hostname", OrbStack wins outright.
+
+**Linux machines.** `orb create ubuntu` gives you a VM to log into. klimax
+provisions exactly one VM, to host containers and clusters. Running arbitrary
+Linux machines is out of scope by design.
+
+**Startup time.** OrbStack is usable in a couple of seconds. klimax restarts an
+existing VM in about fifteen, and a first boot takes minutes (image download,
+cloud-init, Docker, kind). Fine for a login-time `klimax autostart`; not
+comparable if you stop and start all day.
+
+**A full GUI.** [Klimax UI](https://klimax.dev/docs/klimax-ui.html) is a
+companion for watching VM, cluster and mirror state — not a control surface for
+everything.
+
+**Continuous disk reclaim.** OrbStack returns freed space to the host as it
+goes. klimax's root disk mounts with `discard`, but the image disk relies on the
+weekly `fstrim.timer`, so reclaim there is periodic rather than immediate. A
+measured example: `fstrim /var/lib/containerd` returned 2.1 GiB that the sparse
+file was still holding. Run it by hand if you need the space back sooner.
+
+---
+
 ## When to use OrbStack
 
 - You want a **single, polished GUI** that handles Docker + K8s + Linux VMs in one app

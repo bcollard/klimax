@@ -62,7 +62,8 @@ This README is the quick tour. The full documentation lives at
 | [Reset &amp; reinstall](https://klimax.dev/docs/reset.html) | Three levels, from rebuilding the VM to a full clean install |
 | [Klimax UI](https://klimax.dev/docs/klimax-ui.html) | The native SwiftUI companion app |
 | [Agent Skill](https://klimax.dev/docs/agent-skill.html) | Teach AI coding tools to drive klimax |
-| [klimax vs. other tools](https://klimax.dev/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack |
+| [klimax as a Docker host](https://klimax.dev/docs/docker-host.html) | Use the VM's Docker daemon on its own, with published ports on `localhost` |
+| [klimax vs. other tools](https://klimax.dev/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack — including what they do better |
 | [Changelog](https://klimax.dev/docs/changelog.html) | Release history |
 
 ---
@@ -683,7 +684,9 @@ vzNAT IPs.)
 > Run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs.
 
 See [docs/klimax-vs-other-lima-based-tools.md](docs/klimax-vs-other-lima-based-tools.md) for
-a detailed comparison with Rancher Desktop, Colima, and kind-on-lima.
+a detailed comparison with Rancher Desktop, Colima, and kind-on-lima, and
+[docs/klimax-vs-orbstack.md](docs/klimax-vs-orbstack.md) for OrbStack — which includes an
+honest list of what OrbStack does better.
 
 ---
 
