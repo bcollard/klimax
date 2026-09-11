@@ -85,7 +85,14 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone, Labels: labels}
 
-	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
+	// Nodes have their own trust store, so the certificates in the VM do not
+	// reach them; they are installed per cluster at creation.
+	caCerts, err := cfg.VM.CACerts.Load()
+	if err != nil {
+		return err
+	}
+
+	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
 

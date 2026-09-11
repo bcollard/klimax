@@ -382,6 +382,12 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 		// Socket lands at ~/.<vmName>.docker.sock; set DOCKER_HOST=unix://$HOME/.<name>.docker.sock.
 		PortForwards: buildPortForwards(cfg),
 
+		// Trust anchors must exist before the provision script runs: cloud-init
+		// installs Docker from get.docker.com, which fails TLS verification
+		// behind an intercepting proxy. Lima maps this to cloud-init's own
+		// ca_certs module, which runs early in first boot.
+		CACertificates: buildCACertificates(cfg),
+
 		// Disable containerd; we use Docker
 		Containerd: limatype.Containerd{
 			System: &systemFalse,
@@ -482,4 +488,22 @@ func proxyProvisions(cfg *config.Config) []limatype.Provision {
 	return []limatype.Provision{
 		dataFile(DockerProxyDropInPath, content, "0644"),
 	}
+}
+
+
+// buildCACertificates passes the configured PEM contents to Lima.
+//
+// Load errors are swallowed here because Build has no error return and the
+// config was already validated by the time it is called — cli.checkCACerts
+// surfaces a bad file before the VM is ever created.
+func buildCACertificates(cfg *config.Config) limatype.CACertificates {
+	certs, err := cfg.VM.CACerts.Load()
+	if err != nil || len(certs) == 0 {
+		return limatype.CACertificates{}
+	}
+	out := make([]string, 0, len(certs))
+	for _, name := range config.SortedNames(certs) {
+		out = append(out, certs[name])
+	}
+	return limatype.CACertificates{Certs: out}
 }

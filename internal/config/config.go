@@ -44,6 +44,10 @@ type VMConfig struct {
 	// Changing this list is applied by `klimax up` (see vm.ReconcileMounts) —
 	// unlike imageDisk, it does not need the VM recreated.
 	Mounts []Mount `yaml:"mounts"`
+	// CACerts are extra certificate authorities the VM and its clusters should
+	// trust — a TLS-intercepting proxy, or a private registry with a
+	// self-signed chain. Empty by default.
+	CACerts CACerts `yaml:"caCerts,omitempty"`
 }
 
 // Mount shares a host directory with the guest over virtiofs.

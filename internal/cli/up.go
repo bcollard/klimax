@@ -106,27 +106,56 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("detecting lima0 IP: %w", err)
 	}
 
-	// 4. Give dockerd the proxy, if one is configured.
-	if err := reconcileDockerProxy(ctx, g, cfg, lima0IP); err != nil {
+	// 4. Install extra CA certificates. Before the proxy: a TLS-intercepting
+	// proxy is useless without its certificate trusted, and both end in the
+	// same Docker restart.
+	caChanged, err := reconcileCACerts(ctx, g, cfg)
+	if err != nil {
+		return fmt.Errorf("ca certificates: %w", err)
+	}
+
+	// 5. Give dockerd the proxy, if one is configured.
+	if err := reconcileDockerProxy(ctx, g, cfg, lima0IP, caChanged); err != nil {
 		return fmt.Errorf("docker proxy: %w", err)
 	}
 
-	// 5. Ensure kind Docker network.
+	// The mirrors get the same proxy dockerd did, host-inherited or not.
+	effectiveCfg, err := effectiveProxy(ctx, g, cfg)
+	if err != nil {
+		return fmt.Errorf("resolving proxy: %w", err)
+	}
+	// Containers cannot reach a proxy on the VM's loopback, so they get the
+	// gateway-rewritten form. dockerd and guest shells keep the literal value:
+	// they run in the VM's own network namespace, where loopback is correct.
+	effectiveProxyEnv := effectiveCfg.ProxyEnv(lima0IP)
+	containerProxyEnv := effectiveCfg.ContainerProxyEnv(lima0IP, cfg.KindBridgeGateway())
+
+	// Put the proxy in the guest environment as well. Lima only writes what the
+	// Mac's system settings say; a proxy that came from the klimax config would
+	// otherwise be invisible to every SSH session — and therefore to
+	// `kind create cluster`, which reads its own environment to decide what to
+	// inject into each node, and to the in-guest `kubectl apply -f https://…`
+	// that installs MetalLB.
+	if err := reconcileGuestProxyEnv(ctx, g, cfg, effectiveProxyEnv); err != nil {
+		return fmt.Errorf("guest proxy environment: %w", err)
+	}
+
+	// 6. Ensure kind Docker network.
 	if err := docker.EnsureKindNetwork(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
 		return fmt.Errorf("docker network: %w", err)
 	}
 
-	// 6. Ensure pull-through mirrors.
-	if err := registry.EnsureRegistries(ctx, g, cfg.Registries, cfg.ProxyEnv(lima0IP)); err != nil {
+	// 7. Ensure pull-through mirrors.
+	if err := registry.EnsureRegistries(ctx, g, cfg.Registries, containerProxyEnv, cfg.VM.CACerts.Enabled()); err != nil {
 		return fmt.Errorf("registries: %w", err)
 	}
 
-	// 7. Install no-NAT rules + systemd persistence in guest.
+	// 8. Install no-NAT rules + systemd persistence in guest.
 	if err := routing.InstallNoNat(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
 		return fmt.Errorf("routing rules: %w", err)
 	}
 
-	// 8. Add macOS route for kind CIDR → lima0.
+	// 9. Add macOS route for kind CIDR → lima0.
 	if err := routing.EnsureRoute(cfg.Network.KindBridgeCIDR, lima0IP); err != nil {
 		return fmt.Errorf("macOS route: %w", err)
 	}
@@ -392,7 +421,7 @@ func raiseLimaLogLevelForVMLogs(cmd *cobra.Command) {
 //
 // Removing the proxy from the config removes the drop-in, rather than leaving
 // dockerd pointed at a proxy that is no longer there.
-func reconcileDockerProxy(ctx context.Context, g *guest.Client, cfg *config.Config, lima0IP string) error {
+func reconcileDockerProxy(ctx context.Context, g *guest.Client, cfg *config.Config, lima0IP string, forceRestart bool) error {
 	effective, err := effectiveProxy(ctx, g, cfg)
 	if err != nil {
 		return err
@@ -401,8 +430,14 @@ func reconcileDockerProxy(ctx context.Context, g *guest.Client, cfg *config.Conf
 
 	// `cat` of a missing file is an error, which is the "not present" case.
 	have, _ := g.Run(ctx, "cat "+limatemplate.DockerProxyDropInPath+" 2>/dev/null")
-	if strings.TrimSpace(have) == strings.TrimSpace(want) {
+	if strings.TrimSpace(have) == strings.TrimSpace(want) && !forceRestart {
 		return nil
+	}
+	if strings.TrimSpace(have) == strings.TrimSpace(want) {
+		// Only the trust store moved; dockerd reads it at start, so it still
+		// needs the restart even though the drop-in is unchanged.
+		_, err := g.Run(ctx, "sudo systemctl restart docker")
+		return err
 	}
 
 	if want == "" {
@@ -456,7 +491,26 @@ func guestEnvironmentProxy(ctx context.Context, g *guest.Client) (map[string]str
 	if err != nil {
 		return nil, err
 	}
-	return parseEnvironmentProxy(out), nil
+	// Strip klimax's own block first. It is written from the config, so reading
+	// it back as "the host's proxy" would make a configured proxy self-
+	// sustaining: removing network.proxy would never take effect, because the
+	// previous run's value would be re-inherited every time.
+	return parseEnvironmentProxy(stripKlimaxEnvBlock(out)), nil
+}
+
+// stripKlimaxEnvBlock removes the #KLIMAX-START..#KLIMAX-END section, leaving
+// Lima's block and anything the image shipped with.
+func stripKlimaxEnvBlock(content string) string {
+	start := strings.Index(content, klimaxEnvStart)
+	if start < 0 {
+		return content
+	}
+	rest := content[start:]
+	end := strings.Index(rest, klimaxEnvEnd)
+	if end < 0 {
+		return content[:start]
+	}
+	return content[:start] + rest[end+len(klimaxEnvEnd):]
 }
 
 // parseEnvironmentProxy extracts the proxy variables from /etc/environment
@@ -491,4 +545,125 @@ func proxySource(cfg *config.Config) string {
 		return "config"
 	}
 	return "macOS system settings (via Lima)"
+}
+
+// caCertDir is where update-ca-certificates looks for extra trust anchors.
+const caCertDir = "/usr/local/share/ca-certificates"
+
+// reconcileCACerts installs the configured CA certificates into the guest trust
+// store and reports whether anything changed.
+//
+// Certificates already reached a *new* VM through Lima's caCerts at first boot.
+// This runs on every `up` so that adding one to an existing VM does not require
+// recreating it — matching how vm.mounts and network.proxy behave — and so that
+// removing one takes effect.
+func reconcileCACerts(ctx context.Context, g *guest.Client, cfg *config.Config) (bool, error) {
+	want, err := cfg.VM.CACerts.Load()
+	if err != nil {
+		return false, err
+	}
+
+	// Only klimax-managed files are considered; the image's own trust store is
+	// never touched.
+	listed, _ := g.Run(ctx, "ls "+caCertDir+"/klimax-*.crt 2>/dev/null || true")
+	have := map[string]bool{}
+	for _, line := range strings.Fields(listed) {
+		have[filepath.Base(line)] = true
+	}
+
+	changed := false
+	for _, name := range config.SortedNames(want) {
+		path := caCertDir + "/" + name
+		if have[name] {
+			existing, _ := g.Run(ctx, "cat "+path+" 2>/dev/null")
+			if strings.TrimSpace(existing) == strings.TrimSpace(want[name]) {
+				delete(have, name)
+				continue
+			}
+		}
+		slog.Info("Installing CA certificate", "name", name)
+		if err := g.WriteFile(ctx, path, want[name]); err != nil {
+			return false, err
+		}
+		delete(have, name)
+		changed = true
+	}
+
+	// Anything left in have is klimax-managed but no longer configured.
+	for name := range have {
+		slog.Info("Removing CA certificate no longer in the config", "name", name)
+		if _, err := g.Run(ctx, "sudo rm -f "+caCertDir+"/"+name); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+
+	if !changed {
+		return false, nil
+	}
+	if _, err := g.Run(ctx, "sudo update-ca-certificates --fresh"); err != nil {
+		return false, fmt.Errorf("updating trust store: %w", err)
+	}
+	return true, nil
+}
+
+// klimaxEnvStart and klimaxEnvEnd delimit klimax's own block in
+// /etc/environment. Lima owns a #LIMA-START/#LIMA-END block in the same file;
+// the two must not tread on each other, and klimax's block is appended last so
+// its values win when both set the same name.
+const (
+	klimaxEnvStart = "#KLIMAX-START"
+	klimaxEnvEnd   = "#KLIMAX-END"
+)
+
+// reconcileGuestProxyEnv maintains klimax's block in the guest's
+// /etc/environment, so SSH sessions — and everything they launch — see the
+// proxy from the klimax config.
+//
+// Only the proxy variables go in. This is not a general-purpose env mechanism,
+// and /etc/environment is read by every login on the VM.
+func reconcileGuestProxyEnv(ctx context.Context, g *guest.Client, cfg *config.Config, env map[string]string) error {
+	var block strings.Builder
+	if !cfg.Network.Proxy.Enabled() {
+		// Host-inherited values already live in Lima's block; duplicating them
+		// would fight with Lima on every boot.
+		env = nil
+	}
+	if len(env) > 0 {
+		block.WriteString(klimaxEnvStart + "\n")
+		for _, k := range sortedKeys(env) {
+			fmt.Fprintf(&block, "%s=%s\n", k, env[k])
+		}
+		block.WriteString(klimaxEnvEnd + "\n")
+	}
+
+	current, _ := g.Run(ctx, "cat /etc/environment 2>/dev/null || true")
+	if extractKlimaxEnvBlock(current) == strings.TrimSuffix(block.String(), "\n") {
+		return nil
+	}
+
+	slog.Info("Updating guest proxy environment", "vars", len(env))
+	// sed deletes any previous klimax block; the new one is appended.
+	script := fmt.Sprintf(`#!/bin/bash
+set -euo pipefail
+sudo sed -i '/%s/,/%s/d' /etc/environment
+`, klimaxEnvStart, klimaxEnvEnd)
+	if block.Len() > 0 {
+		script += fmt.Sprintf("sudo tee -a /etc/environment >/dev/null <<'KLIMAX_ENV_EOF'\n%sKLIMAX_ENV_EOF\n", block.String())
+	}
+	return g.RunScript(ctx, "update guest proxy environment", script)
+}
+
+// extractKlimaxEnvBlock returns klimax's block from /etc/environment content,
+// without a trailing newline, or "" when absent.
+func extractKlimaxEnvBlock(content string) string {
+	start := strings.Index(content, klimaxEnvStart)
+	if start < 0 {
+		return ""
+	}
+	end := strings.Index(content[start:], klimaxEnvEnd)
+	if end < 0 {
+		return ""
+	}
+	return strings.TrimSpace(content[start : start+end+len(klimaxEnvEnd)])
 }

@@ -2,6 +2,7 @@ package config
 
 import (
 	"net"
+	"net/url"
 	"sort"
 	"strings"
 )
@@ -146,4 +147,72 @@ func (c *Config) ProxyEnv(lima0IP string) map[string]string {
 	set("https_proxy", p.HTTPS)
 	set("no_proxy", c.NoProxyString(lima0IP))
 	return env
+}
+
+// ContainerProxyEnv is ProxyEnv with any loopback proxy address rewritten to an
+// address containers can actually reach.
+//
+// Inside a container, 127.0.0.1 is that container's own loopback, so a proxy
+// listening on the VM's loopback is simply not there. registry:2 does not
+// degrade gracefully when its upstream is unreachable — it panics at startup,
+// and with --restart=always that becomes a crash loop that takes every mirror
+// down. Lima performs the same rewrite for the guest; this is the container-side
+// equivalent.
+//
+// gateway is the address to substitute: the kind bridge gateway, which is the VM
+// itself as seen from any container attached to that network.
+func (c *Config) ContainerProxyEnv(lima0IP, gateway string) map[string]string {
+	env := c.ProxyEnv(lima0IP)
+	if env == nil || gateway == "" {
+		return env
+	}
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		if strings.EqualFold(k, "no_proxy") {
+			out[k] = v
+			continue
+		}
+		out[k] = rewriteLoopbackHost(v, gateway)
+	}
+	return out
+}
+
+// rewriteLoopbackHost replaces a loopback host in a proxy URL with gateway,
+// leaving the scheme, port and path alone. A value that is not a URL, or not
+// loopback, is returned unchanged.
+func rewriteLoopbackHost(raw, gateway string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return raw
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	isLoopback := (ip != nil && ip.IsLoopback()) || strings.EqualFold(host, "localhost")
+	if !isLoopback {
+		return raw
+	}
+	if port := u.Port(); port != "" {
+		u.Host = net.JoinHostPort(gateway, port)
+	} else {
+		u.Host = gateway
+	}
+	return u.String()
+}
+
+// KindBridgeGateway returns the first usable address of the kind bridge CIDR,
+// which is the VM as seen from a container on that network. Empty when the CIDR
+// cannot be parsed.
+func (c *Config) KindBridgeGateway() string {
+	_, ipNet, err := net.ParseCIDR(c.Network.KindBridgeCIDR)
+	if err != nil {
+		return ""
+	}
+	gw := ipNet.IP.To4()
+	if gw == nil {
+		return ""
+	}
+	out := make(net.IP, len(gw))
+	copy(out, gw)
+	out[len(out)-1]++
+	return out.String()
 }
