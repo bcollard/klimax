@@ -149,7 +149,8 @@ vm:
   rosetta: false         # Rosetta 2 for amd64 containers; ARM64 only
   imageDisk: "30GiB"     # default: persistent Lima data disk mounted over
                          # /var/lib/containerd so the image store survives `destroy`.
-                         # "" = disabled (image store on the root disk).
+                         # Always on — applyDefaults re-fills an empty value, so
+                         # there is no config route back to the root disk.
                          # ⚠ VM-level: new VMs only. Resize an existing one with
                          # `klimax disk resize-image`.
   mounts: []             # host dirs shared into the guest over virtiofs; empty by default.

@@ -25,13 +25,13 @@ vm:
   # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
   # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
   # rosetta: false
-  # Persistent container image store. When set, klimax attaches a separate Lima
-  # data disk ($LIMA_HOME/_disk/<vm>-images) and mounts it over
-  # /var/lib/containerd in the guest, so kindest/node, registry:2 and any
-  # locally built images survive `klimax destroy`. A locally built image is the
-  # only kind no registry mirror can restore.
-  # Defaults to "30GiB". Set to "" to disable, putting the image store back on
-  # the VM root disk (in which case raise vm.disk to match).
+  # Persistent container image store. klimax attaches a separate Lima data disk
+  # ($LIMA_HOME/_disks/<vm>-img) and mounts it over /var/lib/containerd in the
+  # guest, so kindest/node, registry:2 and any locally built images survive
+  # `klimax destroy`. A locally built image is the only kind no registry mirror
+  # can restore.
+  # Always on; defaults to "30GiB". There is no way to put the image store back
+  # on the root disk — an empty value is treated as unset and re-defaulted.
   # WARNING: only takes effect on new VMs (klimax destroy && klimax up).
   imageDisk: "30GiB"
   #

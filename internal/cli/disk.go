@@ -132,10 +132,6 @@ func runDiskResizeImage(ctx context.Context, size string) error {
 	if err != nil {
 		return err
 	}
-	if cfg.VM.ImageDisk == "" {
-		return fmt.Errorf("imageDisk is not set in %s — nothing to resize", configFile)
-	}
-
 	diskName := config.ImageDiskName(cfg.VM.Name)
 	if err := vm.ResizeImageDisk(ctx, diskName, size); err != nil {
 		return err

@@ -30,14 +30,20 @@ type VMConfig struct {
 	Memory  string `yaml:"memory"`  // e.g. "10GiB"
 	Disk    string `yaml:"disk"`    // e.g. "40GiB"
 	Rosetta bool   `yaml:"rosetta"` // enable Rosetta 2 for amd64 containers (ARM64 only)
-	// ImageDisk, when non-empty (e.g. "10GiB"), provisions a separate Lima data
-	// disk mounted over the guest's container image store (/var/lib/containerd).
-	// Named Lima disks live in $LIMA_HOME/_disks/<vm>-img and survive
-	// `klimax destroy`, so kindest/node, registry:2 and locally built images are
-	// not lost when the VM is re-created (a locally built image is the only kind
-	// no registry mirror can restore).
-	// Empty = disabled (the image store lives on the VM's root disk).
-	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
+	// ImageDisk sizes the separate Lima data disk mounted over the guest's
+	// container image store (/var/lib/containerd), e.g. "30GiB". Named Lima
+	// disks live in $LIMA_HOME/_disks/<vm>-img and survive `klimax destroy`, so
+	// kindest/node, registry:2 and locally built images are not lost when the VM
+	// is re-created (a locally built image is the only kind no registry mirror
+	// can restore).
+	//
+	// Always on: applyDefaults rewrites an empty value to DefaultImageDisk, so
+	// there is no way to put the image store back on the root disk from config.
+	// The `!= ""` guards on this field are defence for callers that build a
+	// Config without going through LoadConfig, not a user-facing mode.
+	//
+	// ⚠ Lima instance config: the size takes effect only when the disk is first
+	// created. Grow an existing one with `klimax disk resize-image`.
 	ImageDisk string `yaml:"imageDisk"`
 	// Mounts are host directories shared into the guest over virtiofs.
 	// Empty by default: klimax shares nothing but its own registry cache.

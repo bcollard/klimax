@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 // TestImageDiskNameFitsExt4Label guards the invariant behind a silent, data
 // destroying failure mode.
@@ -49,5 +53,50 @@ func TestImageDiskNameDistinct(t *testing.T) {
 func TestImageDiskNameStable(t *testing.T) {
 	if got, want := ImageDiskName("klimax"), "klimax-img"; got != want {
 		t.Errorf("ImageDiskName(\"klimax\") = %q, want %q", got, want)
+	}
+}
+
+// The image disk is always on. An empty value is treated as unset and
+// re-defaulted, so the `!= ""` guards elsewhere are unreachable for any config
+// that came through LoadConfig.
+//
+// This was documented the other way round for several releases — "Empty =
+// disabled (the image store lives on the VM's root disk)" — which was never
+// achievable. Pinned here so reintroducing a disable path is a deliberate
+// change that updates the docs with it.
+func TestImageDiskIsAlwaysOn(t *testing.T) {
+	for _, tc := range []struct{ name, yaml string }{
+		{"key absent", "vm:\n  name: k\n"},
+		{"explicitly empty", "vm:\n  name: k\n  imageDisk: \"\"\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(p, []byte(tc.yaml), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			cfg, err := LoadConfig(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.VM.ImageDisk != DefaultImageDisk {
+				t.Errorf("ImageDisk = %q, want %q", cfg.VM.ImageDisk, DefaultImageDisk)
+			}
+		})
+	}
+}
+
+// An explicit size must survive defaulting, or a configured disk would silently
+// become 30GiB.
+func TestImageDiskExplicitValueWins(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(p, []byte("vm:\n  name: k\n  imageDisk: 10GiB\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.VM.ImageDisk != "10GiB" {
+		t.Errorf("ImageDisk = %q, want 10GiB", cfg.VM.ImageDisk)
 	}
 }
