@@ -62,7 +62,7 @@ This README is the quick tour. The full documentation lives at
 | [Reset &amp; reinstall](https://klimax.dev/docs/reset.html) | Three levels, from rebuilding the VM to a full clean install |
 | [Klimax UI](https://klimax.dev/docs/klimax-ui.html) | The native SwiftUI companion app |
 | [Agent Skill](https://klimax.dev/docs/agent-skill.html) | Teach AI coding tools to drive klimax |
-| [klimax as a Docker host](https://klimax.dev/docs/docker-host.html) | Use the VM's Docker daemon on its own, with published ports on `localhost` |
+| [klimax as a Docker host](https://klimax.dev/docs/docker-host.html) | Use the VM's Docker daemon on its own, with published ports on `localhost` and Hub pulls through the cache |
 | [klimax vs. other tools](https://klimax.dev/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack — including what they do better |
 | [Changelog](https://klimax.dev/docs/changelog.html) | Release history |
 

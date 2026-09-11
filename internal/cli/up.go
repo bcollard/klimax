@@ -150,12 +150,18 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("registries: %w", err)
 	}
 
-	// 8. Install no-NAT rules + systemd persistence in guest.
+	// 8. Point dockerd at the Hub mirror, so `docker pull` and `docker compose`
+	// on the host benefit from the cache too — not just cluster pulls.
+	if err := reconcileDockerDaemonConfig(ctx, g, cfg); err != nil {
+		return fmt.Errorf("docker daemon config: %w", err)
+	}
+
+	// 9. Install no-NAT rules + systemd persistence in guest.
 	if err := routing.InstallNoNat(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
 		return fmt.Errorf("routing rules: %w", err)
 	}
 
-	// 9. Add macOS route for kind CIDR → lima0.
+	// 10. Add macOS route for kind CIDR → lima0.
 	if err := routing.EnsureRoute(cfg.Network.KindBridgeCIDR, lima0IP); err != nil {
 		return fmt.Errorf("macOS route: %w", err)
 	}
@@ -666,4 +672,47 @@ func extractKlimaxEnvBlock(content string) string {
 		return ""
 	}
 	return strings.TrimSpace(content[start : start+end+len(klimaxEnvEnd)])
+}
+
+// reconcileDockerDaemonConfig points dockerd at the Docker Hub pull-through
+// cache, and restarts Docker when the file changes.
+//
+// Cluster pulls already use every mirror: kind nodes read
+// /etc/containerd/certs.d, which supports per-registry mirrors. dockerd does
+// not read certs.d and its own mirror setting covers Docker Hub only, so this
+// closes the most valuable part of the gap — Hub is where rate limits bite —
+// and cannot close the rest.
+//
+// klimax only owns the registry-mirrors key. An existing daemon.json with other
+// settings is left alone apart from that one field.
+func reconcileDockerDaemonConfig(ctx context.Context, g *guest.Client, cfg *config.Config) error {
+	want := registry.HubMirrorEndpoint(cfg.Registries)
+
+	current, _ := g.Run(ctx, "cat "+registry.DaemonConfigPath+" 2>/dev/null")
+	merged, changed, err := registry.MergeDaemonConfig(current, want)
+	if err != nil {
+		// A daemon.json klimax cannot parse is the user's, not ours: say so and
+		// leave it rather than overwriting hand-written settings.
+		slog.Warn("Leaving "+registry.DaemonConfigPath+" alone: it is not valid JSON",
+			"err", err, "fix", "repair or remove it, then re-run klimax up")
+		return nil
+	}
+	if !changed {
+		return nil
+	}
+
+	if want == "" {
+		slog.Info("Removing the Docker Hub mirror from dockerd (no docker.io mirror configured)")
+	} else {
+		slog.Info("Pointing dockerd at the Docker Hub pull-through cache", "endpoint", want)
+	}
+	if merged == "" {
+		if _, err := g.Run(ctx, "sudo rm -f "+registry.DaemonConfigPath); err != nil {
+			return err
+		}
+	} else if err := g.WriteFile(ctx, registry.DaemonConfigPath, merged); err != nil {
+		return err
+	}
+	_, err = g.Run(ctx, "sudo systemctl restart docker")
+	return err
 }
