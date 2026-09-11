@@ -490,7 +490,6 @@ func proxyProvisions(cfg *config.Config) []limatype.Provision {
 	}
 }
 
-
 // buildCACertificates passes the configured PEM contents to Lima.
 //
 // Load errors are swallowed here because Build has no error return and the

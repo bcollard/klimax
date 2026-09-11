@@ -102,7 +102,7 @@ func TestCACertsRejectsCollidingGuestNames(t *testing.T) {
 
 func TestGuestCertNameSanitizes(t *testing.T) {
 	for in, want := range map[string]string{
-		"corp root CA.pem":  "klimax-corp-root-CA.crt",
+		"corp root CA.pem":   "klimax-corp-root-CA.crt",
 		"a/b/../evil;rm.pem": "klimax-evil-rm.crt",
 		".pem":               "klimax-cert.crt",
 	} {
