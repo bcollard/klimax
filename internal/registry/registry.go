@@ -146,6 +146,10 @@ type RegistryHost struct {
 	// Endpoint is the mirror URL containerd pulls from (e.g.
 	// "http://registry-dockerio:5030").
 	Endpoint string
+	// Upstream is the real registry the mirror proxies, used as the `server`
+	// fallback in dockerd's hosts.toml. Empty for the kind-node mapping, which
+	// lets containerd derive it from the directory name.
+	Upstream string
 }
 
 // RegistryHosts returns the containerd certs.d host→mirror mappings for all
