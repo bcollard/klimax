@@ -37,6 +37,17 @@ jobs:
           CGO_ENABLED: "1"
         run: go test ./...
 
+      - name: Format check
+        # go vet does not check formatting, so drift accumulated unnoticed.
+        # gofmt -l prints offending files and exits 0, hence the explicit test.
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::These files are not gofmt-formatted. Run: gofmt -w ."
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Vet
         env:
           CGO_ENABLED: "1"

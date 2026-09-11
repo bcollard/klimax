@@ -199,7 +199,6 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 	return inst, nil
 }
 
-
 // heartbeatInterval is how often a long VM start reports that it is still going.
 // A variable so tests can shorten it.
 var heartbeatInterval = 15 * time.Second

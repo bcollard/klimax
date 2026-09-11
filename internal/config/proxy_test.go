@@ -24,9 +24,9 @@ func TestNoProxyCoversClusterInternalTraffic(t *testing.T) {
 	for _, want := range []string{
 		"localhost", "127.0.0.1", "::1",
 		".svc", ".cluster.local",
-		"10.0.0.0/8",       // service + pod subnets
-		"172.30.0.0/16",    // kind bridge: node IPs and MetalLB VIPs
-		"192.168.64.0/24",  // host <-> VM
+		"10.0.0.0/8",      // service + pod subnets
+		"172.30.0.0/16",   // kind bridge: node IPs and MetalLB VIPs
+		"192.168.64.0/24", // host <-> VM
 		"registry-dockerio", "registry-quayio",
 	} {
 		if !slices.Contains(got, want) {

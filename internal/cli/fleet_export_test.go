@@ -15,16 +15,16 @@ func info(version string, labels map[string]string) *kind.ClusterInfo {
 
 func TestCustomLabelsDropsInfraAndManaged(t *testing.T) {
 	got := customLabels(map[string]string{
-		"kubernetes.io/hostname":           "dev-control-plane",
-		"beta.kubernetes.io/arch":          "arm64",
+		"kubernetes.io/hostname":                "dev-control-plane",
+		"beta.kubernetes.io/arch":               "arm64",
 		"node-role.kubernetes.io/control-plane": "",
-		"node.kubernetes.io/exclude":       "true",
-		"topology.kubernetes.io/region":    "europe-west1",
-		"topology.kubernetes.io/zone":      "europe-west1-b",
-		"managed-by":                       "klimax",
-		"klimax.dev/fleet":                 "mesh",
-		"env":                              "prod",
-		"team":                             "platform",
+		"node.kubernetes.io/exclude":            "true",
+		"topology.kubernetes.io/region":         "europe-west1",
+		"topology.kubernetes.io/zone":           "europe-west1-b",
+		"managed-by":                            "klimax",
+		"klimax.dev/fleet":                      "mesh",
+		"env":                                   "prod",
+		"team":                                  "platform",
 	})
 	want := map[string]string{"env": "prod", "team": "platform"}
 	if len(got) != len(want) {

@@ -3,8 +3,8 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"time"
 	"testing"
+	"time"
 )
 
 func TestReportOK(t *testing.T) {

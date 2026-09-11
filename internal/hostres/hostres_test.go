@@ -117,8 +117,8 @@ const gib = uint64(1) << 30
 
 func TestDefaultCPUs(t *testing.T) {
 	tests := []struct{ cores, want int }{
-		{0, 0},   // unknown — caller falls back
-		{1, 1},   // floor is 2, but never more than the host has
+		{0, 0}, // unknown — caller falls back
+		{1, 1}, // floor is 2, but never more than the host has
 		{2, 2},
 		{4, 3},
 		{8, 6},
