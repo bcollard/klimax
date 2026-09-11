@@ -73,7 +73,7 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config, showLog
 	// at all between here and "VM is running" and looks hung. Skip the heartbeat
 	// when showLogs is on: that path is already noisy.
 	if !showLogs {
-		stopHeartbeat := startHeartbeat(ctx)
+		stopHeartbeat := startHeartbeat(ctx, filepath.Join(inst.Dir, "ha.stderr.log"))
 		defer stopHeartbeat()
 	}
 
@@ -199,18 +199,28 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 	return inst, nil
 }
 
-
 // heartbeatInterval is how often a long VM start reports that it is still going.
 // A variable so tests can shorten it.
 var heartbeatInterval = 15 * time.Second
+
+// provisionPhase is the Lima requirement that dominates a first boot: every
+// provision.system script runs inside it. On a fresh VM that is klimax
+// installing packages, Docker, kind and kubectl — minutes of work that Lima
+// reports as a single unnamed wait.
+const provisionPhase = "boot scripts must have finished"
 
 // startHeartbeat logs periodic progress while the VM starts, so a multi-minute
 // wait does not look like a hang. The returned function stops it and is safe to
 // call more than once.
 //
+// logPath is the hostagent's stderr log, read to name the phase Lima is waiting
+// on. Without it every tick says the same thing, which tells the user the
+// process is alive but not that it is making progress — and a first boot
+// spends four of its five minutes in a single phase.
+//
 // The first tick carries the flags that produce real detail — repeating that on
 // every tick would be noise, and by then the user has already read it.
-func startHeartbeat(ctx context.Context) func() {
+func startHeartbeat(ctx context.Context, logPath string) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	started := time.Now()
@@ -218,17 +228,31 @@ func startHeartbeat(ctx context.Context) func() {
 		defer close(done)
 		t := time.NewTicker(heartbeatInterval)
 		defer t.Stop()
-		first := true
+		first, explainedProvision := true, false
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-t.C:
 				elapsed := time.Since(started).Round(time.Second)
+				phase := latestBootPhase(logPath)
+
 				if first {
 					slog.Info("Still starting the VM — a first boot downloads the image and runs cloud-init",
 						"elapsed", elapsed, "detail", "klimax up --show-vm-logs")
 					first = false
+					continue
+				}
+				// Say once what this phase actually is, the first time we are
+				// in it. It is the one wait long enough to look broken.
+				if phase == provisionPhase && !explainedProvision {
+					explainedProvision = true
+					slog.Info("Running the guest provisioning scripts — on a first boot this installs packages, Docker, kind and kubectl",
+						"elapsed", elapsed)
+					continue
+				}
+				if phase != "" {
+					slog.Info("Still starting the VM", "elapsed", elapsed, "phase", phase)
 					continue
 				}
 				slog.Info("Still starting the VM", "elapsed", elapsed)
