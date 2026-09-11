@@ -52,7 +52,7 @@ func TestHeartbeatTicksAndCarriesDetailOnce(t *testing.T) {
 	withInterval(t, 10*time.Millisecond)
 	buf := captureSlog(t)
 
-	stop := startHeartbeat(t.Context())
+	stop := startHeartbeat(t.Context(), "")
 	time.Sleep(120 * time.Millisecond)
 	stop() // blocks until the goroutine has exited
 
@@ -74,7 +74,7 @@ func TestHeartbeatStopsOnStop(t *testing.T) {
 	withInterval(t, 10*time.Millisecond)
 	buf := captureSlog(t)
 
-	stop := startHeartbeat(t.Context())
+	stop := startHeartbeat(t.Context(), "")
 	time.Sleep(35 * time.Millisecond)
 	stop()
 	before := strings.Count(buf.String(), "Still starting")
@@ -91,7 +91,7 @@ func TestHeartbeatSilentWhenStartIsFast(t *testing.T) {
 	withInterval(t, time.Hour)
 	buf := captureSlog(t)
 
-	stop := startHeartbeat(t.Context())
+	stop := startHeartbeat(t.Context(), "")
 	stop()
 
 	if out := buf.String(); strings.Contains(out, "Still starting") {
@@ -106,7 +106,7 @@ func TestHeartbeatStopsWithParentContext(t *testing.T) {
 	buf := captureSlog(t)
 
 	ctx, cancel := context.WithCancel(t.Context())
-	stop := startHeartbeat(ctx)
+	stop := startHeartbeat(ctx, "")
 	t.Cleanup(stop)
 	time.Sleep(35 * time.Millisecond)
 	cancel()
@@ -116,5 +116,43 @@ func TestHeartbeatStopsWithParentContext(t *testing.T) {
 	time.Sleep(60 * time.Millisecond)
 	if after := strings.Count(buf.String(), "Still starting"); after != before {
 		t.Errorf("heartbeat outlived its parent context: %d -> %d", before, after)
+	}
+}
+
+// The point of reading the hostagent log is that a long wait says what it is
+// waiting on. A first boot spends most of its time in one phase, so the
+// explanation of that phase is emitted once rather than on every tick.
+func TestHeartbeatNamesProvisionPhaseAndExplainsItOnce(t *testing.T) {
+	withInterval(t, 10*time.Millisecond)
+	logPath := writeLog(t,
+		rec("Waiting for the final requirement 1 of 1: `boot scripts must have finished`"),
+	)
+	buf := captureSlog(t)
+
+	stop := startHeartbeat(t.Context(), logPath)
+	time.Sleep(150 * time.Millisecond)
+	stop()
+
+	out := buf.String()
+	if n := strings.Count(out, "installs packages, Docker, kind and kubectl"); n != 1 {
+		t.Errorf("provision explanation should appear exactly once, got %d:\n%s", n, out)
+	}
+	if !strings.Contains(out, `phase="`+provisionPhase+`"`) {
+		t.Errorf("later ticks should carry the phase:\n%s", out)
+	}
+}
+
+// With no phase to report the heartbeat must stay as it was, not emit an empty
+// phase= key.
+func TestHeartbeatOmitsPhaseWhenUnknown(t *testing.T) {
+	withInterval(t, 10*time.Millisecond)
+	buf := captureSlog(t)
+
+	stop := startHeartbeat(t.Context(), "")
+	time.Sleep(120 * time.Millisecond)
+	stop()
+
+	if out := buf.String(); strings.Contains(out, "phase=") {
+		t.Errorf("no phase known, but one was logged:\n%s", out)
 	}
 }
