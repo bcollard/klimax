@@ -411,6 +411,50 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 
 ---
 
+## Registry mirrors reach dockerd and the clusters differently
+
+Cluster pulls and `docker pull` take completely different paths, and only one of
+them can use every mirror.
+
+| Consumer | Mechanism | Which mirrors it can use |
+|---|---|---|
+| kind nodes (cluster pulls) | `/etc/containerd/certs.d/<host>/hosts.toml`, written per node by `kind.configureRegistryMirrors` | **all of them** — containerd supports per-registry mirrors |
+| dockerd (`docker pull`, `docker compose`) | `registry-mirrors` in `/etc/docker/daemon.json`, written by `cli.reconcileDockerDaemonConfig` | **Docker Hub only** |
+
+`registry-mirrors` has always been Hub-specific; there is no per-registry
+equivalent. So `docker pull quay.io/...` on the VM goes direct, while the same
+image pulled by a cluster is cached. Hub is where rate limits actually bite, so
+the partial fix is still worth having — but do not document it as if it covered
+everything.
+
+> **containerd's `certs.d` is not a way around this.** dockerd resolves
+> registries with its own client and never reads it, even with the containerd
+> snapshotter enabled. Verified on Docker 29: a `certs.d` entry for `quay.io`
+> on the VM left `docker pull quay.io/...` going direct, with zero bytes added
+> to the mirror cache.
+
+### The endpoint must be 127.0.0.1, not the container name
+
+`registry.HubMirrorEndpoint` returns `http://127.0.0.1:<port>`, deliberately not
+the `registry-dockerio` name the kind nodes use. A kind node is a container on
+the `kind` network, where Docker's embedded DNS resolves that name; **dockerd
+runs in the VM's host namespace, where it does not resolve at all**. Measured:
+`curl registry-dockerio:5030` from the VM returns nothing, `127.0.0.1:5030`
+returns 200.
+
+Getting this wrong fails silently in the worst way — `docker info` lists the
+mirror, and every pull ignores it.
+
+### daemon.json is merged, never overwritten
+
+`registry.MergeDaemonConfig` sets only the `registry-mirrors` key.
+`daemon.json` is a file users edit (`insecure-registries`, `log-driver`,
+`default-address-pools`), and klimax has no business discarding that to set one
+field. A file that does not parse is reported and left alone rather than
+replaced.
+
+---
+
 ## HTTP proxy support
 
 `network.proxy` configures dockerd, the registry mirrors, and (indirectly) the
