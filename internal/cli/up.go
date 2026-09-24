@@ -29,8 +29,9 @@ import (
 func newUpCmd() *cobra.Command {
 	var showVMLogs bool
 	cmd := &cobra.Command{
-		Use:   "up",
-		Short: "Create/start the VM, provision Docker, create kind clusters, set up routing",
+		Use:     "up",
+		Aliases: []string{"start"},
+		Short:   "Create/start the VM, provision Docker, create kind clusters, set up routing",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if showVMLogs {
 				raiseLimaLogLevelForVMLogs(cmd)

@@ -98,8 +98,8 @@ internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), De
 internal/hostres/hostmem_darwin.go   hostMemoryBytes via sysctl hw.memsize (build-tagged; the package still builds for linux)
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
-internal/cli/up.go                   `klimax up` — infra only (VM + network + registries + routing)
-internal/cli/down.go                 `klimax down` [--remove-route]
+internal/cli/up.go                   `klimax up` (alias `start`) — infra only (VM + network + registries + routing)
+internal/cli/down.go                 `klimax down` (aliases `stop`, `d`) [--remove-route]
 internal/cli/destroy.go              `klimax destroy`
 internal/cli/status.go               `klimax status` — collectStatus() → statusReport, rendered as text/json/yaml (host mounts read from the instance config, so they show on a stopped VM)
 internal/cli/doctor.go               `klimax doctor` — diagnose() → []doctorCheck, `--fix` applies the Fixable ones
@@ -314,8 +314,8 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
 ## CLI reference
 
 ```
-klimax up                              Start VM + infra (idempotent)
-klimax down                            Stop VM (no sudo required)
+klimax up                              Start VM + infra (idempotent; alias: start)
+klimax down                            Stop VM (no sudo required; aliases: stop, d)
 klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
 klimax status                          Show VM state, host mounts, clusters, route, iptables

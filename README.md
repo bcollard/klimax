@@ -316,8 +316,8 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 
 | Command | Description |
 |---|---|
-| `klimax up` | Create/start the VM, provision Docker, set up networking and registries (idempotent) |
-| `klimax down` | Stop the VM — preserves all clusters and registry cache data |
+| `klimax up` | Create/start the VM, provision Docker, set up networking and registries (idempotent). Alias: `klimax start` |
+| `klimax down` | Stop the VM — preserves all clusters and registry cache data. Aliases: `klimax stop`, `klimax d` |
 | `klimax down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
 | `klimax destroy` | Stop + delete VM, delete all clusters, remove host route |
 | `klimax status` | Show VM state, host mounts, clusters, route, and iptables rule presence (`-o text\|json\|yaml`) |

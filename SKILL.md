@@ -27,13 +27,13 @@ brew install --cask klimax
 ## Lifecycle commands you'll actually use in recipes
 
 ```bash
-klimax up                              # Start VM + Docker + network + registries + routing. Idempotent.
+klimax up                              # Start VM + Docker + network + registries + routing. Idempotent. Alias: klimax start.
 klimax cluster create <name>           # Create a kind cluster. Auto-assigns num (1-99), MetalLB, CoreDNS patches.
 klimax fleet create -f fleet.yaml      # Create several clusters at once from a Fleet manifest (see below).
 klimax cluster delete <name>           # Delete a cluster. ALWAYS pass <name> in scripts — omitting it opens an interactive picker that will hang a non-interactive agent.
 klimax cluster list                    # List clusters with num, API port, kubeconfig path.
 klimax cluster e2e-test-nginx          # Built-in smoke test: deploy nginx, expose via LoadBalancer, curl it. Uses your current kubectl context.
-klimax down                            # Stop VM. Cluster state is preserved on the VM disk.
+klimax down                            # Stop VM (all clusters stop with it). Cluster state is preserved on the VM disk. Alias: klimax stop.
 klimax destroy                         # Delete all clusters + VM + macOS host route.
 ```
 

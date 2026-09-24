@@ -14,7 +14,7 @@ func newDownCmd() *cobra.Command {
 	var removeRoute bool
 	cmd := &cobra.Command{
 		Use:     "down",
-		Aliases: []string{"d"},
+		Aliases: []string{"d", "stop"},
 		Short:   "Stop the VM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDown(cmd.Context(), removeRoute)
