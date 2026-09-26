@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -217,5 +218,78 @@ func TestRemoveCluster(t *testing.T) {
 	}
 	if _, err := os.Stat(s.RootCertPath()); err != nil {
 		t.Error("removing a cluster must keep the root")
+	}
+}
+
+// TestFleetZoneIsIsolated: the fleet intermediate covers the fleet's names and
+// nothing else, and a member's own intermediate cannot sign fleet names —
+// fleet-wide trust never widens what one cluster can mint.
+func TestFleetZoneIsIsolated(t *testing.T) {
+	s := newStore(t)
+	f, err := s.EnsureFleet("stonex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.Kind != FleetZone || f.SecretName() != FleetWildcardSecret || f.IssuerName() != FleetIssuerName {
+		t.Errorf("fleet material: kind=%s secret=%s issuer=%s", f.Kind, f.SecretName(), f.IssuerName())
+	}
+	for name, ok := range map[string]bool{
+		"kong-gw.stonex.klimax.internal":      true,
+		"kong-gw.stonex-east.klimax.internal": false,
+		"github.com":                          false,
+	} {
+		if err := verify(t, f, name); (err == nil) != ok {
+			t.Errorf("fleet wildcard for %s: err=%v, want ok=%v", name, err, ok)
+		}
+	}
+
+	if _, err := s.EnsureCluster("stonex-east"); err != nil {
+		t.Fatal(err)
+	}
+	evil := signWith(t, s, "stonex-east", "kong-gw.stonex.klimax.internal")
+	roots := x509.NewCertPool()
+	roots.AddCert(parseChain(t, f.RootPEM)[0])
+	inter, _ := clusterCA(t, s, "stonex-east")
+	inters := x509.NewCertPool()
+	inters.AddCert(inter)
+	if _, err := evil.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inters, DNSName: "kong-gw.stonex.klimax.internal"}); err == nil {
+		t.Error("a member's intermediate must not be able to sign fleet-wide names")
+	}
+
+	if got := s.Fleets(); len(got) != 1 || got[0] != "stonex" {
+		t.Errorf("Fleets() = %v", got)
+	}
+	if err := s.RemoveFleet("stonex"); err != nil {
+		t.Fatal(err)
+	}
+	if len(s.Fleets()) != 0 || len(s.Clusters()) != 1 {
+		t.Errorf("RemoveFleet must remove the fleet only: fleets=%v clusters=%v", s.Fleets(), s.Clusters())
+	}
+}
+
+// TestConcurrentFleetIssuance mirrors a fleet applied with maxParallel > 1:
+// every member asks for the same fleet material at once and must get the same.
+func TestConcurrentFleetIssuance(t *testing.T) {
+	s := newStore(t)
+	const n = 8
+	got := make([]string, n)
+	errs := make([]error, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			f, err := s.EnsureFleet("stonex")
+			if err == nil {
+				got[i] = f.WildcardPEM
+			}
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+	for i := range n {
+		if errs[i] != nil || got[i] != got[0] {
+			t.Fatalf("member %d: err=%v, same material=%v", i, errs[i], got[i] == got[0])
+		}
 	}
 }

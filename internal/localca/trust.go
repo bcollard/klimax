@@ -1,17 +1,15 @@
 package localca
 
 import (
-	"os/exec"
-
 	"github.com/bcollard/homepki/pkg/pki"
 	"github.com/bcollard/klimax/internal/hostsudo"
 )
 
-// Trusted reports whether macOS trusts the root. Unprivileged: `security
-// verify-cert` evaluates the certificate against the current trust settings.
+// Trusted reports whether the system trusts the root. Unprivileged: on macOS
+// the system pool is the platform verifier, so this reflects keychain trust.
 func (s *Store) Trusted() bool {
-	args := pki.MacOSTrustStatusArgs(s.RootCertPath())
-	return exec.Command(args[0], args[1:]...).Run() == nil
+	root, err := s.Root()
+	return err == nil && pki.SystemTrusts(root) == nil
 }
 
 // Trust adds the root to the System keychain as a trusted root. Needs sudo;

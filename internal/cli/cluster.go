@@ -84,6 +84,13 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 	slog.Info("Auto-assigned cluster num", "name", name, "num", num)
 
 	cl := config.ClusterConfig{Name: name, Num: num, Region: region, Zone: zone, Labels: labels}
+	fleet := labels[fleetLabelKey]
+	if err := checkClusterNameFree(ctx, g, cfg, name); err != nil {
+		return err
+	}
+	if err := checkZoneNames(ctx, g, cfg, fleet, name); err != nil {
+		return err
+	}
 
 	// Nodes have their own trust store, so the certificates in the VM do not
 	// reach them; they are installed per cluster at creation.
@@ -96,8 +103,9 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 	if err := kind.CreateCluster(ctx, g, cl, withLocalDNSForward(cfg, cfg.Kind), cfg.Registries, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
-	installLocalDNS(ctx, g, cfg, name)
+	installLocalDNS(ctx, g, cfg, name, fleet)
 	installLocalCA(ctx, g, localCA)
+	installFleetCA(ctx, g, cfg, name, fleet)
 
 	if *cfg.Kind.AutoMergeKubeconfig {
 		if err := runClusterMerge(name); err != nil {

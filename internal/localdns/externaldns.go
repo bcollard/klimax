@@ -40,8 +40,17 @@ const ExternalDNSNamespace = "external-dns"
 // --fqdn-template gives every LoadBalancer Service a name with no annotation
 // (OrbStack-style), from network.dns.nameTemplate; --combine-fqdn-annotation keeps that name when an
 // external-dns.kubernetes.io/hostname annotation adds a custom one.
-func ExternalDNSManifest(cfg *config.Config, cluster string) string {
+//
+// fleet, when set, adds the fleet's zone (<fleet>.<domain>) to the filter, so a
+// member cluster can publish fleet-wide names such as kong-gw.<fleet>.<domain>
+// through the hostname annotation. Automatic names always stay in the
+// cluster's own zone.
+func ExternalDNSManifest(cfg *config.Config, cluster, fleet string) string {
 	zone := cfg.ClusterDNSZone(cluster)
+	fleetFilter := ""
+	if fleet != "" {
+		fleetFilter = "\n            - --domain-filter=" + cfg.FleetDNSZone(fleet)
+	}
 	return fmt.Sprintf(`apiVersion: v1
 kind: Namespace
 metadata:
@@ -120,7 +129,7 @@ spec:
             - --provider=coredns
             - --registry=txt
             - --txt-owner-id=%[3]s
-            - --domain-filter=%[4]s
+            - --domain-filter=%[4]s%[7]s
             - --policy=sync
             - --interval=15s
             - --fqdn-template=%[6]s.%[4]s
@@ -137,13 +146,13 @@ spec:
             runAsGroup: 65532
             runAsNonRoot: true
             runAsUser: 65532
-`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP(), cfg.DNSNameTemplate())
+`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP(), cfg.DNSNameTemplate(), fleetFilter)
 }
 
 // InstallExternalDNS applies the manifest to a cluster and waits for it.
 // Re-applying is safe: kubectl apply converges to the same objects.
-func InstallExternalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, cluster string) error {
-	slog.Info("Installing ExternalDNS for local DNS", "cluster", cluster, "zone", cfg.ClusterDNSZone(cluster))
+func InstallExternalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, cluster, fleet string) error {
+	slog.Info("Installing ExternalDNS for local DNS", "cluster", cluster, "zone", cfg.ClusterDNSZone(cluster), "fleet", fleet)
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 KIND_KUBECONFIG=/tmp/klimax-kube-%[1]s.yaml
@@ -151,7 +160,7 @@ kind get kubeconfig --name %[1]s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g'
 cat <<'MANIFEST_EOF' | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
 %[2]sMANIFEST_EOF
 kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[3]s rollout status deploy/external-dns --timeout=180s
-`, cluster, ExternalDNSManifest(cfg, cluster), ExternalDNSNamespace)
+`, cluster, ExternalDNSManifest(cfg, cluster, fleet), ExternalDNSNamespace)
 	return g.RunScript(ctx, fmt.Sprintf("install ExternalDNS on cluster %q", cluster), script)
 }
 

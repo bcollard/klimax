@@ -3,7 +3,7 @@ module github.com/bcollard/klimax
 go 1.26.0
 
 require (
-	github.com/bcollard/homepki v0.7.1
+	github.com/bcollard/homepki v0.8.1
 	github.com/docker/go-units v0.5.0
 	github.com/lima-vm/lima/v2 v2.2.0
 	github.com/sirupsen/logrus v1.10.2
@@ -93,4 +93,5 @@ require (
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gvisor.dev/gvisor v0.0.0-20240916094835-a174eb65023f // indirect
+	software.sslmate.com/src/go-pkcs12 v0.7.3 // indirect
 )

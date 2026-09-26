@@ -25,8 +25,8 @@ github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmms
 github.com/armon/go-proxyproto v0.0.0-20210323213023-7e956b284f0a/go.mod h1:QmP9hvJ91BbJmGVGSbutW19IC0Q9phDCLGaomwTJbgU=
 github.com/balajiv113/fd v0.0.0-20230330094840-143eec500f3e h1:IdMhFPEfTZQU971tIHx3UhY4l+yCeynprnINrDTSrOc=
 github.com/balajiv113/fd v0.0.0-20230330094840-143eec500f3e/go.mod h1:aXGMJsd3XrnUFTuyf/pTGg5jG6CY8JMZ5juywvShjgQ=
-github.com/bcollard/homepki v0.7.1 h1:rrmXzI8OHlg+WWjj5TNO+U96x95aeszVDVnEd+SbPkY=
-github.com/bcollard/homepki v0.7.1/go.mod h1:MRKKc4J2vghh25Gs0KdddAygS9BB5Wl8/1ERJNxAzhE=
+github.com/bcollard/homepki v0.8.1 h1:btSlskrTCYH8ydskXzthDO5x6JwvWax/AYBkJ4zGx5k=
+github.com/bcollard/homepki v0.8.1/go.mod h1:WaXtOS1IRh9yzCAkHvKm+waeKp8lMMBfbnuuzv3cQFA=
 github.com/bmatcuk/doublestar/v4 v4.7.1 h1:fdDeAqgT47acgwd9bd9HxJRDmc9UAmPpc+2m0CXv75Q=
 github.com/bmatcuk/doublestar/v4 v4.7.1/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
@@ -266,3 +266,5 @@ gotest.tools/v3 v3.5.2 h1:7koQfIKdy+I8UTetycgUqXWSDwpgv193Ka+qRsmBY8Q=
 gotest.tools/v3 v3.5.2/go.mod h1:LtdLGcnqToBH83WByAAi/wiwSFCArdFIUV/xxN4pcjA=
 gvisor.dev/gvisor v0.0.0-20240916094835-a174eb65023f h1:O2w2DymsOlM/nv2pLNWCMCYOldgBBMkD7H0/prN5W2k=
 gvisor.dev/gvisor v0.0.0-20240916094835-a174eb65023f/go.mod h1:sxc3Uvk/vHcd3tj7/DHVBoR5wvWT/MmRq2pj7HRJnwU=
+software.sslmate.com/src/go-pkcs12 v0.7.3 h1:JBQD3FDqYjTeyDAeZQklj2ar88ykBLtALloPJHyAauU=
+software.sslmate.com/src/go-pkcs12 v0.7.3/go.mod h1:Qiz0EyvDRJjjxGyUQa2cCNZn/wMyzrRJ/qcDXOQazLI=

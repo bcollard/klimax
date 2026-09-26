@@ -45,22 +45,26 @@ func withLocalDNSForward(cfg *config.Config, kindCfg config.KindConfig) config.K
 // A failure is reported, not returned: the cluster itself is fine, and failing
 // `cluster create` over a DNS addon — typically a slow image pull — would leave
 // the user deleting a working cluster to retry.
-func installLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, cluster string) {
+func installLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, cluster, fleet string) {
 	if !cfg.DNSEnabled() {
 		return
 	}
-	if err := localdns.InstallExternalDNS(ctx, g, cfg, cluster); err != nil {
+	if err := localdns.InstallExternalDNS(ctx, g, cfg, cluster, fleet); err != nil {
 		slog.Warn("Local DNS: ExternalDNS did not become ready — the cluster works, its Services just have no names yet",
 			"cluster", cluster, "err", err, "fix", "klimax dns attach "+cluster)
 		return
 	}
 	fmt.Printf("dns: LoadBalancer Services resolve as %s\n", cfg.DNSNameExample(cluster))
+	if fleet != "" {
+		fmt.Printf("dns: fleet-wide names under %s via the external-dns.kubernetes.io/hostname annotation\n", cfg.FleetDNSZone(fleet))
+	}
 }
 
 // deleteCluster deletes a cluster and its DNS records. ExternalDNS goes down
 // with the cluster, so it never removes its own records; without the purge a
 // deleted cluster's names keep resolving to VIPs nothing answers on.
 func deleteCluster(ctx context.Context, g *guest.Client, cfg *config.Config, name string) error {
+	fleet := liveFleetOf(ctx, g, name) // read before the cluster, and its labels, are gone
 	if err := kind.DeleteCluster(ctx, g, name); err != nil {
 		return err
 	}
@@ -70,6 +74,7 @@ func deleteCluster(ctx context.Context, g *guest.Client, cfg *config.Config, nam
 		}
 	}
 	removeLocalCA(cfg, name)
+	leaveFleetZone(ctx, g, cfg, name, fleet)
 	return nil
 }
 
@@ -196,5 +201,5 @@ func attachCluster(ctx context.Context, g *guest.Client, cfg *config.Config, nam
 	if err := kind.ApplyCoreDNSPatch(ctx, g, name, resolvers); err != nil {
 		return fmt.Errorf("CoreDNS forward: %w", err)
 	}
-	return localdns.InstallExternalDNS(ctx, g, cfg, name)
+	return localdns.InstallExternalDNS(ctx, g, cfg, name, liveFleetOf(ctx, g, name))
 }

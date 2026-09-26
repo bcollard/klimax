@@ -90,6 +90,14 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 		}
 	}
 
+	var names []string
+	for _, c := range cs.Spec.Clusters {
+		names = append(names, c.Name)
+	}
+	if err := checkZoneNames(ctx, g, cfg, cs.Metadata.Name, names...); err != nil {
+		return err
+	}
+
 	existing, err := kind.DetectUsedNums(ctx, g)
 	if err != nil {
 		return fmt.Errorf("detecting existing clusters: %w", err)
@@ -128,7 +136,7 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 	}
 
 	if adopt && len(foreign) > 0 {
-		if err := adoptIntoFleet(ctx, g, cs, plan, foreign); err != nil {
+		if err := adoptIntoFleet(ctx, g, cfg, cs, plan, foreign); err != nil {
 			return err
 		}
 	}
@@ -179,7 +187,7 @@ func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan
 
 // adoptIntoFleet relabels pre-existing clusters so they join the fleet: it applies
 // the klimax.dev/fleet label plus the manifest entry's merged labels.
-func adoptIntoFleet(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan *fleet.Plan, foreign map[string]bool) error {
+func adoptIntoFleet(ctx context.Context, g *guest.Client, cfg *config.Config, cs *fleet.Fleet, plan *fleet.Plan, foreign map[string]bool) error {
 	byName := map[string]fleet.PlannedCluster{}
 	for _, pc := range plan.Clusters {
 		byName[pc.Name] = pc
@@ -195,6 +203,7 @@ func adoptIntoFleet(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan 
 		if err := kind.LabelNodes(ctx, g, name, args); err != nil {
 			return fmt.Errorf("adopting cluster %q: %w", name, err)
 		}
+		joinFleetZone(ctx, g, cfg, name, cs.Metadata.Name)
 	}
 	fmt.Printf("adopted %d cluster(s) into fleet %q\n", len(names), cs.Metadata.Name)
 	return nil
@@ -342,8 +351,9 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetNa
 	if err := kind.CreateCluster(ctx, g, cl, withLocalDNSForward(cfg, kindCfg), regCfg, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
-	installLocalDNS(ctx, g, cfg, pc.Name)
+	installLocalDNS(ctx, g, cfg, pc.Name, fleetName)
 	installLocalCA(ctx, g, localCA)
+	installFleetCA(ctx, g, cfg, pc.Name, fleetName)
 
 	// Addons.
 	if pc.Addons != nil && pc.Addons.MetricsServer != nil && pc.Addons.MetricsServer.Enabled {

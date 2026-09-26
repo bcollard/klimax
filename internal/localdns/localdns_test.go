@@ -68,7 +68,7 @@ func TestCorefile(t *testing.T) {
 }
 
 func TestExternalDNSManifest(t *testing.T) {
-	m := ExternalDNSManifest(testConfig(t), "dev")
+	m := ExternalDNSManifest(testConfig(t), "dev", "")
 	for _, want := range []string{
 		"--provider=coredns",
 		"--txt-owner-id=dev",
@@ -119,5 +119,46 @@ func TestResolverContent(t *testing.T) {
 	}
 	if !strings.Contains(c, "\nnameserver 172.30.255.53\n") {
 		t.Errorf("unexpected content: %q", c)
+	}
+}
+
+func TestOwnedKeys(t *testing.T) {
+	// Two members publish into fleet zone stonex; east owns kong-gw, west owns
+	// portal and a deeper name under kong-gw that must survive east's purge.
+	out := `/skydns/internal/klimax/stonex/a-kong-gw/1111
+{"text":"\"heritage=external-dns,external-dns/owner=stonex-east,external-dns/resource=service/kong/gw\""}
+/skydns/internal/klimax/stonex/kong-gw/2222
+{"host":"172.30.4.3","ttl":0}
+/skydns/internal/klimax/stonex/kong-gw/a-admin/3333
+{"text":"\"heritage=external-dns,external-dns/owner=stonex-west,external-dns/resource=service/kong/admin\""}
+/skydns/internal/klimax/stonex/kong-gw/admin/4444
+{"host":"172.30.5.9","ttl":0}
+/skydns/internal/klimax/stonex/a-portal/5555
+{"text":"\"heritage=external-dns,external-dns/owner=stonex-west\""}
+/skydns/internal/klimax/stonex/portal/6666
+{"host":"172.30.5.4","ttl":0}`
+	got := ownedKeys(out, "stonex-east")
+	want := []string{"/skydns/internal/klimax/stonex/a-kong-gw/1111", "/skydns/internal/klimax/stonex/kong-gw/2222"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("ownedKeys(east) = %v, want %v", got, want)
+	}
+	if n := len(ownedKeys(out, "stonex-west")); n != 4 {
+		t.Errorf("ownedKeys(west) returned %d keys, want 4 (two TXT + two A)", n)
+	}
+	if len(ownedKeys(out, "stonex")) != 0 {
+		t.Error("an owner name that is a prefix of another must not match")
+	}
+}
+
+func TestExternalDNSManifestFleet(t *testing.T) {
+	cfg := testConfig(t)
+	m := ExternalDNSManifest(cfg, "stonex-east", "stonex")
+	for _, want := range []string{"--domain-filter=stonex-east.klimax.internal", "--domain-filter=stonex.klimax.internal", "--txt-owner-id=stonex-east"} {
+		if !strings.Contains(m, want) {
+			t.Errorf("manifest missing %q", want)
+		}
+	}
+	if strings.Contains(ExternalDNSManifest(cfg, "dev", ""), "--domain-filter=.klimax.internal") {
+		t.Error("no fleet must not add an empty-fleet filter")
 	}
 }

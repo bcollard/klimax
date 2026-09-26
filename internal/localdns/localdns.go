@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -257,5 +258,81 @@ func ProbeFromHost(ctx context.Context, cfg *config.Config) error {
 	if err == nil || (errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
 		return nil
 	}
+	return err
+}
+
+// ownerRE extracts the owner from an ExternalDNS TXT registry record. The text
+// is stored JSON-escaped: "\"heritage=external-dns,external-dns/owner=dev,...\"".
+var ownerRE = regexp.MustCompile(`external-dns/owner=([a-z0-9.-]+)`)
+
+// PurgeOwned deletes the records in zone that owner published, and their
+// ownership TXT records. Used for a fleet's zone, which several clusters write
+// into: deleting the whole prefix would take the other members' names too.
+//
+// Layout (SkyDNS, label-reversed): the A record for kong-gw.<zone> is under
+// <zone>/kong-gw/<id>; its TXT registry record is under <zone>/a-kong-gw/<id>.
+func PurgeOwned(ctx context.Context, g *guest.Client, zone, owner string) error {
+	out, err := g.Run(ctx, fmt.Sprintf(
+		"docker exec %s etcdctl get --prefix %s 2>/dev/null || true", EtcdContainer, shellQuote(zoneKey(zone))))
+	if err != nil {
+		return err
+	}
+	for _, k := range ownedKeys(out, owner) {
+		if _, err := g.Run(ctx, fmt.Sprintf("docker exec %s etcdctl del %s >/dev/null", EtcdContainer, shellQuote(k))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ownedKeys returns the exact etcd keys to delete for owner: each TXT registry
+// record it owns, plus the records stored directly beside it under the same
+// name. Exact keys, not prefixes — a prefix would also take deeper names
+// (x.kong-gw.<zone>) that another cluster may own.
+func ownedKeys(out, owner string) []string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var all []string
+	for i := 0; i+1 < len(lines); i += 2 {
+		all = append(all, strings.TrimSpace(lines[i]))
+	}
+	dirOf := func(k string) string { return k[:strings.LastIndex(k, "/")] }
+	var del []string
+	for _, txt := range ownedTXTKeys(out, owner) {
+		del = append(del, txt)
+		dir := dirOf(txt)
+		parent, label := dir[:strings.LastIndex(dir, "/")+1], dir[strings.LastIndex(dir, "/")+1:]
+		// TXT names are the record name with a record-type prefix: a-, aaaa-, cname-.
+		_, rec, ok := strings.Cut(label, "-")
+		if !ok {
+			continue
+		}
+		for _, k := range all {
+			if dirOf(k) == parent+rec {
+				del = append(del, k)
+			}
+		}
+	}
+	return del
+}
+
+// ownedTXTKeys returns the keys of TXT registry records owned by owner, from
+// `etcdctl get` output (alternating key and value lines).
+func ownedTXTKeys(out, owner string) []string {
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	var keys []string
+	for i := 0; i+1 < len(lines); i += 2 {
+		m := ownerRE.FindStringSubmatch(lines[i+1])
+		if m != nil && m[1] == owner {
+			keys = append(keys, strings.TrimSpace(lines[i]))
+		}
+	}
+	return keys
+}
+
+// PurgeZone deletes every record in zone — a fleet's zone once it has no
+// members left.
+func PurgeZone(ctx context.Context, g *guest.Client, zone string) error {
+	_, err := g.Run(ctx, fmt.Sprintf(
+		"docker exec %s etcdctl del --prefix %s >/dev/null 2>&1 || true", EtcdContainer, shellQuote(zoneKey(zone))))
 	return err
 }

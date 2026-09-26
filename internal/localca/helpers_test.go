@@ -2,12 +2,10 @@ package localca
 
 import (
 	"crypto"
-	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"math/big"
 	"path/filepath"
 	"testing"
 	"time"
@@ -35,7 +33,7 @@ func signWith(t *testing.T, s *Store, cluster, name string) *x509.Certificate {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := pki.SignLeaf(key.Public(), pkix.Name{CommonName: name}, pki.SANs{DNS: []string{name}}, pki.ServerLeaf, inter, interKey)
+	c, err := pki.SignLeaf(key.Public(), pkix.Name{CommonName: name}, pki.SANs{DNS: []string{name}}, pki.ServerLeaf, 0, inter, interKey)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,31 +41,22 @@ func signWith(t *testing.T, s *Store, cluster, name string) *x509.Certificate {
 }
 
 // signWildcardExpiring writes a PEM wildcard (leaf + intermediate) valid for
-// only `left` more, signed by the cluster's current intermediate. The wildcard
-// key on disk is reused so the pair stays consistent.
+// only `left`, signed by the cluster's current intermediate. The wildcard key
+// on disk is reused so the pair stays consistent.
 func signWildcardExpiring(t *testing.T, s *Store, cluster string, left time.Duration) []byte {
 	t.Helper()
-	dir := s.clusterDir(cluster)
 	inter, interKey := clusterCA(t, s, cluster)
-	leafKey, err := pki.LoadKey(filepath.Join(dir, "private", "wildcard.key"))
+	leafKey, err := pki.LoadKey(filepath.Join(s.clusterDir(cluster), "private", "wildcard.key"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	zone := cluster + "." + s.Domain
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(42),
-		Subject:      pkix.Name{CommonName: "*." + zone},
-		DNSNames:     []string{"*." + zone, zone},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(left),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, inter, leafKey.Public(), interKey)
+	leaf, err := pki.SignLeaf(leafKey.Public(), pkix.Name{CommonName: "*." + zone},
+		pki.SANs{DNS: []string{"*." + zone, zone}}, pki.ServerLeaf, left, inter, interKey)
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	out := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf.Raw})
 	return append(out, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: inter.Raw})...)
 }
 

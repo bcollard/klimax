@@ -57,7 +57,7 @@ func runFleetAdopt(ctx context.Context, name string, clusters []string) error {
 	if err := config.ValidateLabels(map[string]string{fleetLabelKey: name}); err != nil {
 		return fmt.Errorf("%q is not a valid fleet name: %w", name, err)
 	}
-	_, g, err := connectToRunningVM(ctx)
+	cfg, g, err := connectToRunningVM(ctx)
 	if err != nil {
 		return err
 	}
@@ -70,10 +70,14 @@ func runFleetAdopt(ctx context.Context, name string, clusters []string) error {
 			return fmt.Errorf("cluster %q not found (see 'klimax cluster list')", c)
 		}
 	}
+	if err := checkZoneNames(ctx, g, cfg, name); err != nil {
+		return err
+	}
 	for _, c := range clusters {
 		if err := kind.LabelNodes(ctx, g, c, []string{fleetLabelKey + "=" + name}); err != nil {
 			return fmt.Errorf("adopting cluster %q: %w", c, err)
 		}
+		joinFleetZone(ctx, g, cfg, c, name)
 	}
 	fmt.Printf("Adopted %d cluster(s) into fleet %q: %s\n", len(clusters), name, strings.Join(clusters, ", "))
 	return nil
