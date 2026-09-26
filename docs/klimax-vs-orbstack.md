@@ -18,7 +18,9 @@ local Kubernetes setup.
 | **VM technology** | Apple Virtualization.framework (vzNAT) | Apple Virtualization.framework |
 | **Container runtime** | Docker | Docker (or containerd) |
 | **Host→pod routing** | Pure L3 — static macOS route, no SNAT | Custom VZ network stack + event-based port forwarding |
-| **LoadBalancer** | MetalLB — routable IPs via L3 | ServiceLB (klipper-lb) + `.orb.local` DNS |
+| **LoadBalancer** | MetalLB — routable IPs via L3 | ServiceLB (klipper-lb) |
+| **Service hostnames** | `<svc>.<ns>.<cluster>.klimax.internal`, every cluster, no setup | `*.k8s.orb.local`, one cluster, no setup |
+| **Container hostnames** | None | `*.orb.local` |
 | **Registry mirrors** | Pre-provisioned (docker.io, quay.io, gcr.io) | Manual `daemon.json` config only |
 | **Port mirroring** | Optional — disable with `disablePortMirroring` | Always on (event-based, not Lima) |
 | **Self-contained binary** | Yes — no extra installs | macOS app bundle |
@@ -205,13 +207,11 @@ on `127.0.0.1`. This does not affect OrbStack, which does not use Lima port mirr
 Worth stating plainly, because the sections above are mostly framed the other
 way round.
 
-**`*.orb.local` DNS, with no setup.** Every container and Kubernetes Service
-gets a working hostname immediately — no domain, no DNS provider, no
-`/etc/hosts`. OrbStack can do this because it owns its whole network stack.
-klimax's answer is real DNS via [ExternalDNS](external-dns.md): more capable
-(publicly trusted TLS, names that work from other machines and survive the VM)
-but it needs a domain you control and a setup session. On "friction to the first
-working hostname", OrbStack wins outright.
+**Hostnames for plain containers.** OrbStack names every `docker run` container
+under `*.orb.local`, because it owns its whole network stack. Since v0.2.0 klimax
+names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.klimax.internal`,
+across all clusters, with no setup ([Local DNS names](https://klimax.dev/docs/local-dns.html)) —
+but not containers outside a cluster.
 
 **Linux machines.** `orb create ubuntu` gives you a VM to log into. klimax
 provisions exactly one VM, to host containers and clusters. Running arbitrary
@@ -240,7 +240,7 @@ file was still holding. Run it by hand if you need the space back sooner.
 - You only need **one Kubernetes cluster** at a time
 - You don't need to test against **specific Kubernetes versions**
 - You don't need **MetalLB** or custom IP address pools
-- The `.orb.local` DNS model fits your workflow
+- You want hostnames for **plain Docker containers**, not just Kubernetes Services
 - You want the **fastest possible** Docker engine on Apple Silicon for non-Kubernetes workloads
 
 ## When to use klimax
