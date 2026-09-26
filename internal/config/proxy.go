@@ -113,6 +113,12 @@ func (c *Config) NoProxy(lima0IP string) []string {
 		add(n)
 	}
 
+	// The local DNS zone resolves to MetalLB VIPs on the kind bridge, which a
+	// proxy cannot route to.
+	if c.DNSEnabled() {
+		add("." + c.DNSDomain())
+	}
+
 	for _, v := range c.Network.Proxy.NoProxy {
 		add(v)
 	}

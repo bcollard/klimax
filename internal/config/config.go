@@ -153,6 +153,9 @@ type NetworkConfig struct {
 	// the kind nodes. Leave it unset to use the Mac's system proxy settings,
 	// which Lima propagates into the guest on its own.
 	Proxy ProxyConfig `yaml:"proxy,omitempty"`
+	// DNS serves LoadBalancer Services under a local zone (klimax.internal by
+	// default). See DNSConfig.
+	DNS DNSConfig `yaml:"dns"`
 }
 
 // CustomDNSResolver forwards a DNS zone to one or more upstream resolvers via CoreDNS.
@@ -301,6 +304,12 @@ func applyDefaults(cfg *Config) {
 	}
 	if cfg.Network.DisablePortMirroring == nil {
 		cfg.Network.DisablePortMirroring = boolPtr(true)
+	}
+	if cfg.Network.DNS.Enabled == nil {
+		cfg.Network.DNS.Enabled = boolPtr(true)
+	}
+	if cfg.Network.DNS.Domain == "" {
+		cfg.Network.DNS.Domain = DefaultDNSDomain
 	}
 	if cfg.Kind.NodeVersion == "" {
 		cfg.Kind.NodeVersion = DefaultKindNodeVersion
@@ -460,6 +469,10 @@ func Validate(cfg *Config) error {
 
 	if _, _, err := net.ParseCIDR(cfg.Network.KindBridgeCIDR); err != nil {
 		errs = append(errs, fmt.Errorf("network.kindBridgeCIDR %q is not a valid CIDR: %w", cfg.Network.KindBridgeCIDR, err))
+	}
+
+	if cfg.DNSEnabled() {
+		errs = append(errs, validateDNS(cfg)...)
 	}
 
 	for _, m := range cfg.Registries.Mirrors {

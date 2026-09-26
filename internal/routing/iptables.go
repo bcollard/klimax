@@ -31,7 +31,14 @@ if [ -z "${KIND_NET_ID}" ]; then
   echo "WARNING: Docker network 'kind' not found, skipping iptables setup"
   exit 0
 fi
-KIND_IF=$(ip link show | grep -o "${KIND_NET_ID}[^:]*" | head -n1 | tr -d ' ' || true)
+# Docker names the bridge br-<first 12 chars of the network id>. An earlier
+# version of this script grepped the id out of "ip link" without the br- prefix,
+# which yielded a name no interface has: iptables accepts any -o name, so Rule 3
+# silently never matched (Rule 2 carried the traffic). Look the name up exactly.
+KIND_IF=""
+if ip link show "br-${KIND_NET_ID}" >/dev/null 2>&1; then
+  KIND_IF="br-${KIND_NET_ID}"
+fi
 if [ -z "${KIND_IF}" ]; then
   echo "WARNING: Could not find bridge interface for kind network ${KIND_NET_ID}"
   exit 0
@@ -50,10 +57,52 @@ iptables -C DOCKER-USER -s "${HOST_GW}/32" -d "${KIND_CIDR}" \
        -m conntrack --ctstate NEW,RELATED,ESTABLISHED -j ACCEPT
 
 # Rule 3: Allow forwarding from lima0 to kind bridge
+# Drop the prefix-less rule the old interface lookup installed.
+iptables -D DOCKER-USER -s "${HOST_GW}/32" -d "${KIND_CIDR}" \
+  -i "${HOST_IF}" -o "${KIND_NET_ID}" -j ACCEPT 2>/dev/null || true
 iptables -C DOCKER-USER -s "${HOST_GW}/32" -d "${KIND_CIDR}" \
   -i "${HOST_IF}" -o "${KIND_IF}" -j ACCEPT 2>/dev/null \
   || iptables -I DOCKER-USER 2 -s "${HOST_GW}/32" -d "${KIND_CIDR}" \
        -i "${HOST_IF}" -o "${KIND_IF}" -j ACCEPT
+
+# Local DNS (network.dns). Empty DNS_IP means the feature is off, and anything
+# a previous run installed is removed.
+DNS_IP="{{ .DNSIP }}"
+DNS_DOMAIN="{{ .DNSDomain }}"
+
+# Rule 4: Docker drops traffic to a container address that does not arrive on
+# its bridge (a per-container raw PREROUTING DROP, which runs before DOCKER-USER
+# is ever consulted). That blocks the host from the DNS container, so exempt
+# exactly that one address, from the host gateway only. Docker appends its own
+# rules, so an insert at the top stays ahead of them. Tagged with a comment so
+# it can be found and removed without knowing the address it was written for.
+# grep exits 1 on no match, which pipefail + set -e would turn into a failed run.
+DNS_RULES=$(iptables -t raw -S PREROUTING | grep -- '--comment klimax-dns' || true)
+while read -r RULE; do
+  [ -z "${RULE}" ] && continue
+  if [ -n "${DNS_IP}" ] && [[ "${RULE}" == *"-d ${DNS_IP}/32"* ]] && [[ "${RULE}" == *"-s ${HOST_GW}/32"* ]]; then
+    continue
+  fi
+  eval "iptables -t raw ${RULE/-A PREROUTING/-D PREROUTING}"
+done <<< "${DNS_RULES}"
+if [ -n "${DNS_IP}" ]; then
+  iptables -t raw -C PREROUTING -i "${HOST_IF}" -s "${HOST_GW}/32" -d "${DNS_IP}/32" \
+    -m comment --comment klimax-dns -j ACCEPT 2>/dev/null \
+    || iptables -t raw -I PREROUTING 1 -i "${HOST_IF}" -s "${HOST_GW}/32" -d "${DNS_IP}/32" \
+         -m comment --comment klimax-dns -j ACCEPT
+
+  # Route the zone for the VM itself (dockerd pulls, klimax shell). A
+  # route-only domain on the kind bridge link: only names under it go to the
+  # DNS container, and the bridge never becomes a default DNS route. Re-applied
+  # here because Docker recreates the bridge link on restart.
+  if command -v resolvectl >/dev/null 2>&1; then
+    resolvectl dns "${KIND_IF}" "${DNS_IP}" || true
+    resolvectl domain "${KIND_IF}" "~${DNS_DOMAIN}" || true
+    resolvectl default-route "${KIND_IF}" false || true
+  fi
+elif command -v resolvectl >/dev/null 2>&1; then
+  resolvectl revert "${KIND_IF}" 2>/dev/null || true
+fi
 
 echo "no-nat-kind rules applied successfully"
 `
@@ -79,13 +128,19 @@ const dockerDropIn = `[Service]
 ExecStartPost=/usr/local/sbin/no-nat-kind.sh
 `
 
+// LocalDNS is the part of network.dns the routing rules need. The zero value
+// means the feature is off.
+type LocalDNS struct {
+	ServerIP string
+	Domain   string
+}
+
 // InstallNoNat installs the no-NAT routing rules in the guest VM and
 // sets up systemd persistence. Idempotent.
-func InstallNoNat(ctx context.Context, g *guest.Client, kindCIDR string) error {
+func InstallNoNat(ctx context.Context, g *guest.Client, kindCIDR string, dns LocalDNS) error {
 	slog.Info("Installing no-NAT routing rules in guest", "kindCIDR", kindCIDR)
 
-	// Substitute the kindCIDR placeholder.
-	script := strings.ReplaceAll(noNatScript, `{{ .KindCIDR }}`, kindCIDR)
+	script := renderNoNatScript(kindCIDR, dns)
 
 	installScript := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
@@ -121,6 +176,27 @@ systemctl enable --now lima-no-nat-kind.service
 		return fmt.Errorf("applying no-NAT rules: %w", err)
 	}
 	return nil
+}
+
+// renderNoNatScript fills the script's placeholders.
+func renderNoNatScript(kindCIDR string, dns LocalDNS) string {
+	return strings.NewReplacer(
+		`{{ .KindCIDR }}`, kindCIDR,
+		`{{ .DNSIP }}`, dns.ServerIP,
+		`{{ .DNSDomain }}`, dns.Domain,
+	).Replace(noNatScript)
+}
+
+// CheckDNSRule reports whether the raw-table exemption for the DNS container is
+// present — without it the Mac's queries are dropped by Docker before they reach
+// the container.
+func CheckDNSRule(ctx context.Context, g *guest.Client, serverIP string) (bool, error) {
+	out, err := g.Run(ctx, fmt.Sprintf(
+		`sudo iptables -t raw -S PREROUTING | grep -- '--comment klimax-dns' | grep -q -- '-d %s/32' && echo yes || echo no`, serverIP))
+	if err != nil {
+		return false, fmt.Errorf("checking DNS iptables rule: %w", err)
+	}
+	return strings.TrimSpace(out) == "yes", nil
 }
 
 // CheckNoNatRule returns true if the NAT exemption rule is present in the guest.

@@ -338,9 +338,10 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetNa
 		return err
 	}
 
-	if err := kind.CreateCluster(ctx, g, cl, kindCfg, regCfg, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
+	if err := kind.CreateCluster(ctx, g, cl, withLocalDNSForward(cfg, kindCfg), regCfg, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
+	installLocalDNS(ctx, g, cfg, pc.Name)
 
 	// Addons.
 	if pc.Addons != nil && pc.Addons.MetricsServer != nil && pc.Addons.MetricsServer.Enabled {

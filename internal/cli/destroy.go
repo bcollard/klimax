@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/klimax/internal/localdns"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 func newDestroyCmd() *cobra.Command {
@@ -54,6 +57,12 @@ func runDestroy(ctx context.Context) error {
 	// Delete the VM.
 	if err := mgr.Delete(ctx); err != nil {
 		return fmt.Errorf("deleting VM: %w", err)
+	}
+
+	// The resolver file would otherwise point macOS at an address nothing
+	// answers on, and every lookup under the zone would wait for a timeout.
+	if err := localdns.RemoveHostResolvers(term.IsTerminal(int(os.Stdin.Fd()))); err != nil {
+		slog.Warn("Failed to remove the klimax resolver file (continuing)", "err", err)
 	}
 
 	// Remove macOS route.
