@@ -57,7 +57,8 @@ func TestCorefile(t *testing.T) {
 		"klimax.internal:53 {",
 		"endpoint http://172.30.255.52:2379",
 		"path /skydns",
-		"rewrite ttl regex .* 5-30",
+		"success 9984 30",
+		"denial 9984 5",
 		"reload",
 	} {
 		if !strings.Contains(cf, want) {

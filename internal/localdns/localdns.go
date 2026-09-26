@@ -54,9 +54,15 @@ const (
 
 // Corefile renders the CoreDNS config for the zone.
 //
-// `rewrite ttl` caps answers at 30s. ExternalDNS writes records with TTL 0,
-// which the etcd plugin turns into 300s — so a Service recreated on a new VIP
-// would keep resolving to the old one for five minutes on the Mac.
+// The cache block caps the TTLs clients see, in the authority section too:
+//   - success 30: ExternalDNS writes records with TTL 0, which the etcd plugin
+//     turns into 300s — a Service recreated on a new VIP would keep resolving
+//     to the old one for five minutes on the Mac.
+//   - denial 5: the etcd plugin's SOA minimum is a fixed 30s, so a name looked
+//     up before ExternalDNS's first sync stayed "no such name" on the Mac for
+//     30s after it existed. `rewrite ttl` cannot fix that: it leaves the
+//     authority section alone. Measured: a record added after a cached
+//     NXDOMAIN is visible within ~6s.
 //
 // `reload` makes a Corefile edit (a domain change) apply without recreating
 // the container.
@@ -68,7 +74,10 @@ func Corefile(cfg *config.Config) string {
         path %s
         endpoint http://%s:2379
     }
-    rewrite ttl regex .* 5-30
+    cache {
+        success 9984 30
+        denial 9984 5
+    }
     reload
 }
 `, cfg.DNSDomain(), EtcdPrefix, cfg.DNSEtcdIP())
