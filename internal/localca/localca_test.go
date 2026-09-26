@@ -226,7 +226,7 @@ func TestRemoveCluster(t *testing.T) {
 // fleet-wide trust never widens what one cluster can mint.
 func TestFleetZoneIsIsolated(t *testing.T) {
 	s := newStore(t)
-	f, err := s.EnsureFleet("stonex")
+	f, err := s.EnsureFleet("lab")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,32 +234,32 @@ func TestFleetZoneIsIsolated(t *testing.T) {
 		t.Errorf("fleet material: kind=%s secret=%s issuer=%s", f.Kind, f.SecretName(), f.IssuerName())
 	}
 	for name, ok := range map[string]bool{
-		"kong-gw.stonex.klimax.internal":      true,
-		"kong-gw.stonex-east.klimax.internal": false,
-		"github.com":                          false,
+		"gateway.lab.klimax.internal":      true,
+		"gateway.lab-east.klimax.internal": false,
+		"github.com":                       false,
 	} {
 		if err := verify(t, f, name); (err == nil) != ok {
 			t.Errorf("fleet wildcard for %s: err=%v, want ok=%v", name, err, ok)
 		}
 	}
 
-	if _, err := s.EnsureCluster("stonex-east"); err != nil {
+	if _, err := s.EnsureCluster("lab-east"); err != nil {
 		t.Fatal(err)
 	}
-	evil := signWith(t, s, "stonex-east", "kong-gw.stonex.klimax.internal")
+	evil := signWith(t, s, "lab-east", "gateway.lab.klimax.internal")
 	roots := x509.NewCertPool()
 	roots.AddCert(parseChain(t, f.RootPEM)[0])
-	inter, _ := clusterCA(t, s, "stonex-east")
+	inter, _ := clusterCA(t, s, "lab-east")
 	inters := x509.NewCertPool()
 	inters.AddCert(inter)
-	if _, err := evil.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inters, DNSName: "kong-gw.stonex.klimax.internal"}); err == nil {
+	if _, err := evil.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inters, DNSName: "gateway.lab.klimax.internal"}); err == nil {
 		t.Error("a member's intermediate must not be able to sign fleet-wide names")
 	}
 
-	if got := s.Fleets(); len(got) != 1 || got[0] != "stonex" {
+	if got := s.Fleets(); len(got) != 1 || got[0] != "lab" {
 		t.Errorf("Fleets() = %v", got)
 	}
-	if err := s.RemoveFleet("stonex"); err != nil {
+	if err := s.RemoveFleet("lab"); err != nil {
 		t.Fatal(err)
 	}
 	if len(s.Fleets()) != 0 || len(s.Clusters()) != 1 {
@@ -279,7 +279,7 @@ func TestConcurrentFleetIssuance(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			f, err := s.EnsureFleet("stonex")
+			f, err := s.EnsureFleet("lab")
 			if err == nil {
 				got[i] = f.WildcardPEM
 			}

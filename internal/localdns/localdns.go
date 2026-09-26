@@ -269,8 +269,8 @@ var ownerRE = regexp.MustCompile(`external-dns/owner=([a-z0-9.-]+)`)
 // ownership TXT records. Used for a fleet's zone, which several clusters write
 // into: deleting the whole prefix would take the other members' names too.
 //
-// Layout (SkyDNS, label-reversed): the A record for kong-gw.<zone> is under
-// <zone>/kong-gw/<id>; its TXT registry record is under <zone>/a-kong-gw/<id>.
+// Layout (SkyDNS, label-reversed): the A record for gateway.<zone> is under
+// <zone>/gateway/<id>; its TXT registry record is under <zone>/a-gateway/<id>.
 func PurgeOwned(ctx context.Context, g *guest.Client, zone, owner string) error {
 	out, err := g.Run(ctx, fmt.Sprintf(
 		"docker exec %s etcdctl get --prefix %s 2>/dev/null || true", EtcdContainer, shellQuote(zoneKey(zone))))
@@ -288,7 +288,7 @@ func PurgeOwned(ctx context.Context, g *guest.Client, zone, owner string) error 
 // ownedKeys returns the exact etcd keys to delete for owner: each TXT registry
 // record it owns, plus the records stored directly beside it under the same
 // name. Exact keys, not prefixes — a prefix would also take deeper names
-// (x.kong-gw.<zone>) that another cluster may own.
+// (x.gateway.<zone>) that another cluster may own.
 func ownedKeys(out, owner string) []string {
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	var all []string

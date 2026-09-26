@@ -14,7 +14,7 @@ import (
 )
 
 // A fleet has its own DNS zone, <fleet>.<domain>, beside its members' zones.
-// Fleet-wide names (kong-gw.<fleet>.<domain>) are published by whichever member
+// Fleet-wide names (gateway.<fleet>.<domain>) are published by whichever member
 // annotates a Service with one; klimax only has to let every member write
 // there, give the zone a wildcard certificate, and clean up after a member.
 //
