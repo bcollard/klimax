@@ -11,8 +11,8 @@ rename is a clean break, not a compatibility layer — see `internal/cli/migrate
 
 - Every identifier moved: module `github.com/bcollard/marina`, `~/.marina`
   (LIMA_HOME), VM `marina` / disk `marina-img`, `marina.internal`, labels
-  `marina.sh/fleet` + `managed-by=marina`, `apiVersion: marina.sh/v1alpha1`,
-  `marina-*` Secrets/ClusterIssuers/containers, launchd `sh.marina.autostart`.
+  `marina.run/fleet` + `managed-by=marina`, `apiVersion: marina.run/v1alpha1`,
+  `marina-*` Secrets/ClusterIssuers/containers, launchd `run.marina.autostart`.
 - `marina migrate` deletes the klimax VM (by pointing LIMA_HOME at `~/.klimax` —
   the klimax binary is gone after `brew upgrade`), rewrites the config (default
   VM name, DNS zone), moves the registry cache, removes the launchd agent.
@@ -31,7 +31,7 @@ Release-time steps outside this repo (not done by code): rename the GitHub repos
 (`klimax` → `marina`, `homebrew-klimax` → `homebrew-marina`, `klimax-website`,
 `klimax-ui`); add `cask_renames.json` `{"klimax": "marina"}` to the tap so
 `brew upgrade` moves users over; add the new website repo to the GCS WIF
-binding **before** renaming it; buy `marina.sh`; new logo wordmark.
+binding **before** renaming it; buy `marina.run`; new logo wordmark.
 
 ---
 
@@ -112,7 +112,7 @@ internal/registry/registry.go        EnsureRegistries, RegistryHosts (pull-throu
 internal/registry/daemon.go          HubMirrorEndpoint, MergeDaemonConfig — dockerd's Hub-only registry-mirrors (classic image store)
 internal/registry/dockerhosts.go     DockerdRegistryHosts, DockerHostsTOML — per-registry mirrors for dockerd via /etc/docker/certs.d
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
-internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (marina.sh/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
+internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (marina.run/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/localdns/localdns.go        Ensure/Remove (etcd + CoreDNS containers at x.y.255.52/.53), Corefile, PurgeCluster, ListRecords, ProbeFromHost
 internal/localdns/externaldns.go     ExternalDNSManifest / InstallExternalDNS (plain kubectl, not Helm), ClusterForward (CoreDNS stanza)
@@ -150,12 +150,12 @@ internal/cli/sudoers.go              `marina sudoers` — emits/checks the NOPAS
 internal/cli/disk.go                 `marina disk resize` — grows vm.disk + the Lima instance config (applied on next start)
                                      `marina disk resize-image` — grows the vm.imageDisk data disk in place (VM must be stopped)
 internal/cli/prune.go                `marina prune` — removes superseded guest agents, orphaned registry caches, (opt-in) Lima download cache
-internal/cli/autostart.go            `marina autostart` — launchd agent (sh.marina.autostart) running `marina up` at login
+internal/cli/autostart.go            `marina autostart` — launchd agent (run.marina.autostart) running `marina up` at login
 internal/cli/config_cmd.go           `marina config edit` — opens config in $VISUAL / $EDITOR
 internal/cli/cluster.go              `marina cluster` subcommands (create/delete/list/label/e2e-test-nginx; use+merge deprecated → kubeconfig)
 internal/cli/kubeconfig.go           `marina kubeconfig` (path/env/merge/remove/use) — kubeconfig helpers; `use` merges + kubectl use-context
 internal/cli/cluster_apply.go        `marina cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
-internal/cli/fleet.go                `marina fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the marina.sh/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
+internal/cli/fleet.go                `marina fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the marina.run/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `marina registry clean-cache`
 internal/cli/fleetzone.go            fleet zones: checkZoneNames/checkClusterNameFree (fleet ≠ cluster name), installFleetCA, joinFleetZone (adopt), leaveFleetZone (delete: owner-scoped purge; last member removes zone + CA)
 internal/cli/ca.go                   `marina ca status|cert|attach|secret|trust|untrust`; reconcileLocalCA (up), localCAForCluster/installLocalCA (create), removeLocalCA (delete/destroy)
@@ -343,7 +343,7 @@ A declarative fleet applied via `marina cluster apply -f <file>`. See `examples/
 
 - **Minimal manifest lists only names** — everything else defaults:
   ```yaml
-  apiVersion: marina.sh/v1alpha1
+  apiVersion: marina.run/v1alpha1
   kind: Fleet
   spec:
     clusters: [dev, staging]
@@ -354,9 +354,9 @@ A declarative fleet applied via `marina cluster apply -f <file>`. See `examples/
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
 - **Teardown**: `marina cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
-- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every marina cluster always gets `managed-by=marina`; fleets add `marina.sh/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `marina cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
-- **`fleet` command & selectors**: fleet membership is derived from the live `marina.sh/fleet` node label (not the manifest), so `marina fleet list/describe/delete/label <name>` operate on whatever clusters currently carry the label.
-- **Adoption**: `apply`/`fleet create` only *skip* pre-existing clusters by name — it does not relabel them, so a listed cluster that isn't already a member is **not** silently pulled into the fleet. Instead it warns and lists them; re-run with `--adopt` to relabel them into the fleet (fleet label + the manifest entry's labels, via `adoptIntoFleet` → `kind.LabelNodes`). `marina fleet adopt <fleet> <cluster>…` does the same for arbitrary existing clusters (just sets `marina.sh/fleet`). `fleet delete <name>` and `fleet label <name>` resolve members via `kind.ClustersMatchingSelector(g, "marina.sh/fleet=<name>")`; `fleet list` groups via `kind.ClustersByFleet`. `cluster list -l` / `cluster delete -l` take an arbitrary kubectl label selector (matched in-guest by kubectl, one call per cluster). `fleet create -f`/`delete -f` delegate to the same code as `cluster apply -f`/`delete -f`. Selectors are charset-validated (`selectorRE`) before shell interpolation.
+- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every marina cluster always gets `managed-by=marina`; fleets add `marina.run/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `marina cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
+- **`fleet` command & selectors**: fleet membership is derived from the live `marina.run/fleet` node label (not the manifest), so `marina fleet list/describe/delete/label <name>` operate on whatever clusters currently carry the label.
+- **Adoption**: `apply`/`fleet create` only *skip* pre-existing clusters by name — it does not relabel them, so a listed cluster that isn't already a member is **not** silently pulled into the fleet. Instead it warns and lists them; re-run with `--adopt` to relabel them into the fleet (fleet label + the manifest entry's labels, via `adoptIntoFleet` → `kind.LabelNodes`). `marina fleet adopt <fleet> <cluster>…` does the same for arbitrary existing clusters (just sets `marina.run/fleet`). `fleet delete <name>` and `fleet label <name>` resolve members via `kind.ClustersMatchingSelector(g, "marina.run/fleet=<name>")`; `fleet list` groups via `kind.ClustersByFleet`. `cluster list -l` / `cluster delete -l` take an arbitrary kubectl label selector (matched in-guest by kubectl, one call per cluster). `fleet create -f`/`delete -f` delegate to the same code as `cluster apply -f`/`delete -f`. Selectors are charset-validated (`selectorRE`) before shell interpolation.
 
 ---
 
@@ -416,7 +416,7 @@ marina cluster delete [name]           Delete a cluster; interactive multi-selec
   -y, --yes                            Skip the confirmation prompt
 marina cluster list                    List clusters with num, API port, kubeconfig path
   -o text|json|yaml                    Output format
-  -l, --selector <sel>                 Filter by node label selector (e.g. marina.sh/fleet=f1)
+  -l, --selector <sel>                 Filter by node label selector (e.g. marina.run/fleet=f1)
 marina cluster use <name>              DEPRECATED → 'marina kubeconfig env <name>'
 marina cluster merge <name>            DEPRECATED → 'marina kubeconfig merge <name>'
 
@@ -433,12 +433,12 @@ marina cluster e2e-test-nginx          Deploy nginx, expose, curl — uses curre
 
 marina fleet create -f <file>          Create clusters from a Fleet manifest (alias of 'cluster apply -f'; --dry-run, --max-parallel)
   --adopt                              Adopt pre-existing clusters listed in the manifest into this fleet (relabel them)
-marina fleet adopt <fleet> <cluster>…  Adopt existing clusters into a fleet (sets their marina.sh/fleet label)
-marina fleet list [-o text|json|yaml]  List fleets (grouped by marina.sh/fleet) and their member clusters
+marina fleet adopt <fleet> <cluster>…  Adopt existing clusters into a fleet (sets their marina.run/fleet label)
+marina fleet list [-o text|json|yaml]  List fleets (grouped by marina.run/fleet) and their member clusters
 marina fleet describe <name>           Show a fleet's members with num, API port, kubeconfig, node count/version/readiness, labels ([-o text|json|yaml])
 marina fleet export [cluster...]       Write a Fleet manifest for live clusters (reverse of `fleet create -f`)
   -l, --selector <sel>                 Select by node label selector instead of names
-  --name <fleet>                       metadata.name (default: shared marina.sh/fleet label, else "exported")
+  --name <fleet>                       metadata.name (default: shared marina.run/fleet label, else "exported")
   --nums                               Record each cluster's num, pinning API ports on re-apply (default true)
                                        No names and no selector → interactive picker.
                                        Not captured (not recoverable from live state): dependsOn, registries, addons.
@@ -581,7 +581,7 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
   ambiguous joins, shared 63-char label, and a rename for v0.2.x users).
 - **Fleet zones (`<fleet>.<domain>`).** Members' ExternalDNS get a second
   `--domain-filter` for the fleet zone (set at create, `fleet adopt`/`--adopt`,
-  and `dns attach`, from the live `marina.sh/fleet` label). Automatic names stay in
+  and `dns attach`, from the live `marina.run/fleet` label). Automatic names stay in
   the cluster zone; fleet names come only from the hostname annotation. **First
   member to publish a name owns it** (TXT registry; `--txt-owner-id` stays per
   cluster, so `sync` is safe). Verified: deleting the owner hands the name to the

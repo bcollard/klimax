@@ -22,7 +22,7 @@ func TestCustomLabelsDropsInfraAndManaged(t *testing.T) {
 		"topology.kubernetes.io/region":         "europe-west1",
 		"topology.kubernetes.io/zone":           "europe-west1-b",
 		"managed-by":                            "marina",
-		"marina.sh/fleet":                       "mesh",
+		"marina.run/fleet":                       "mesh",
 		"env":                                   "prod",
 		"team":                                  "platform",
 	})
@@ -58,8 +58,8 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "all share a fleet label",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"marina.sh/fleet": "mesh"}),
-				"b": info("v1.36.1", map[string]string{"marina.sh/fleet": "mesh"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
+				"b": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 			},
 			want: "mesh",
 		},
@@ -67,8 +67,8 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "mixed fleets fall back",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"marina.sh/fleet": "mesh"}),
-				"b": info("v1.36.1", map[string]string{"marina.sh/fleet": "gw"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
+				"b": info("v1.36.1", map[string]string{"marina.run/fleet": "gw"}),
 			},
 			want: "exported",
 		},
@@ -76,7 +76,7 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "one unlabelled falls back",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"marina.sh/fleet": "mesh"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 				"b": info("v1.36.1", map[string]string{}),
 			},
 			want: "exported",
@@ -104,12 +104,12 @@ func TestAssembleFleetCapturesLiveState(t *testing.T) {
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
 			"topology.kubernetes.io/zone":   "europe-west1-b",
-			"marina.sh/fleet":               "mesh",
+			"marina.run/fleet":               "mesh",
 			"kubernetes.io/hostname":        "dev-control-plane",
 			"env":                           "dev",
 		}),
 		"staging": info("v1.36.1", map[string]string{
-			"marina.sh/fleet": "mesh",
+			"marina.run/fleet": "mesh",
 		}),
 	}
 
@@ -148,7 +148,7 @@ func TestAssembleFleetCapturesLiveState(t *testing.T) {
 
 func TestAssembleFleetExplicitNameAndNoNums(t *testing.T) {
 	infos := map[string]*kind.ClusterInfo{
-		"a": info("v1.36.1", map[string]string{"marina.sh/fleet": "mesh"}),
+		"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 	}
 	man := assembleFleet([]string{"a"}, map[string]int{"a": 7}, infos, "chosen", false)
 	if man.Metadata.Name != "chosen" {
@@ -165,7 +165,7 @@ func TestAssembleFleetRoundTripsThroughParse(t *testing.T) {
 	infos := map[string]*kind.ClusterInfo{
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
-			"marina.sh/fleet":               "mesh",
+			"marina.run/fleet":               "mesh",
 			"env":                           "dev",
 		}),
 	}

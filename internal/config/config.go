@@ -353,7 +353,7 @@ const (
 	// ExampleConfigURL is the annotated reference config.
 	ExampleConfigURL = "https://github.com/bcollard/marina/blob/main/config.example.yaml"
 	// ConfigDocsURL is the configuration reference on the docs site.
-	ConfigDocsURL = "https://marina.sh/docs/configuration.html"
+	ConfigDocsURL = "https://marina.run/docs/configuration.html"
 )
 
 func WriteDefaultConfig(path string) error {

@@ -23,7 +23,7 @@ func validateSelector(sel string) error {
 }
 
 // ClustersMatchingSelector returns the names of clusters whose nodes match the
-// given kubectl label selector (e.g. "marina.sh/fleet=f1,env=prod"). Selector
+// given kubectl label selector (e.g. "marina.run/fleet=f1,env=prod"). Selector
 // parsing is delegated to kubectl in the guest.
 func ClustersMatchingSelector(ctx context.Context, g *guest.Client, selector string) ([]string, error) {
 	if err := validateSelector(selector); err != nil {
@@ -41,13 +41,13 @@ done`, selector)
 	return nonEmptyLines(out), nil
 }
 
-// ClustersByFleet groups every cluster by its marina.sh/fleet node label value.
+// ClustersByFleet groups every cluster by its marina.run/fleet node label value.
 // Clusters without the label are grouped under the empty string.
 func ClustersByFleet(ctx context.Context, g *guest.Client) (map[string][]string, error) {
 	cmd := `for c in $(kind get clusters 2>/dev/null); do
   kc=/tmp/marina-kube-$c.yaml
   kind get kubeconfig --name "$c" | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > "$kc" 2>/dev/null
-  f=$(kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -r '.items[0].metadata.labels["marina.sh/fleet"] // ""')
+  f=$(kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -r '.items[0].metadata.labels["marina.run/fleet"] // ""')
   echo "$c|$f"
 done`
 	out, err := g.Run(ctx, cmd)

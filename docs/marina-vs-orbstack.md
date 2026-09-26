@@ -210,7 +210,7 @@ way round.
 **Hostnames for plain containers.** OrbStack names every `docker run` container
 under `*.orb.local`, because it owns its whole network stack. Since v0.2.0 marina
 names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.marina.internal`,
-across all clusters, with no setup ([Local DNS names](https://marina.sh/docs/local-dns.html)) —
+across all clusters, with no setup ([Local DNS names](https://marina.run/docs/local-dns.html)) —
 but not containers outside a cluster.
 
 **Linux machines.** `orb create ubuntu` gives you a VM to log into. marina
@@ -222,7 +222,7 @@ existing VM in about fifteen, and a first boot takes minutes (image download,
 cloud-init, Docker, kind). Fine for a login-time `marina autostart`; not
 comparable if you stop and start all day.
 
-**A full GUI.** [Marina UI](https://marina.sh/docs/marina-ui.html) is a
+**A full GUI.** [Marina UI](https://marina.run/docs/marina-ui.html) is a
 companion for watching VM, cluster and mirror state — not a control surface for
 everything.
 

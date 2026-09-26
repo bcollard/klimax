@@ -236,7 +236,7 @@ func ConfigureCACerts(ctx context.Context, g *guest.Client, clusterName string, 
 }
 
 // applyNodeLabels labels every node in the cluster at creation. It always applies
-// managed-by=marina, plus any caller-supplied labels (marina.sh/fleet, custom).
+// managed-by=marina, plus any caller-supplied labels (marina.run/fleet, custom).
 // Topology labels (region/zone) and ingress-ready are already set at node
 // registration via the kubeadm node-labels patch.
 func applyNodeLabels(ctx context.Context, g *guest.Client, clusterName string, labels map[string]string) error {

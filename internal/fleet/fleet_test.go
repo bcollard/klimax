@@ -4,7 +4,7 @@ import "testing"
 
 // minimal manifest: only cluster names, everything else defaulted.
 func TestParseMinimalNamesOnly(t *testing.T) {
-	data := []byte(`apiVersion: marina.sh/v1alpha1
+	data := []byte(`apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -28,7 +28,7 @@ spec:
 
 // entries may mix bare strings and full objects.
 func TestParseMixedEntries(t *testing.T) {
-	data := []byte(`apiVersion: marina.sh/v1alpha1
+	data := []byte(`apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -66,22 +66,22 @@ func TestValidateErrors(t *testing.T) {
 		"bad apiVersion": `apiVersion: v1
 kind: Fleet
 spec: {clusters: [a]}`,
-		"bad kind": `apiVersion: marina.sh/v1alpha1
+		"bad kind": `apiVersion: marina.run/v1alpha1
 kind: Pod
 spec: {clusters: [a]}`,
-		"no clusters": `apiVersion: marina.sh/v1alpha1
+		"no clusters": `apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec: {clusters: []}`,
-		"dup name": `apiVersion: marina.sh/v1alpha1
+		"dup name": `apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec: {clusters: [a, a]}`,
-		"unknown dep": `apiVersion: marina.sh/v1alpha1
+		"unknown dep": `apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
     - name: a
       dependsOn: [ghost]`,
-		"cycle": `apiVersion: marina.sh/v1alpha1
+		"cycle": `apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -89,7 +89,7 @@ spec:
       dependsOn: [b]
     - name: b
       dependsOn: [a]`,
-		"dup num": `apiVersion: marina.sh/v1alpha1
+		"dup num": `apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -110,7 +110,7 @@ spec:
 }
 
 func TestResolveNumAssignment(t *testing.T) {
-	data := []byte(`apiVersion: marina.sh/v1alpha1
+	data := []byte(`apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -158,7 +158,7 @@ spec:
 }
 
 func TestLabelsMergeWithDefaults(t *testing.T) {
-	data := []byte(`apiVersion: marina.sh/v1alpha1
+	data := []byte(`apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   defaults:
@@ -188,7 +188,7 @@ spec:
 }
 
 func TestResolvePinnedNumConflictsWithLive(t *testing.T) {
-	data := []byte(`apiVersion: marina.sh/v1alpha1
+	data := []byte(`apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:

@@ -16,9 +16,9 @@ import (
 )
 
 const (
-	// autostartLabel is the launchd job label (reverse-DNS of marina.sh, matching
-	// the marina.sh/* label namespace used for cluster nodes).
-	autostartLabel = "sh.marina.autostart"
+	// autostartLabel is the launchd job label (reverse-DNS of marina.run, matching
+	// the marina.run/* label namespace used for cluster nodes).
+	autostartLabel = "run.marina.autostart"
 )
 
 func newAutostartCmd() *cobra.Command {

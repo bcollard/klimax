@@ -3,13 +3,13 @@
 </p>
 
 <p align="center">
-  <a href="https://marina.sh"><strong>🌐 marina.sh</strong></a>
+  <a href="https://marina.run"><strong>🌐 marina.run</strong></a>
   &nbsp;&middot;&nbsp;
-  <a href="https://marina.sh/docs/"><strong>📚 Documentation</strong></a>
+  <a href="https://marina.run/docs/"><strong>📚 Documentation</strong></a>
   &nbsp;&middot;&nbsp;
-  <a href="https://marina.sh/docs/getting-started.html"><strong>🚀 Getting started</strong></a>
+  <a href="https://marina.run/docs/getting-started.html"><strong>🚀 Getting started</strong></a>
   &nbsp;&middot;&nbsp;
-  <a href="https://marina.sh/docs/cli-reference.html"><strong>📖 CLI reference</strong></a>
+  <a href="https://marina.run/docs/cli-reference.html"><strong>📖 CLI reference</strong></a>
 </p>
 
 _Fast, efficient, and opinionated multi-cluster manager for macOS Silicon laptops._
@@ -21,7 +21,7 @@ Marina is self-contained, clean, and can work alongside your current Docker setu
 ![marina high-level architecture](docs/MARINA-HLD-architecture.png)
 
 For lower-level design, see [docs/MARINA-LLD-architecture.png](docs/MARINA-LLD-architecture.png)
-and the [Architecture guide](https://marina.sh/docs/architecture.html).
+and the [Architecture guide](https://marina.run/docs/architecture.html).
 
 ---
 
@@ -44,27 +44,27 @@ and the [Architecture guide](https://marina.sh/docs/architecture.html).
 ## Documentation
 
 This README is the quick tour. The full documentation lives at
-**[marina.sh/docs](https://marina.sh/docs/)**:
+**[marina.run/docs](https://marina.run/docs/)**:
 
 | Guide | What it covers |
 |---|---|
-| [Getting started](https://marina.sh/docs/getting-started.html) | Install marina, bring up the VM, create your first routable kind cluster |
-| [Managing clusters](https://marina.sh/docs/managing-clusters.html) | Create, list, switch, label, verify, and delete individual clusters |
-| [Fleet management](https://marina.sh/docs/fleet.html) | Declaratively create and tear down whole fleets from one manifest |
-| [Fleet resource reference](https://marina.sh/docs/fleet-reference.html) | Every field of the `marina.sh/v1alpha1` Fleet manifest, with defaults and validation rules |
-| [Configuration](https://marina.sh/docs/configuration.html) | `~/.marina/config.yaml` — VM size, bridge CIDR, kind versions, DNS, mirrors |
-| [CLI reference](https://marina.sh/docs/cli-reference.html) | Every command and flag |
-| [Registry mirrors](https://marina.sh/docs/registries.html) | Pull-through caches, dodging Docker Hub rate limits, adding your own mirror |
-| [Networking &amp; L3 routing](https://marina.sh/docs/networking.html) | vzNAT, the host route, `ip_forward`, and the iptables SNAT exemptions |
-| [Helm with marina](https://marina.sh/docs/helm.html) | Charts with LoadBalancer services, reachable from your Mac via MetalLB |
-| [Architecture](https://marina.sh/docs/architecture.html) | How the VM, Docker, kind, MetalLB, CoreDNS, and mirrors fit together |
-| [Upgrading](https://marina.sh/docs/upgrading.html) | Upgrade without losing your image cache or config |
-| [Reset &amp; reinstall](https://marina.sh/docs/reset.html) | Three levels, from rebuilding the VM to a full clean install |
-| [Marina UI](https://marina.sh/docs/marina-ui.html) | The native SwiftUI companion app |
-| [Agent Skill](https://marina.sh/docs/agent-skill.html) | Teach AI coding tools to drive marina |
-| [marina as a Docker host](https://marina.sh/docs/docker-host.html) | Use the VM's Docker daemon on its own, with published ports on `localhost` and Hub pulls through the cache |
-| [marina vs. other tools](https://marina.sh/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack — including what they do better |
-| [Changelog](https://marina.sh/docs/changelog.html) | Release history |
+| [Getting started](https://marina.run/docs/getting-started.html) | Install marina, bring up the VM, create your first routable kind cluster |
+| [Managing clusters](https://marina.run/docs/managing-clusters.html) | Create, list, switch, label, verify, and delete individual clusters |
+| [Fleet management](https://marina.run/docs/fleet.html) | Declaratively create and tear down whole fleets from one manifest |
+| [Fleet resource reference](https://marina.run/docs/fleet-reference.html) | Every field of the `marina.run/v1alpha1` Fleet manifest, with defaults and validation rules |
+| [Configuration](https://marina.run/docs/configuration.html) | `~/.marina/config.yaml` — VM size, bridge CIDR, kind versions, DNS, mirrors |
+| [CLI reference](https://marina.run/docs/cli-reference.html) | Every command and flag |
+| [Registry mirrors](https://marina.run/docs/registries.html) | Pull-through caches, dodging Docker Hub rate limits, adding your own mirror |
+| [Networking &amp; L3 routing](https://marina.run/docs/networking.html) | vzNAT, the host route, `ip_forward`, and the iptables SNAT exemptions |
+| [Helm with marina](https://marina.run/docs/helm.html) | Charts with LoadBalancer services, reachable from your Mac via MetalLB |
+| [Architecture](https://marina.run/docs/architecture.html) | How the VM, Docker, kind, MetalLB, CoreDNS, and mirrors fit together |
+| [Upgrading](https://marina.run/docs/upgrading.html) | Upgrade without losing your image cache or config |
+| [Reset &amp; reinstall](https://marina.run/docs/reset.html) | Three levels, from rebuilding the VM to a full clean install |
+| [Marina UI](https://marina.run/docs/marina-ui.html) | The native SwiftUI companion app |
+| [Agent Skill](https://marina.run/docs/agent-skill.html) | Teach AI coding tools to drive marina |
+| [marina as a Docker host](https://marina.run/docs/docker-host.html) | Use the VM's Docker daemon on its own, with published ports on `localhost` and Hub pulls through the cache |
+| [marina vs. other tools](https://marina.run/docs/comparison.html) | How it lines up against Rancher Desktop, Colima, and OrbStack — including what they do better |
+| [Changelog](https://marina.run/docs/changelog.html) | Release history |
 
 ---
 
@@ -98,7 +98,7 @@ This README is the quick tour. The full documentation lives at
 
 ## Installation
 
-> 📚 Full guide: [Getting started](https://marina.sh/docs/getting-started.html)
+> 📚 Full guide: [Getting started](https://marina.run/docs/getting-started.html)
 
 ### Homebrew (recommended)
 
@@ -118,11 +118,11 @@ marina migrate                              # deletes the klimax VM, moves the c
 marina up
 ```
 
-What changes for you: hostnames `*.klimax.internal` → `*.marina.internal`, the fleet label `klimax.dev/fleet` → `marina.sh/fleet`, Fleet manifests' `apiVersion` → `marina.sh/v1alpha1`, and a new local CA to trust (one sudo prompt). Clusters are re-created; cached images are not downloaded again. `marina migrate --dry-run` shows the plan first.
+What changes for you: hostnames `*.klimax.internal` → `*.marina.internal`, the fleet label `klimax.dev/fleet` → `marina.run/fleet`, Fleet manifests' `apiVersion` → `marina.run/v1alpha1`, and a new local CA to trust (one sudo prompt). Clusters are re-created; cached images are not downloaded again. `marina migrate --dry-run` shows the plan first.
 
 ### Upgrading
 
-> 📚 Full guide: [Upgrading marina](https://marina.sh/docs/upgrading.html)
+> 📚 Full guide: [Upgrading marina](https://marina.run/docs/upgrading.html)
 
 ```sh
 brew upgrade --cask marina
@@ -167,7 +167,7 @@ marina completion fish > ~/.config/fish/completions/marina.fish
 
 ## Quick start
 
-> 📚 Walkthrough with explanations: [Getting started](https://marina.sh/docs/getting-started.html)
+> 📚 Walkthrough with explanations: [Getting started](https://marina.run/docs/getting-started.html)
 
 ```sh
 # 1. Bring up the VM + Docker + networking + registries
@@ -226,7 +226,7 @@ After `marina up`, the kind bridge CIDR is routed from your Mac directly to the 
 
 ## Configuration reference
 
-> 📚 Full reference: [Configuration](https://marina.sh/docs/configuration.html)
+> 📚 Full reference: [Configuration](https://marina.run/docs/configuration.html)
 
 The default config path is `~/.marina/config.yaml`. Use `marina config edit` to open it in your `$EDITOR`, or copy `config.example.yaml` to get started.
 
@@ -322,7 +322,7 @@ registries:
 
 ## CLI reference
 
-> 📚 Every command and flag: [CLI reference](https://marina.sh/docs/cli-reference.html)
+> 📚 Every command and flag: [CLI reference](https://marina.run/docs/cli-reference.html)
 
 ```
 marina [--config ~/.marina/config.yaml] [--debug] [--lima-log-level <level>] <command>
@@ -392,7 +392,7 @@ headroom with `marina shell df -h /`.
 
 ### Reclaiming space
 
-> 📚 See also: [Reset &amp; reinstall](https://marina.sh/docs/reset.html) for deeper cleanups
+> 📚 See also: [Reset &amp; reinstall](https://marina.run/docs/reset.html) for deeper cleanups
 
 ```sh
 marina prune --dry-run           # show what would go
@@ -477,7 +477,7 @@ Unlike `vm.imageDisk` and `network.disablePortMirroring`, this list does **not**
 
 ### Clusters
 
-> 📚 Full guide: [Managing clusters](https://marina.sh/docs/managing-clusters.html)
+> 📚 Full guide: [Managing clusters](https://marina.run/docs/managing-clusters.html)
 
 ```sh
 # Create
@@ -499,7 +499,7 @@ marina cluster delete -l env=test --yes              # delete by label selector
 # List
 marina cluster list
 marina cluster list -o json
-marina cluster list -l marina.sh/fleet=dev-fleet    # filter by label selector
+marina cluster list -l marina.run/fleet=dev-fleet    # filter by label selector
 
 # Label an existing cluster's nodes
 marina cluster label <name> -l team=platform -l env=prod   # set/overwrite
@@ -531,14 +531,14 @@ Delete kind clusters (↑/↓ navigate · Space toggle · a=all · Enter confirm
 
 ### Fleets — `marina fleet`
 
-> 📚 Full guide: [Fleet management](https://marina.sh/docs/fleet.html) &middot; every manifest field: [Fleet resource reference](https://marina.sh/docs/fleet-reference.html)
+> 📚 Full guide: [Fleet management](https://marina.run/docs/fleet.html) &middot; every manifest field: [Fleet resource reference](https://marina.run/docs/fleet-reference.html)
 
 Create and manage several clusters at once from a declarative **Fleet** manifest.
 The minimal manifest lists only names — everything else defaults:
 
 ```yaml
 # fleet.yaml
-apiVersion: marina.sh/v1alpha1
+apiVersion: marina.run/v1alpha1
 kind: Fleet
 metadata:
   name: dev-fleet
@@ -565,7 +565,7 @@ If `fleet create` finds a listed cluster that already exists but isn't part of t
 fleet, it **warns and skips** it (never silently relabels). Re-run with `--adopt`
 to pull those clusters into the fleet, or use `marina fleet adopt <fleet> <cluster>…`.
 
-Fleet membership is tracked by the `marina.sh/fleet=<name>` node label, so
+Fleet membership is tracked by the `marina.run/fleet=<name>` node label, so
 `fleet list/label/delete` work on the live clusters regardless of the manifest.
 
 `create` is **additive**: clusters that already exist are skipped. Each entry can
@@ -588,11 +588,11 @@ optionally set `dependsOn` (ordering), `num`, `nodeVersion`, `region`/`zone`,
 | MetalLB pool | `<kindPrefix>.N.1–7` and `<kindPrefix>.N.16–254` |
 | kubeconfig | `~/.kube/marina/<name>.kubeconfig` |
 | topology labels | `topology.kubernetes.io/region=europe-westN`, `zone=europe-westN-b` |
-| default node labels | `managed-by=marina` (always); `marina.sh/fleet=<name>` (via `apply -f`); plus any `-l key=value` / Fleet `labels` |
+| default node labels | `managed-by=marina` (always); `marina.run/fleet=<name>` (via `apply -f`); plus any `-l key=value` / Fleet `labels` |
 
 ### Registries
 
-> 📚 Full guide: [Registry mirrors](https://marina.sh/docs/registries.html)
+> 📚 Full guide: [Registry mirrors](https://marina.run/docs/registries.html)
 
 ```sh
 marina registry clean-cache   # remove all mirror cache dirs + containers; run 'marina up' to restart
@@ -647,7 +647,7 @@ curl https://shop.dev.marina.internal/     # serve that Secret; browsers trust i
 
 ### AI coding tools (Agent Skill)
 
-> 📚 Full guide: [Agent Skill for AI coding tools](https://marina.sh/docs/agent-skill.html)
+> 📚 Full guide: [Agent Skill for AI coding tools](https://marina.run/docs/agent-skill.html)
 
 marina ships an [Agent Skill](https://code.claude.com/docs/en/skills) that teaches AI coding tools how to drive marina — spinning up ephemeral kind clusters for scripts, demos, and e2e tests. Install it once and every future agent session knows how to use marina without you explaining it each time:
 
@@ -664,7 +664,7 @@ The skill is embedded in the binary, so no download is needed. Start a new agent
 
 ## Networking deep-dive
 
-> 📚 Full guide: [Networking &amp; L3 routing](https://marina.sh/docs/networking.html)
+> 📚 Full guide: [Networking &amp; L3 routing](https://marina.run/docs/networking.html)
 
 ```
 macOS host
@@ -716,7 +716,7 @@ All mirror containers are attached to the `kind` Docker network so cluster nodes
 
 ## Running alongside Orbstack, Rancher Desktop, or Colima
 
-> 📚 Feature-by-feature comparison: [marina vs. other tools](https://marina.sh/docs/comparison.html)
+> 📚 Feature-by-feature comparison: [marina vs. other tools](https://marina.run/docs/comparison.html)
 
 marina is designed to coexist with other Lima-based tools on the same Mac. Each Lima VM gets
 its own vzNAT interface (`bridge1xx`) and a distinct macOS-assigned IP, so there is no
@@ -757,7 +757,7 @@ honest list of what OrbStack does better.
 
 ## Project layout
 
-> 📚 How the runtime pieces fit together: [Architecture](https://marina.sh/docs/architecture.html)
+> 📚 How the runtime pieces fit together: [Architecture](https://marina.run/docs/architecture.html)
 
 ```
 marina/
