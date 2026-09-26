@@ -629,6 +629,7 @@ curl https://shop.dev.klimax.internal/     # serve that Secret; browsers trust i
 - **Constrained by design.** The root may only issue under `.klimax.internal` and each cluster's intermediate only under `.<cluster>.klimax.internal`, so trusting the root cannot be abused for any other site. The root's key never leaves `~/.klimax/pki/`.
 - **One label.** `*.dev.klimax.internal` covers annotated names and Ingress hosts (`shop.dev.klimax.internal`), not the automatic `web.default.dev.klimax.internal`. For those, use cert-manager with the `klimax-ca` ClusterIssuer, or set `nameTemplate: "{{.Name}}-{{.Namespace}}"`.
 - **Fleets** get their own intermediate, constrained to `.<fleet>.klimax.internal`, and a `*.<fleet>.klimax.internal` wildcard in every member as `default/klimax-fleet-wildcard-tls` (plus a `klimax-fleet-ca` ClusterIssuer with cert-manager). Neither a member's intermediate nor the fleet's can sign for the other's zone.
+- **Upgrading from v0.2.2/0.2.3:** run `klimax ca attach <cluster>` on each cluster. Those versions issued certificates macOS rejects (a name-constraint quirk in Apple's verifier); `attach` re-issues and re-installs them.
 - **Pods** trust the root once it is mounted: the ConfigMap `default/klimax-root-ca` holds it.
 - `klimax destroy` keeps the root (like the registry cache); cluster intermediates are removed with their clusters.
 
