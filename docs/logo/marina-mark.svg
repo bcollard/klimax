@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- marina mark: mountain, water, ship wheel. Source for docs/marina-logo-01*.png. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 168" width="200" height="168">
+  <defs>
+    <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#0369a1"/></linearGradient>
+    <linearGradient id="word" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="45%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient>
+  </defs>
+  <rect width="200" height="168" fill="#1c2127"/>
+  <g transform="translate(0,8)">
+    <!-- Mountain -->
+    <path d="M18 118 L66 40 L82 62 L104 22 L162 118 Z" fill="url(#rock)"/>
+    <!-- Snow -->
+    <path d="M104 22 L118 45 L110 41 L103 50 L96 42 L91 47 Z" fill="#ffffff"/>
+    <path d="M66 40 L76 56 L70 53 L65 60 L60 52 L57 55 Z" fill="#ffffff" opacity="0.95"/>
+    <!-- Water -->
+    <path d="M10 128 Q25 121 40 128 T70 128 T100 128 T130 128 T160 128 T190 128" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
+    <path d="M22 142 Q37 135 52 142 T82 142 T112 142 T142 142 T172 142" fill="none" stroke="#0ea5e9" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+    <!-- Ship wheel -->
+    <g transform="translate(90,112)">
+      <g stroke="#ffffff" stroke-width="5" stroke-linecap="round">
+        <line x1="0" y1="-40" x2="0" y2="40"/>
+        <line x1="-40" y1="0" x2="40" y2="0"/>
+        <line x1="-28.3" y1="-28.3" x2="28.3" y2="28.3"/>
+        <line x1="-28.3" y1="28.3" x2="28.3" y2="-28.3"/>
+      </g>
+      <g fill="#ffffff">
+        <circle cx="0" cy="-41" r="5"/><circle cx="0" cy="41" r="5"/><circle cx="-41" cy="0" r="5"/><circle cx="41" cy="0" r="5"/>
+        <circle cx="-29" cy="-29" r="5"/><circle cx="29" cy="29" r="5"/><circle cx="-29" cy="29" r="5"/><circle cx="29" cy="-29" r="5"/>
+      </g>
+      <circle r="26" fill="none" stroke="#ffffff" stroke-width="6"/>
+      <circle r="13" fill="#0ea5e9" stroke="#ffffff" stroke-width="5"/>
+      <circle r="4" fill="#ffffff"/>
+    </g>
+  </g>
+</svg>

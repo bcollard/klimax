@@ -31,9 +31,14 @@ Release-time steps outside this repo (not done by code): rename the GitHub repos
 (`klimax` → `marina`, `homebrew-klimax` → `homebrew-marina`, `klimax-website`,
 `klimax-ui`); add `cask_renames.json` `{"klimax": "marina"}` to the tap so
 `brew upgrade` moves users over; add the new website repo to the GCS WIF
-binding **before** renaming it; buy `marina.run`; new logo wordmark.
+binding **before** renaming it; buy `marina.run`; re-export the draw.io diagrams (still labelled klimax).
 
 ---
+
+**Logo:** `docs/logo/marina-mark.svg` (mark) and `docs/logo/marina-logo.svg`
+(mark + wordmark + tagline) are the sources; every `docs/marina-logo-*.png` is
+rendered from them with `rsvg-convert -w <W> -h <H>` at the sizes already in the
+repo. The wordmark uses Avenir Next Heavy, which rsvg finds on macOS.
 
 ## Workspace rules (CRITICAL)
 
