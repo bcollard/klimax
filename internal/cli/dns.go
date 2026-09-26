@@ -10,11 +10,11 @@ import (
 	"slices"
 	"text/tabwriter"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/localdns"
-	"github.com/bcollard/klimax/internal/routing"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/localdns"
+	"github.com/bcollard/marina/internal/routing"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -51,7 +51,7 @@ func installLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, c
 	}
 	if err := localdns.InstallExternalDNS(ctx, g, cfg, cluster, fleet); err != nil {
 		slog.Warn("Local DNS: ExternalDNS did not become ready — the cluster works, its Services just have no names yet",
-			"cluster", cluster, "err", err, "fix", "klimax dns attach "+cluster)
+			"cluster", cluster, "err", err, "fix", "marina dns attach "+cluster)
 		return
 	}
 	fmt.Printf("dns: LoadBalancer Services resolve as %s\n", cfg.DNSNameExample(cluster))
@@ -85,16 +85,16 @@ func reconcileHostResolver(cfg *config.Config) {
 	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 	if err := localdns.EnsureHostResolver(cfg, interactive); err != nil {
 		if !cfg.DNSEnabled() {
-			slog.Warn("Could not remove the klimax resolver file", "err", err)
+			slog.Warn("Could not remove the marina resolver file", "err", err)
 			return
 		}
 		slog.Warn("Could not write the macOS resolver file — names resolve inside the VM and clusters, not yet on the Mac",
 			"path", localdns.ResolverPath(cfg), "err", err,
-			"fix", "run 'klimax up' from a terminal, which can answer the sudo prompt")
+			"fix", "run 'marina up' from a terminal, which can answer the sudo prompt")
 	}
 }
 
-// ─── klimax dns ──────────────────────────────────────────────────────────────
+// ─── marina dns ──────────────────────────────────────────────────────────────
 
 func newDNSCmd() *cobra.Command {
 	cmd := &cobra.Command{

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // ExternalDNSImage is the ExternalDNS release the manifest below was written
 // against. v0.22.0 matters specifically: it changed the annotation prefix to
-// external-dns.kubernetes.io/ with no fallback, and the docs klimax points at
+// external-dns.kubernetes.io/ with no fallback, and the docs marina points at
 // assume that.
 const ExternalDNSImage = "registry.k8s.io/external-dns/external-dns:v0.22.0"
 
@@ -65,7 +65,7 @@ metadata:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: klimax-external-dns
+  name: marina-external-dns
 rules:
   - apiGroups: [""]
     resources: ["nodes"]
@@ -83,11 +83,11 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: klimax-external-dns
+  name: marina-external-dns
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: klimax-external-dns
+  name: marina-external-dns
 subjects:
   - kind: ServiceAccount
     name: external-dns
@@ -100,7 +100,7 @@ metadata:
   namespace: %[1]s
   labels:
     app.kubernetes.io/name: external-dns
-    app.kubernetes.io/managed-by: klimax
+    app.kubernetes.io/managed-by: marina
 spec:
   replicas: 1
   strategy:
@@ -155,7 +155,7 @@ func InstallExternalDNS(ctx context.Context, g *guest.Client, cfg *config.Config
 	slog.Info("Installing ExternalDNS for local DNS", "cluster", cluster, "zone", cfg.ClusterDNSZone(cluster), "fleet", fleet)
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%[1]s.yaml
+KIND_KUBECONFIG=/tmp/marina-kube-%[1]s.yaml
 kind get kubeconfig --name %[1]s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 cat <<'MANIFEST_EOF' | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
 %[2]sMANIFEST_EOF
@@ -165,7 +165,7 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[3]s rollout status deploy/external-
 }
 
 // ClusterForward is the CoreDNS stanza that sends the zone from a cluster's
-// pods to the klimax DNS server. Expressed as a CustomDNSResolver so it goes
+// pods to the marina DNS server. Expressed as a CustomDNSResolver so it goes
 // through the same Corefile patch as the user's own zones.
 func ClusterForward(cfg *config.Config) config.CustomDNSResolver {
 	return config.CustomDNSResolver{Domain: cfg.DNSDomain(), Resolvers: []string{cfg.DNSServerIP()}}

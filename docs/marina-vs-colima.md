@@ -1,6 +1,6 @@
-# klimax vs. colima — Lima integration analysis
+# marina vs. colima — Lima integration analysis
 
-Comparative analysis of how klimax and colima leverage Lima, covering package reuse,
+Comparative analysis of how marina and colima leverage Lima, covering package reuse,
 Lima capabilities, and what each project builds on top.
 
 ---
@@ -11,7 +11,7 @@ Lima capabilities, and what each project builds on top.
 everything — `limactl start`, `limactl stop`, `limactl delete`, `limactl list --json`,
 `limactl shell <profile> <cmd>`. Lima is a runtime binary dependency, not a library.
 
-**Klimax embeds Lima as a Go module** and calls its internal APIs directly —
+**Marina embeds Lima as a Go module** and calls its internal APIs directly —
 `instance.Start()`, `instance.StopGracefully()`, `instance.Delete()`,
 `store.Inspect()`. No `limactl` binary needed at runtime.
 
@@ -19,7 +19,7 @@ everything — `limactl start`, `limactl stop`, `limactl delete`, `limactl list 
 
 ## Package-level comparison
 
-| Layer | Colima | Klimax |
+| Layer | Colima | Marina |
 |---|---|---|
 | Lima dependency type | External binary (`limactl`) | Go module (`lima/v2/pkg/instance`, `pkg/store`, `pkg/limatype`, `pkg/ptr`) |
 | VM create | `limactl start <profile>.yaml` | `instance.Create(ctx, name, yamlBytes, false)` |
@@ -30,14 +30,14 @@ everything — `limactl start`, `limactl stop`, `limactl delete`, `limactl list 
 | SSH/guest exec | `limactl shell <profile> <cmd>` | Custom SSH client using Lima's key from `$LIMA_HOME/_config/user` |
 | Lima YAML | Built as a struct, serialised to temp file | Built as `*limatype.LimaYAML`, marshalled to bytes |
 
-**Consequence:** Klimax ships as a single self-contained binary. Colima requires Lima
+**Consequence:** Marina ships as a single self-contained binary. Colima requires Lima
 (and optionally `socket_vmnet`) installed on the host as separate tools.
 
 ---
 
 ## Network modes
 
-| Mode | Colima | Klimax |
+| Mode | Colima | Marina |
 |---|---|---|
 | vzNAT | Yes | Yes (only mode) |
 | socket_vmnet shared | Yes | No |
@@ -48,14 +48,14 @@ everything — `limactl start`, `limactl stop`, `limactl delete`, `limactl list 
 | Port range forwarding | 1–65535 (TCP/UDP) | Docker socket + cluster API ports (700N) |
 
 Colima runs a **host-side daemon** (`go-daemon` fork) to manage `socket_vmnet` for
-bridged/shared networking. Klimax has no daemon — it's a pure CLI that applies
+bridged/shared networking. Marina has no daemon — it's a pure CLI that applies
 iptables rules in the guest and a `route add` on the host.
 
 ---
 
 ## Provisioning and container runtimes
 
-| Capability | Colima | Klimax |
+| Capability | Colima | Marina |
 |---|---|---|
 | Docker | Yes | Yes |
 | containerd | Yes | No |
@@ -67,7 +67,7 @@ iptables rules in the guest and a `route add` on the host.
 
 ---
 
-## What klimax adds on top of Lima that colima doesn't do
+## What marina adds on top of Lima that colima doesn't do
 
 | Feature | Detail |
 |---|---|
@@ -80,21 +80,21 @@ iptables rules in the guest and a `route add` on the host.
 | Pure L3 routing | iptables nat exemption + systemd oneshot + docker.service.d drop-in |
 | macOS route management | `sudo route add/delete` for `kindBridgeCIDR` → VM IP |
 | CoreDNS custom domains | Configurable zones forwarded to 8.8.8.8 at cluster creation |
-| Kubeconfig export | Written to `~/.kube/klimax/<name>.kubeconfig`; server points to the VM's `lima0` IP `<lima0IP>:700N` by default (`disablePortMirroring: true`), or `127.0.0.1:700N` via Lima port forwarding when `disablePortMirroring: false` |
+| Kubeconfig export | Written to `~/.kube/marina/<name>.kubeconfig`; server points to the VM's `lima0` IP `<lima0IP>:700N` by default (`disablePortMirroring: true`), or `127.0.0.1:700N` via Lima port forwarding when `disablePortMirroring: false` |
 | Kubeconfig auto-merge | `autoMergeKubeconfig` / `autoRemoveKubeconfig` config flags; `cluster merge` for manual merge |
 | Topology labels | `topology.kubernetes.io/region/zone` on kind nodes |
-| Persistent registry cache | Mirror blobs bind-mounted from `~/.klimax/registry-cache/` (host, survives destroy) or inside VM (`guest` mode) |
-| Interactive cluster picker | `klimax cluster delete` — raw-terminal multi-select TUI with arrow keys, space toggle, `a`=all |
-| E2E smoke test | `klimax cluster e2e-test-nginx [--cleanup]` — deploys nginx, exposes service, curls it using host kubectl |
-| Docker context | `klimax docker-context` creates/updates a named Docker context; `docker-env` for per-shell env var |
-| SSH shell | `klimax shell` — interactive SSH session into the VM |
-| Config editor | `klimax config edit` — opens config in `$VISUAL` / `$EDITOR` |
-| Shell completion | `klimax completion bash|zsh|fish|powershell` |
-| Registry cache cleanup | `klimax registry clean-cache` — stops mirror containers and removes cache dirs |
+| Persistent registry cache | Mirror blobs bind-mounted from `~/.marina/registry-cache/` (host, survives destroy) or inside VM (`guest` mode) |
+| Interactive cluster picker | `marina cluster delete` — raw-terminal multi-select TUI with arrow keys, space toggle, `a`=all |
+| E2E smoke test | `marina cluster e2e-test-nginx [--cleanup]` — deploys nginx, exposes service, curls it using host kubectl |
+| Docker context | `marina docker-context` creates/updates a named Docker context; `docker-env` for per-shell env var |
+| SSH shell | `marina shell` — interactive SSH session into the VM |
+| Config editor | `marina config edit` — opens config in `$VISUAL` / `$EDITOR` |
+| Shell completion | `marina completion bash|zsh|fish|powershell` |
+| Registry cache cleanup | `marina registry clean-cache` — stops mirror containers and removes cache dirs |
 
 ---
 
-## What colima does that klimax doesn't
+## What colima does that marina doesn't
 
 | Feature | Detail |
 |---|---|
@@ -117,7 +117,7 @@ Colima is a **general-purpose local container runtime** — it replaces Docker D
 for any workload. It abstracts Lima completely and exposes its own opinionated config
 surface.
 
-Klimax is a **multi-cluster Kubernetes lab** — it takes full ownership of the
+Marina is a **multi-cluster Kubernetes lab** — it takes full ownership of the
 networking layer (pure L3, no SNAT) and kind cluster lifecycle, accepting that the
 trade-off is macOS+vzNAT only, Docker only, kind only. The deeper Lima Go API
 integration is a deliberate choice: it avoids the `limactl` binary dependency and

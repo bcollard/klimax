@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/spf13/cobra"
 )
 
@@ -18,25 +18,25 @@ func newShellCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "shell [command [args...]]",
 		Aliases: []string{"ssh"},
-		Short:   "Open an interactive shell in the klimax VM, or run a command in it",
-		Long: `With no arguments, opens an interactive SSH session in the klimax VM.
+		Short:   "Open an interactive shell in the marina VM, or run a command in it",
+		Long: `With no arguments, opens an interactive SSH session in the marina VM.
 
 With arguments, runs that command in the VM and exits with its exit code —
 stdin, stdout and stderr are passed through, so it composes in pipelines:
 
-  klimax shell docker ps
-  klimax shell -- bash -c 'kind get clusters | wc -l'
-  cat script.sh | klimax shell bash -s
+  marina shell docker ps
+  marina shell -- bash -c 'kind get clusters | wc -l'
+  cat script.sh | marina shell bash -s
 
 Use "--" before the command when it has flags of its own, so they are not
-parsed as klimax flags.`,
+parsed as marina flags.`,
 		Args: cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runShell(cmd.Context(), args, tty)
 		},
 	}
 	// Stop flag parsing at the first positional argument so that
-	// `klimax shell docker ps -a` does not try to interpret -a.
+	// `marina shell docker ps -a` does not try to interpret -a.
 	cmd.Flags().SetInterspersed(false)
 	cmd.Flags().BoolVarP(&tty, "tty", "t", false, "Force pseudo-terminal allocation (for interactive commands)")
 	return cmd
@@ -48,13 +48,13 @@ func runShell(ctx context.Context, args []string, tty bool) error {
 		return err
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return fmt.Errorf("inspecting VM: %w", err)
 	}
 	if inst == nil {
-		return errors.New("VM does not exist; run 'klimax up' first")
+		return errors.New("VM does not exist; run 'marina up' first")
 	}
 
 	sshArgs, err := guest.SSHArgs(inst)

@@ -1,14 +1,14 @@
 version: 2
 
-project_name: klimax
+project_name: marina
 
 before:
   hooks:
     - go mod tidy
 
 builds:
-  - main: ./cmd/klimax
-    binary: klimax
+  - main: ./cmd/marina
+    binary: marina
     # CGO_ENABLED=1 is required: Lima's instance/store packages call into
     # macOS frameworks (Virtualization.framework) at link time on darwin.
     env:
@@ -68,22 +68,30 @@ changelog:
       - Merge branch
 
 homebrew_casks:
-  - name: klimax
-    binaries: ["klimax"]
+  - name: marina
+    binaries: ["marina"]
     repository:
       owner: bcollard
-      name: homebrew-klimax
+      name: homebrew-marina
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://github.com/bcollard/klimax
+    homepage: https://marina.run
     description: Lima-based macOS VZ VM + multi-kind cluster manager
+    # Transition alias for scripts written against klimax (marina before v1.0):
+    # `klimax …` keeps working and runs marina. Drop it in a later release.
+    custom_block: |
+      binary "marina", target: "klimax"
     caveats: |
-      klimax bakes a specific kind CLI and default Kubernetes node image into the
-      VM at creation time. Upgrading the klimax binary does NOT re-provision an
+      Coming from klimax? Run `marina migrate` once: it moves ~/.klimax (config,
+      registry cache) over and deletes the old VM. `klimax` stays available as an
+      alias of `marina` for now.
+
+      marina bakes a specific kind CLI and default Kubernetes node image into the
+      VM at creation time. Upgrading the marina binary does NOT re-provision an
       existing VM, so after upgrading you should rebuild it:
 
-        klimax destroy && klimax up
+        marina destroy && marina up
 
-      Then recreate your clusters (klimax cluster create <name>). Skipping this can
+      Then recreate your clusters (marina cluster create <name>). Skipping this can
       leave you on an older kind that cannot create the new default node version.
     directory: Casks
     commit_author:

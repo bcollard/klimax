@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // InstallMetricsServer installs the Kubernetes metrics-server addon into the
@@ -30,7 +30,7 @@ func InstallMetricsServer(ctx context.Context, g *guest.Client, clusterName, ver
 
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
+KIND_KUBECONFIG=/tmp/marina-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 
 kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f %s

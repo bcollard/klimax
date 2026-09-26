@@ -14,12 +14,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/limatemplate"
-	"github.com/bcollard/klimax/internal/localdns"
-	"github.com/bcollard/klimax/internal/routing"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/limatemplate"
+	"github.com/bcollard/marina/internal/localdns"
+	"github.com/bcollard/marina/internal/routing"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -34,7 +34,7 @@ const (
 )
 
 // Stable check IDs. These are part of the machine-readable contract — renaming
-// one is a breaking change for anything consuming `klimax doctor -o json`.
+// one is a breaking change for anything consuming `marina doctor -o json`.
 const (
 	checkIDHostagent   = "hostagent"
 	checkIDVM          = "vm"
@@ -62,7 +62,7 @@ type doctorCheck struct {
 	FixError string `json:"fixError,omitempty" yaml:"fixError,omitempty"`
 }
 
-// doctorReport is the machine-readable shape of `klimax doctor`.
+// doctorReport is the machine-readable shape of `marina doctor`.
 type doctorReport struct {
 	OK     bool          `json:"ok"     yaml:"ok"`
 	Checks []doctorCheck `json:"checks" yaml:"checks"`
@@ -81,21 +81,21 @@ func newDoctorCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
 		Short: "Diagnose issues and print actionable fix commands",
-		Long: `Diagnose common klimax problems and print a fix for each failure.
+		Long: `Diagnose common marina problems and print a fix for each failure.
 
-With --fix, klimax applies the repairs it can perform itself: the macOS host
+With --fix, marina applies the repairs it can perform itself: the macOS host
 route, the iptables no-NAT exemption, and guest IP forwarding. Everything else
 (creating or starting the VM, installing Rosetta, clearing a stale hostagent)
-stays advisory — those either need a full 'klimax up' or are too destructive to
+stays advisory — those either need a full 'marina up' or are too destructive to
 run without you asking.
 
-The macOS route fix shells out to sudo, exactly as 'klimax up' does.`,
+The macOS route fix shells out to sudo, exactly as 'marina up' does.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDoctor(cmd.Context(), outputFmt, fix)
 		},
 	}
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "text", "Output format: text, json, yaml")
-	cmd.Flags().BoolVar(&fix, "fix", false, "Apply the fixes klimax can perform itself (route, iptables, IP forwarding)")
+	cmd.Flags().BoolVar(&fix, "fix", false, "Apply the fixes marina can perform itself (route, iptables, IP forwarding)")
 	return cmd
 }
 
@@ -150,7 +150,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 	}
 
 	// VM.
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		rep.Checks = append(rep.Checks, doctorCheck{
@@ -165,13 +165,13 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 		rep.Checks = append(rep.Checks, doctorCheck{
 			ID: checkIDVM, Status: checkFail,
 			Message: fmt.Sprintf("VM %q does not exist", cfg.VM.Name),
-			Fix:     fmt.Sprintf("klimax up -c %s", configFile),
+			Fix:     fmt.Sprintf("marina up -c %s", configFile),
 		})
 	case inst.Status != limatype.StatusRunning:
 		rep.Checks = append(rep.Checks, doctorCheck{
 			ID: checkIDVM, Status: checkFail,
 			Message: fmt.Sprintf("VM %q is %s (expected Running)", cfg.VM.Name, inst.Status),
-			Fix:     fmt.Sprintf("klimax up -c %s", configFile),
+			Fix:     fmt.Sprintf("marina up -c %s", configFile),
 		})
 	default:
 		rep.Checks = append(rep.Checks, doctorCheck{
@@ -192,7 +192,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 		rep.Checks = append(rep.Checks, doctorCheck{
 			ID: checkIDRoute, Status: checkFail,
 			Message: fmt.Sprintf("macOS route for %s is missing", cfg.Network.KindBridgeCIDR),
-			Fix:     fmt.Sprintf("klimax up -c %s", configFile),
+			Fix:     fmt.Sprintf("marina up -c %s", configFile),
 			Fixable: running,
 		})
 	}
@@ -231,7 +231,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 		rep.Checks = append(rep.Checks, doctorCheck{
 			ID: checkIDIPTables, Status: checkFail,
 			Message: fmt.Sprintf("iptables no-NAT exemption for %s is missing", cfg.Network.KindBridgeCIDR),
-			Fix:     fmt.Sprintf("klimax up -c %s   (or run /usr/local/sbin/no-nat-kind.sh inside the VM)", configFile),
+			Fix:     fmt.Sprintf("marina up -c %s   (or run /usr/local/sbin/no-nat-kind.sh inside the VM)", configFile),
 			Fixable: true,
 		})
 	}
@@ -258,7 +258,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 		})
 	}
 
-	// Proxy. Reported rather than judged: klimax cannot tell a misconfigured
+	// Proxy. Reported rather than judged: marina cannot tell a misconfigured
 	// proxy from a correct one, but "which proxy is dockerd actually using"
 	// is the first question when pulls fail on a corporate network.
 	rep.Checks = append(rep.Checks, checkProxy(ctx, g, cfg))
@@ -282,7 +282,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 		rep.Checks = append(rep.Checks, doctorCheck{
 			ID: checkIDRosettaVM, Status: checkFail,
 			Message: "vm.rosetta is set but Rosetta is not active in the VM",
-			Fix:     "install Rosetta on the host, then: klimax destroy -c " + configFile + " && klimax up -c " + configFile,
+			Fix:     "install Rosetta on the host, then: marina destroy -c " + configFile + " && marina up -c " + configFile,
 		})
 	case rosettaActive:
 		rep.Checks = append(rep.Checks, doctorCheck{
@@ -439,14 +439,14 @@ func checkRosettaHost(wanted bool) doctorCheck {
 
 // checkHostagent detects a running hostagent whose on-disk binary has been
 // replaced since it was launched — a common cause of "zsh: killed" when running
-// subsequent klimax commands, because macOS amfid refuses the new binary.
+// subsequent marina commands, because macOS amfid refuses the new binary.
 // Returns nil when no pidfile is present.
 //
 // Deliberately not Fixable: the remedy kills a live process and removes its
 // socket, which is too destructive to run without the operator asking.
 func checkHostagent(instanceName string) *doctorCheck {
-	pidFile := filepath.Join(KlimaxHome(), instanceName, "ha.pid")
-	sockFile := filepath.Join(KlimaxHome(), instanceName, "ha.sock")
+	pidFile := filepath.Join(MarinaHome(), instanceName, "ha.pid")
+	sockFile := filepath.Join(MarinaHome(), instanceName, "ha.sock")
 
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
@@ -473,7 +473,7 @@ func checkHostagent(instanceName string) *doctorCheck {
 	if err != nil {
 		return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
 			Message: fmt.Sprintf("hostagent is running (pid %d)", pid),
-			Detail:  fmt.Sprintf("Could not determine its binary (%v). If klimax commands fail with 'killed', the binary may have been replaced while hostagent was running.", err),
+			Detail:  fmt.Sprintf("Could not determine its binary (%v). If marina commands fail with 'killed', the binary may have been replaced while hostagent was running.", err),
 			Fix:     cleanup}
 	}
 
@@ -485,17 +485,17 @@ func checkHostagent(instanceName string) *doctorCheck {
 		if replaced, mtime, start := binaryReplacedSinceLaunch(exe, pid); replaced {
 			return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
 				Message: fmt.Sprintf("hostagent (pid %d) is running a binary that has since been replaced", pid),
-				Detail: fmt.Sprintf("%s was modified at %s, after the hostagent started at %s.\n  It is still running the old code; klimax execs may fail with 'killed'.",
+				Detail: fmt.Sprintf("%s was modified at %s, after the hostagent started at %s.\n  It is still running the old code; marina execs may fail with 'killed'.",
 					exe, mtime.Format(time.RFC3339), start.Format(time.RFC3339)),
-				Fix: "klimax down && klimax up  (or: " + cleanup + ")"}
+				Fix: "marina down && marina up  (or: " + cleanup + ")"}
 		}
 		return &doctorCheck{ID: checkIDHostagent, Status: checkOK,
 			Message: fmt.Sprintf("hostagent is running (pid %d)", pid)}
 	}
 	return &doctorCheck{ID: checkIDHostagent, Status: checkWarn,
-		Message: fmt.Sprintf("hostagent (pid %d) is running a different binary than the current klimax", pid),
+		Message: fmt.Sprintf("hostagent (pid %d) is running a different binary than the current marina", pid),
 		Detail:  fmt.Sprintf("hostagent binary: %s\n  current binary:   %s", exe, self),
-		Fix:     "klimax down  (or: " + cleanup + ")"}
+		Fix:     "marina down  (or: " + cleanup + ")"}
 }
 
 // processAlive reports whether pid is a live process.
@@ -511,7 +511,7 @@ func processAlive(pid int) bool {
 
 // processExePath returns the on-disk path of the binary backing pid.
 //
-// /proc is Linux-only, so on macOS — the only platform klimax supports — it is
+// /proc is Linux-only, so on macOS — the only platform marina supports — it is
 // never available, and the binary-replacement check this function exists for
 // would silently never run. Fall back to ps, which reports the executable path
 // on darwin.
@@ -531,7 +531,7 @@ func processExePath(pid int) (string, error) {
 }
 
 // sameFile compares two executable paths, resolving symlinks first: Homebrew
-// installs klimax as /opt/homebrew/bin/klimax -> ../Caskroom/klimax/<ver>/klimax,
+// installs marina as /opt/homebrew/bin/marina -> ../Caskroom/marina/<ver>/marina,
 // and ps and os.Executable do not agree on which side of that link they report.
 func sameFile(a, b string) bool {
 	if a == b {
@@ -550,7 +550,7 @@ func sameFile(a, b string) bool {
 // longer contains.
 //
 // This is the case plain path comparison cannot see. `make dev-install` does
-// `sudo cp` over /usr/local/bin/klimax, overwriting the file underneath the
+// `sudo cp` over /usr/local/bin/marina, overwriting the file underneath the
 // running hostagent, which is what makes macOS amfid kill subsequent execs. Both
 // sides of a path comparison still read the same string, so only the timestamps
 // give it away.
@@ -558,7 +558,7 @@ func sameFile(a, b string) bool {
 // A Homebrew upgrade is different — it writes a new file into the Caskroom and
 // re-points the symlink, so the running process keeps its own inode and amfid is
 // not upset. That still trips this check, and rightly so: the hostagent is
-// running an older klimax and the VM wants rebuilding either way. Hence a
+// running an older marina and the VM wants rebuilding either way. Hence a
 // warning, never a failure — and mtime is a heuristic, so a rebuild producing
 // identical content would also trip it.
 func binaryReplacedSinceLaunch(path string, pid int) (replaced bool, mtime, start time.Time) {
@@ -592,7 +592,7 @@ func checkProxy(ctx context.Context, g *guest.Client, cfg *config.Config) doctor
 		return doctorCheck{ID: checkIDProxy, Status: checkWarn,
 			Message: "A proxy is set in the guest environment but dockerd is not using it",
 			Detail:  "Shell commands would work while image pulls fail. dockerd is a systemd service and does not read /etc/environment.",
-			Fix:     "klimax up   (writes the dockerd drop-in)"}
+			Fix:     "marina up   (writes the dockerd drop-in)"}
 
 	default:
 		src := "config"
@@ -614,7 +614,7 @@ func checkLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config) doc
 	}
 	fail := func(msg, detail string) doctorCheck {
 		return doctorCheck{ID: checkIDDNS, Status: checkFail, Message: msg, Detail: detail,
-			Fix: fmt.Sprintf("klimax up -c %s", configFile), Fixable: true}
+			Fix: fmt.Sprintf("marina up -c %s", configFile), Fixable: true}
 	}
 	if ok, err := localdns.ServerRunning(ctx, g); err != nil || !ok {
 		return fail(fmt.Sprintf("Local DNS server container %q is not running", localdns.ServerContainer), "")
@@ -635,7 +635,7 @@ func checkLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config) doc
 		Message: fmt.Sprintf("Local DNS serves %s at %s, and the Mac resolves through it", cfg.DNSDomain(), cfg.DNSServerIP())}
 }
 
-// fixLocalDNS re-runs the same reconciliation `klimax up` does for network.dns.
+// fixLocalDNS re-runs the same reconciliation `marina up` does for network.dns.
 func fixLocalDNS(ctx context.Context, env *doctorEnv) error {
 	if err := localdns.Ensure(ctx, env.guest, env.cfg); err != nil {
 		return err
@@ -656,17 +656,17 @@ func checkLocalCA(cfg *config.Config) doctorCheck {
 	root, err := store.Root()
 	if err != nil {
 		return doctorCheck{ID: checkIDTLS, Status: checkFail, Message: "The local CA has no root yet",
-			Fix: "klimax up -c " + configFile, Fixable: true}
+			Fix: "marina up -c " + configFile, Fixable: true}
 	}
 	if !store.Trusted() {
 		return doctorCheck{ID: checkIDTLS, Status: checkFail,
-			Message: "The local CA root is not trusted by macOS — browsers reject klimax.internal certificates",
-			Fix:     "klimax ca trust", Fixable: true}
+			Message: "The local CA root is not trusted by macOS — browsers reject marina.internal certificates",
+			Fix:     "marina ca trust", Fixable: true}
 	}
 	if left := time.Until(root.NotAfter); left < 90*24*time.Hour {
 		return doctorCheck{ID: checkIDTLS, Status: checkWarn,
 			Message: fmt.Sprintf("The local CA root expires on %s", root.NotAfter.Format(time.DateOnly)),
-			Detail:  "Move " + store.Dir + " aside, run klimax up, then klimax ca attach on each cluster."}
+			Detail:  "Move " + store.Dir + " aside, run marina up, then marina ca attach on each cluster."}
 	}
 	return doctorCheck{ID: checkIDTLS, Status: checkOK,
 		Message: fmt.Sprintf("Local CA for .%s is trusted (root expires %s)", cfg.DNSDomain(), root.NotAfter.Format(time.DateOnly))}

@@ -11,12 +11,12 @@ func newDockerEnvCmd() *cobra.Command {
 	var unset bool
 	cmd := &cobra.Command{
 		Use:   "docker-env",
-		Short: "Print the export command to point DOCKER_HOST at the klimax VM",
+		Short: "Print the export command to point DOCKER_HOST at the marina VM",
 		Long: `Prints shell export commands that configure your terminal to use the
-Docker daemon running inside the klimax VM.
+Docker daemon running inside the marina VM.
 
-  eval $(klimax docker-env)        # activate
-  eval $(klimax docker-env --unset) # deactivate`,
+  eval $(marina docker-env)        # activate
+  eval $(marina docker-env --unset) # deactivate`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDockerEnv(unset)
 		},
@@ -36,14 +36,14 @@ func runDockerEnv(unset bool) error {
 	if unset {
 		fmt.Println("unset DOCKER_HOST")
 		fmt.Println("unset DOCKER_TLS_VERIFY")
-		fmt.Println("# Run this command to deactivate klimax docker environment:")
-		fmt.Println("#   eval $(klimax docker-env --unset)")
+		fmt.Println("# Run this command to deactivate marina docker environment:")
+		fmt.Println("#   eval $(marina docker-env --unset)")
 		return nil
 	}
 
 	fmt.Printf("export DOCKER_HOST=unix://%s\n", socketPath)
 	fmt.Println("# Run this command to configure your shell:")
-	fmt.Println("#   eval $(klimax docker-env)")
+	fmt.Println("#   eval $(marina docker-env)")
 	return nil
 }
 

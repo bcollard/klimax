@@ -14,17 +14,17 @@ import (
 // 16 bytes, so a name longer than 11 chars makes that path unreachable and Lima
 // reformats the disk on EVERY boot — silently wiping the container image store.
 //
-// Observed for real: vm name "klimax" with the old "-images" suffix produced
-// "lima-klimax-images", which mkfs stored as "lima-klimax-imag".
+// Observed for real: vm name "marina" with the old "-images" suffix produced
+// "lima-marina-images", which mkfs stored as "lima-marina-imag".
 func TestImageDiskNameFitsExt4Label(t *testing.T) {
 	const ext4LabelMax = 16
 
 	names := []string{
-		"klimax",
+		"marina",
 		"k",
 		"dev",
-		"klimax-prod",
-		"a-very-long-klimax-vm-name-indeed",
+		"marina-prod",
+		"a-very-long-marina-vm-name-indeed",
 		"0123456789012345678901234567890123456789",
 	}
 
@@ -43,16 +43,16 @@ func TestImageDiskNameFitsExt4Label(t *testing.T) {
 // TestImageDiskNameDistinct ensures VM names that collide after truncation still
 // get separate disks — otherwise two VMs would silently share one image store.
 func TestImageDiskNameDistinct(t *testing.T) {
-	a := ImageDiskName("a-very-long-klimax-vm-name-one")
-	b := ImageDiskName("a-very-long-klimax-vm-name-two")
+	a := ImageDiskName("a-very-long-marina-vm-name-one")
+	b := ImageDiskName("a-very-long-marina-vm-name-two")
 	if a == b {
 		t.Errorf("distinct VM names produced the same disk name %q", a)
 	}
 }
 
 func TestImageDiskNameStable(t *testing.T) {
-	if got, want := ImageDiskName("klimax"), "klimax-img"; got != want {
-		t.Errorf("ImageDiskName(\"klimax\") = %q, want %q", got, want)
+	if got, want := ImageDiskName("marina"), "marina-img"; got != want {
+		t.Errorf("ImageDiskName(\"marina\") = %q, want %q", got, want)
 	}
 }
 

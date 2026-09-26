@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // selectorRE guards against shell-metacharacter injection when embedding a label
@@ -23,14 +23,14 @@ func validateSelector(sel string) error {
 }
 
 // ClustersMatchingSelector returns the names of clusters whose nodes match the
-// given kubectl label selector (e.g. "klimax.dev/fleet=f1,env=prod"). Selector
+// given kubectl label selector (e.g. "marina.run/fleet=f1,env=prod"). Selector
 // parsing is delegated to kubectl in the guest.
 func ClustersMatchingSelector(ctx context.Context, g *guest.Client, selector string) ([]string, error) {
 	if err := validateSelector(selector); err != nil {
 		return nil, err
 	}
 	cmd := fmt.Sprintf(`for c in $(kind get clusters 2>/dev/null); do
-  kc=/tmp/klimax-kube-$c.yaml
+  kc=/tmp/marina-kube-$c.yaml
   kind get kubeconfig --name "$c" | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > "$kc" 2>/dev/null
   if [ -n "$(kubectl --kubeconfig "$kc" get nodes -l '%s' -o name 2>/dev/null)" ]; then echo "$c"; fi
 done`, selector)
@@ -41,13 +41,13 @@ done`, selector)
 	return nonEmptyLines(out), nil
 }
 
-// ClustersByFleet groups every cluster by its klimax.dev/fleet node label value.
+// ClustersByFleet groups every cluster by its marina.run/fleet node label value.
 // Clusters without the label are grouped under the empty string.
 func ClustersByFleet(ctx context.Context, g *guest.Client) (map[string][]string, error) {
 	cmd := `for c in $(kind get clusters 2>/dev/null); do
-  kc=/tmp/klimax-kube-$c.yaml
+  kc=/tmp/marina-kube-$c.yaml
   kind get kubeconfig --name "$c" | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > "$kc" 2>/dev/null
-  f=$(kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -r '.items[0].metadata.labels["klimax.dev/fleet"] // ""')
+  f=$(kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -r '.items[0].metadata.labels["marina.run/fleet"] // ""')
   echo "$c|$f"
 done`
 	out, err := g.Run(ctx, cmd)
@@ -74,7 +74,7 @@ type ClusterInfo struct {
 // control-plane node's labels for a cluster. Returns a zero-value ClusterInfo
 // (NodeCount 0) if the cluster's API can't be reached.
 func ClusterInfoFor(ctx context.Context, g *guest.Client, clusterName string) (*ClusterInfo, error) {
-	cmd := fmt.Sprintf(`kc=/tmp/klimax-kube-%s.yaml
+	cmd := fmt.Sprintf(`kc=/tmp/marina-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > "$kc" 2>/dev/null
 kubectl --kubeconfig "$kc" get nodes -o json 2>/dev/null | jq -c '{count:(.items|length), version:(.items[0].status.nodeInfo.kubeletVersion // ""), ready:(all(.items[]; any(.status.conditions[]; .type=="Ready" and .status=="True"))), labels:(.items[0].metadata.labels // {})}'`,
 		clusterName, clusterName)

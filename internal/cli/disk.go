@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/docker/go-units"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/lima-vm/lima/v2/pkg/limatype/filenames"
@@ -18,7 +18,7 @@ import (
 func newDiskCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "disk",
-		Short: "Manage the klimax VM disk",
+		Short: "Manage the marina VM disk",
 	}
 	cmd.AddCommand(newDiskResizeCmd())
 	cmd.AddCommand(newDiskResizeImageCmd())
@@ -29,13 +29,13 @@ func newDiskResizeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "resize <size>",
 		Short: "Grow the VM disk (e.g. 80GiB) — applied on the next VM start",
-		Long: `Grows the klimax VM disk without recreating the VM.
+		Long: `Grows the marina VM disk without recreating the VM.
 
-The new size is written to vm.disk in the klimax config and to the Lima instance
+The new size is written to vm.disk in the marina config and to the Lima instance
 config. Lima expands the disk image on the next VM start, and the guest root
 filesystem is extended during boot, so the change takes effect after:
 
-  klimax down && klimax up
+  marina down && marina up
 
 Shrinking is not supported (neither by Lima nor by the guest filesystem).`,
 		Args: cobra.ExactArgs(1),
@@ -68,20 +68,20 @@ func runDiskResize(ctx context.Context, size string) error {
 		return fmt.Errorf("cannot shrink the disk: current size is %s, requested %s", cfg.VM.Disk, size)
 	}
 
-	// Update the klimax config so a future 'klimax destroy && up' keeps the size.
+	// Update the marina config so a future 'marina destroy && up' keeps the size.
 	if err := rewriteVMDisk(configFile, size); err != nil {
 		return fmt.Errorf("updating vm.disk in %s: %w", configFile, err)
 	}
 	fmt.Printf("Updated vm.disk in %s: %s → %s\n", configFile, cfg.VM.Disk, size)
 
 	// Update the live instance config, which is what Lima reads on start.
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return fmt.Errorf("inspecting VM: %w", err)
 	}
 	if inst == nil {
-		fmt.Printf("VM does not exist yet — it will be created with a %s disk on 'klimax up'.\n", size)
+		fmt.Printf("VM does not exist yet — it will be created with a %s disk on 'marina up'.\n", size)
 		return nil
 	}
 
@@ -92,9 +92,9 @@ func runDiskResize(ctx context.Context, size string) error {
 	fmt.Printf("Updated disk in %s\n", limaYAML)
 
 	if inst.Status == limatype.StatusRunning {
-		fmt.Printf("\nThe VM is running. Restart it to apply the new size:\n  klimax down && klimax up\n")
+		fmt.Printf("\nThe VM is running. Restart it to apply the new size:\n  marina down && marina up\n")
 	} else {
-		fmt.Printf("\nStart the VM to apply the new size:\n  klimax up\n")
+		fmt.Printf("\nStart the VM to apply the new size:\n  marina up\n")
 	}
 	return nil
 }
@@ -103,21 +103,21 @@ func newDiskResizeImageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "resize-image <size>",
 		Short: "Grow the persistent image-cache disk (e.g. 30GiB)",
-		Long: `Grows the klimax VM's persistent image-cache disk (imageDisk in the config,
+		Long: `Grows the marina VM's persistent image-cache disk (imageDisk in the config,
 mounted over /var/lib/containerd in the guest).
 
-Unlike 'klimax disk resize' (the VM's root disk), this disk survives
-'klimax destroy' by design — it holds the container image store so images
+Unlike 'marina disk resize' (the VM's root disk), this disk survives
+'marina destroy' by design — it holds the container image store so images
 don't need re-pulling after a VM recreate. Resizing it in place preserves
 that cache, instead of deleting and recreating the disk at a new size.
 
-The VM must be stopped first (klimax down) — the backing disk file cannot be
+The VM must be stopped first (marina down) — the backing disk file cannot be
 resized while attached to a running VM. The guest filesystem is grown
 automatically on the next boot, so apply with:
 
-  klimax down
-  klimax disk resize-image <size>
-  klimax up
+  marina down
+  marina disk resize-image <size>
+  marina up
 
 Shrinking is not supported.`,
 		Args: cobra.ExactArgs(1),
@@ -149,15 +149,15 @@ func runDiskResizeImage(ctx context.Context, size string) error {
 		}
 		fmt.Printf("Updated imageDisk in %s: %s → %s\n", configFile, cfg.VM.ImageDisk, size)
 	}
-	fmt.Printf("\nStart the VM to mount the grown disk:\n  klimax up\n")
+	fmt.Printf("\nStart the VM to mount the grown disk:\n  marina up\n")
 	return nil
 }
 
-// imageDiskRE matches the klimax config's `vm.imageDisk` line (2-space
+// imageDiskRE matches the marina config's `vm.imageDisk` line (2-space
 // nested, value optionally quoted, optional trailing comment).
 var imageDiskRE = regexp.MustCompile(`(?m)^(\s+imageDisk:\s*)("?[^"\s#]+"?)(\s*(#.*)?)$`)
 
-// rewriteImageDisk rewrites imageDisk in the klimax config file in place,
+// rewriteImageDisk rewrites imageDisk in the marina config file in place,
 // preserving indentation and any trailing inline comment.
 func rewriteImageDisk(path, size string) error {
 	data, err := os.ReadFile(path)
@@ -171,11 +171,11 @@ func rewriteImageDisk(path, size string) error {
 	return os.WriteFile(path, out, 0o600)
 }
 
-// vmDiskRE matches the klimax config's `vm.disk` line (2-space nested, value
+// vmDiskRE matches the marina config's `vm.disk` line (2-space nested, value
 // optionally quoted, optional trailing comment).
 var vmDiskRE = regexp.MustCompile(`(?m)^(\s+disk:\s*)("?[^"\s#]+"?)(\s*(#.*)?)$`)
 
-// rewriteVMDisk rewrites vm.disk in the klimax config file in place, preserving
+// rewriteVMDisk rewrites vm.disk in the marina config file in place, preserving
 // indentation and any trailing inline comment.
 func rewriteVMDisk(path, size string) error {
 	data, err := os.ReadFile(path)

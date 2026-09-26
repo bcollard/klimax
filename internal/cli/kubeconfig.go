@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/marina/internal/kind"
 	"github.com/spf13/cobra"
 )
 
@@ -14,9 +14,9 @@ func newKubeconfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "kubeconfig",
 		Aliases: []string{"kc"},
-		Short:   "Manage kubeconfig for klimax clusters",
-		Long: `Kubeconfig helpers for klimax clusters. Each cluster's kubeconfig is written
-to ~/.kube/klimax/<name>.kubeconfig; 'merge'/'use' integrate it into the default
+		Short:   "Manage kubeconfig for marina clusters",
+		Long: `Kubeconfig helpers for marina clusters. Each cluster's kubeconfig is written
+to ~/.kube/marina/<name>.kubeconfig; 'merge'/'use' integrate it into the default
 ~/.kube/config.`,
 	}
 	cmd.AddCommand(

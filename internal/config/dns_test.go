@@ -11,8 +11,8 @@ func TestDNSDefaults(t *testing.T) {
 	if !cfg.DNSEnabled() {
 		t.Fatal("network.dns should default to enabled")
 	}
-	if got := cfg.DNSDomain(); got != "klimax.internal" {
-		t.Errorf("domain = %q, want klimax.internal", got)
+	if got := cfg.DNSDomain(); got != "marina.internal" {
+		t.Errorf("domain = %q, want marina.internal", got)
 	}
 	if got := cfg.DNSServerIP(); got != "172.30.255.53" {
 		t.Errorf("server = %q, want 172.30.255.53", got)
@@ -20,7 +20,7 @@ func TestDNSDefaults(t *testing.T) {
 	if got := cfg.DNSEtcdIP(); got != "172.30.255.52" {
 		t.Errorf("etcd = %q, want 172.30.255.52", got)
 	}
-	if got := cfg.ClusterDNSZone("dev"); got != "dev.klimax.internal" {
+	if got := cfg.ClusterDNSZone("dev"); got != "dev.marina.internal" {
 		t.Errorf("zone = %q", got)
 	}
 	if err := Validate(cfg); err != nil {
@@ -52,7 +52,7 @@ func TestDNSValidation(t *testing.T) {
 		name, domain, cidr, wantErr string
 	}{
 		{"bare TLD", "internal", "", "at least two labels"},
-		{"mdns", "klimax.local", "", ".local is reserved"},
+		{"mdns", "marina.local", "", ".local is reserved"},
 		{"bad label", "kli_max.internal", "", "not a valid DNS label"},
 		{"cidr too small", "", "172.30.0.0/24", "inside network.kindBridgeCIDR"},
 		{"custom ok", "lab.internal", "", ""},
@@ -76,11 +76,11 @@ func TestDNSValidation(t *testing.T) {
 func TestNoProxyIncludesDNSZone(t *testing.T) {
 	cfg := &Config{}
 	applyDefaults(cfg)
-	if !strings.Contains(cfg.NoProxyString(""), ".klimax.internal") {
+	if !strings.Contains(cfg.NoProxyString(""), ".marina.internal") {
 		t.Errorf("no_proxy should exempt the local zone: %s", cfg.NoProxyString(""))
 	}
 	cfg.Network.DNS.Enabled = boolPtr(false)
-	if strings.Contains(cfg.NoProxyString(""), "klimax.internal") {
+	if strings.Contains(cfg.NoProxyString(""), "marina.internal") {
 		t.Errorf("no_proxy should not list the zone when DNS is off")
 	}
 }
@@ -88,11 +88,11 @@ func TestNoProxyIncludesDNSZone(t *testing.T) {
 func TestDNSNameTemplate(t *testing.T) {
 	cfg := &Config{}
 	applyDefaults(cfg)
-	if got := cfg.DNSNameExample("dev"); got != "<service>.<namespace>.dev.klimax.internal" {
+	if got := cfg.DNSNameExample("dev"); got != "<service>.<namespace>.dev.marina.internal" {
 		t.Errorf("default example = %q", got)
 	}
 	cfg.Network.DNS.NameTemplate = "{{.Name}}-{{.Namespace}}"
-	if got := cfg.DNSNameExample("dev"); got != "<service>-<namespace>.dev.klimax.internal" {
+	if got := cfg.DNSNameExample("dev"); got != "<service>-<namespace>.dev.marina.internal" {
 		t.Errorf("flat example = %q", got)
 	}
 	for tmpl, wantErr := range map[string]string{

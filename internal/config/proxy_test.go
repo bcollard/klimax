@@ -20,7 +20,7 @@ func TestNoProxyCoversClusterInternalTraffic(t *testing.T) {
 	got := proxyTestConfig().NoProxy("192.168.64.3")
 
 	// Each of these, sent to a corporate proxy, becomes a timeout that looks
-	// like a klimax bug rather than a proxy misconfiguration.
+	// like a marina bug rather than a proxy misconfiguration.
 	for _, want := range []string{
 		"localhost", "127.0.0.1", "::1",
 		".svc", ".cluster.local",

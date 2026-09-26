@@ -8,7 +8,7 @@ import (
 	"text/template"
 )
 
-// DNSConfig controls klimax's local DNS zone for LoadBalancer Services.
+// DNSConfig controls marina's local DNS zone for LoadBalancer Services.
 //
 // With it on, every cluster publishes its LoadBalancer Services and Ingress
 // hosts as <svc>.<namespace>.<cluster>.<domain>, resolvable from the Mac, the
@@ -21,22 +21,22 @@ import (
 //     on the kind network, which the host route already follows across lima0
 //     IP changes, so the file is written once and never goes stale.
 //
-// Reconciled on every `klimax up`: turning it off removes the containers, the
+// Reconciled on every `marina up`: turning it off removes the containers, the
 // iptables exemption and the resolver file. ExternalDNS is installed at
 // cluster creation, so it reaches clusters created while the toggle is on.
 type DNSConfig struct {
 	// Enabled is the global toggle. nil = default (true).
 	Enabled *bool `yaml:"enabled"`
-	// Domain is the zone klimax serves. Default "klimax.internal".
+	// Domain is the zone marina serves. Default "marina.internal".
 	//
 	// .internal is reserved by ICANN for private use and never delegated in
-	// the public root. klimax takes a subdomain rather than all of .internal,
+	// the public root. marina takes a subdomain rather than all of .internal,
 	// because corporate networks and GCP (metadata.google.internal) already use
 	// it and a resolver file for the whole TLD would take those names over.
 	Domain string `yaml:"domain"`
 	// NameTemplate is the automatic name every LoadBalancer Service and Ingress
 	// gets, as an ExternalDNS --fqdn-template relative to the cluster's zone:
-	// klimax appends ".<cluster>.<domain>". Fields: .Name, .Namespace, .Labels,
+	// marina appends ".<cluster>.<domain>". Fields: .Name, .Namespace, .Labels,
 	// .Annotations. Default "{{.Name}}.{{.Namespace}}", mirroring Kubernetes'
 	// own <svc>.<ns>.svc.cluster.local.
 	//
@@ -51,12 +51,12 @@ type DNSConfig struct {
 	TLS TLSConfig `yaml:"tls"`
 }
 
-// TLSConfig controls klimax's local certificate authority for the DNS zone.
+// TLSConfig controls marina's local certificate authority for the DNS zone.
 //
 // A root CA on the Mac, name-constrained to .<domain>, trusted in the System
 // keychain; one intermediate per cluster, constrained to .<cluster>.<domain>;
 // and a *.<cluster>.<domain> wildcard certificate signed by it and stored in
-// the cluster as the TLS Secret default/klimax-wildcard-tls. The constraints
+// the cluster as the TLS Secret default/marina-wildcard-tls. The constraints
 // are what make trusting the root safe: nothing it or its intermediates sign
 // is accepted for any other domain, and a leaked intermediate only covers its
 // own cluster.
@@ -67,7 +67,7 @@ type TLSConfig struct {
 }
 
 // DefaultDNSDomain is the zone served when network.dns.domain is unset.
-const DefaultDNSDomain = "klimax.internal"
+const DefaultDNSDomain = "marina.internal"
 
 // DefaultDNSNameTemplate is the automatic per-Service name, relative to the
 // cluster zone.
@@ -147,7 +147,7 @@ func (c *Config) FleetDNSZone(fleet string) string {
 var dnsLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // validateDNS checks network.dns. Only called when the feature is on: a bad
-// domain on a disabled feature is not worth failing `klimax up` over.
+// domain on a disabled feature is not worth failing `marina up` over.
 func validateDNS(c *Config) []error {
 	var errs []error
 	domain := c.DNSDomain()
@@ -182,7 +182,7 @@ func validateDNS(c *Config) []error {
 }
 
 // validateNameTemplate parses the template and renders it for a sample Service,
-// so a typo fails `klimax up` instead of silently publishing nothing.
+// so a typo fails `marina up` instead of silently publishing nothing.
 func validateNameTemplate(tmpl string) []error {
 	t, err := template.New("nameTemplate").Option("missingkey=zero").Parse(tmpl)
 	if err != nil {
@@ -199,14 +199,14 @@ func validateNameTemplate(tmpl string) []error {
 	}
 	for _, l := range strings.Split(out, ".") {
 		if !dnsLabelRE.MatchString(l) {
-			return []error{fmt.Errorf("network.dns.nameTemplate %q renders %q for a sample Service — not a valid relative DNS name (klimax appends the cluster zone itself)", tmpl, out)}
+			return []error{fmt.Errorf("network.dns.nameTemplate %q renders %q for a sample Service — not a valid relative DNS name (marina appends the cluster zone itself)", tmpl, out)}
 		}
 	}
 	return nil
 }
 
 // DNSNameExample renders the automatic name with placeholders, for messages:
-// "<service>-<namespace>.dev.klimax.internal". cluster "" gives "<cluster>".
+// "<service>-<namespace>.dev.marina.internal". cluster "" gives "<cluster>".
 func (c *Config) DNSNameExample(cluster string) string {
 	if cluster == "" {
 		cluster = "<cluster>"

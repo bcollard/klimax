@@ -8,8 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/docker/go-units"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -26,14 +26,14 @@ func newPruneCmd() *cobra.Command {
 	var dryRun, downloads, yes bool
 	cmd := &cobra.Command{
 		Use:   "prune",
-		Short: "Remove klimax's reclaimable cached files",
-		Long: `Removes files klimax can safely re-create:
+		Short: "Remove marina's reclaimable cached files",
+		Long: `Removes files marina can safely re-create:
 
-  • superseded Lima guest agents in ~/.klimax/share/lima (the one matching the
-    Lima version THIS klimax binary is built against is kept — running prune from
-    a different klimax build removes that build's agent, which is re-downloaded
-    on its next 'klimax up')
-  • registry cache directories under ~/.klimax/registry-cache that no longer
+  • superseded Lima guest agents in ~/.marina/share/lima (the one matching the
+    Lima version THIS marina binary is built against is kept — running prune from
+    a different marina build removes that build's agent, which is re-downloaded
+    on its next 'marina up')
+  • registry cache directories under ~/.marina/registry-cache that no longer
     correspond to a configured mirror (e.g. after renaming or removing one)
 
 With --downloads, it also clears Lima's image download cache. That cache lives in
@@ -42,7 +42,7 @@ the OS cache directory and is shared with any other Lima instances on this host
 re-download base images too.
 
 Live registry caches for configured mirrors are never touched — use
-'klimax registry clean-cache' for those.`,
+'marina registry clean-cache' for those.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runPrune(dryRun, downloads, yes)
 		},
@@ -145,8 +145,8 @@ func collectPruneTargets(cfg *config.Config, downloads bool) []pruneTarget {
 
 	// 1. Superseded guest agents. EnsureGuestAgent version-stamps the filename,
 	//    so bumping the Lima module leaves the previous download behind.
-	agentDir := filepath.Join(KlimaxHome(), "share", "lima")
-	keep := filepath.Base(vm.GuestAgentCachePath(KlimaxHome()))
+	agentDir := filepath.Join(MarinaHome(), "share", "lima")
+	keep := filepath.Base(vm.GuestAgentCachePath(MarinaHome()))
 	if entries, err := os.ReadDir(agentDir); err == nil {
 		for _, e := range entries {
 			if e.IsDir() || e.Name() == keep {
@@ -166,7 +166,7 @@ func collectPruneTargets(cfg *config.Config, downloads bool) []pruneTarget {
 	for _, m := range cfg.Registries.Mirrors {
 		configured[m.Name] = true
 	}
-	cacheRoot := filepath.Join(KlimaxHome(), "registry-cache")
+	cacheRoot := filepath.Join(MarinaHome(), "registry-cache")
 	if entries, err := os.ReadDir(cacheRoot); err == nil {
 		for _, e := range entries {
 			if !e.IsDir() || configured[e.Name()] {

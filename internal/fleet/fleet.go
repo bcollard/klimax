@@ -1,12 +1,12 @@
-// Package fleet parses and validates the klimax Fleet manifest — a
+// Package fleet parses and validates the marina Fleet manifest — a
 // declarative description of a fleet of kind clusters applied via
-// `klimax cluster apply -f`. It is deliberately separate from the infrastructure
-// config (~/.klimax/config.yaml): the manifest is an ephemeral input, like a
+// `marina cluster apply -f`. It is deliberately separate from the infrastructure
+// config (~/.marina/config.yaml): the manifest is an ephemeral input, like a
 // `kubectl apply -f` object, and never lives in the config file.
 //
 // The minimal manifest a user must write only lists cluster names:
 //
-//	apiVersion: klimax.dev/v1alpha1
+//	apiVersion: marina.run/v1alpha1
 //	kind: Fleet
 //	spec:
 //	  clusters:
@@ -28,8 +28,8 @@ import (
 )
 
 const (
-	// APIVersion is the manifest apiVersion accepted by `klimax cluster apply`.
-	APIVersion = "klimax.dev/v1alpha1"
+	// APIVersion is the manifest apiVersion accepted by `marina cluster apply`.
+	APIVersion = "marina.run/v1alpha1"
 	// Kind is the only manifest kind supported today.
 	Kind = "Fleet"
 

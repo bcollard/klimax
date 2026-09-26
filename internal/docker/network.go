@@ -8,7 +8,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // EnsureKindNetwork ensures a Docker bridge network named "kind" exists in the

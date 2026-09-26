@@ -10,7 +10,7 @@ import (
 	"github.com/lima-vm/lima/v2/pkg/ptr"
 )
 
-// limaYAMLFixture mirrors the shape of a real klimax-generated instance config:
+// limaYAMLFixture mirrors the shape of a real marina-generated instance config:
 // nested mappings, a sequence of mappings, and — the part that makes node-level
 // surgery worth testing — a literal block scalar holding a shell script whose
 // own '#' comments and blank lines must survive a re-encode untouched.
@@ -24,11 +24,11 @@ cpus: 8
 memory: 20GiB
 disk: 20GiB
 additionalDisks:
-    - name: klimax-img
+    - name: marina-img
       format: true
       fsType: ext4
 mounts:
-    - location: /Users/tester/.klimax/registry-cache
+    - location: /Users/tester/.marina/registry-cache
       writable: true
 mountType: virtiofs
 provision:
@@ -38,9 +38,9 @@ provision:
         set -euo pipefail
 
         # Find the disk by label, not by device order.
-        DEV="/dev/disk/by-label/lima-klimax-img"
+        DEV="/dev/disk/by-label/lima-marina-img"
         mount "${DEV}" /var/lib/containerd
-      path: /usr/local/sbin/klimax-image-disk.sh
+      path: /usr/local/sbin/marina-image-disk.sh
 containerd:
     system: false
     user: false
@@ -72,8 +72,8 @@ func TestReadInstanceMounts(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []NormalizedMount{{
-		HostPath:  "/Users/tester/.klimax/registry-cache",
-		GuestPath: "/Users/tester/.klimax/registry-cache",
+		HostPath:  "/Users/tester/.marina/registry-cache",
+		GuestPath: "/Users/tester/.marina/registry-cache",
 		Writable:  true,
 	}}
 	if norm := NormalizeMounts(got); !equalNormalized(norm, want) {
@@ -83,7 +83,7 @@ func TestReadInstanceMounts(t *testing.T) {
 
 func TestReadInstanceMountsAbsent(t *testing.T) {
 	body := strings.Replace(limaYAMLFixture,
-		"mounts:\n    - location: /Users/tester/.klimax/registry-cache\n      writable: true\n", "", 1)
+		"mounts:\n    - location: /Users/tester/.marina/registry-cache\n      writable: true\n", "", 1)
 	got, err := ReadInstanceMounts(writeFixture(t, body))
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +99,7 @@ func TestReadInstanceMountsAbsent(t *testing.T) {
 func TestWriteInstanceMountsPreservesRest(t *testing.T) {
 	path := writeFixture(t, limaYAMLFixture)
 	mounts := []limatype.Mount{
-		{Location: "/Users/tester/.klimax/registry-cache", Writable: ptr.Of(true)},
+		{Location: "/Users/tester/.marina/registry-cache", Writable: ptr.Of(true)},
 		{Location: "/Users/tester/projects", Writable: ptr.Of(true)},
 		{Location: "/Users/tester/conf", Writable: ptr.Of(false)},
 	}
@@ -113,7 +113,7 @@ func TestWriteInstanceMountsPreservesRest(t *testing.T) {
 		"      content: |\n",
 		"vmType: vz\n",
 		"            binfmt: true\n",
-		"    - name: klimax-img\n",
+		"    - name: marina-img\n",
 		"user:\n    name: lima\n",
 	} {
 		if !strings.Contains(got, fragment) {
@@ -132,7 +132,7 @@ func TestWriteInstanceMountsPreservesRest(t *testing.T) {
 
 func TestWriteInstanceMountsInsertsWhenAbsent(t *testing.T) {
 	body := strings.Replace(limaYAMLFixture,
-		"mounts:\n    - location: /Users/tester/.klimax/registry-cache\n      writable: true\n", "", 1)
+		"mounts:\n    - location: /Users/tester/.marina/registry-cache\n      writable: true\n", "", 1)
 	path := writeFixture(t, body)
 
 	mounts := []limatype.Mount{{Location: "/Users/tester/projects", Writable: ptr.Of(true)}}

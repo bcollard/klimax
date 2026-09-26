@@ -1,4 +1,4 @@
-// Package hostsudo runs the few privileged commands klimax needs on the Mac:
+// Package hostsudo runs the few privileged commands marina needs on the Mac:
 // the resolver file for the local DNS zone and the keychain trust for the local
 // CA. (The host route has its own sudoers-backed path in internal/routing.)
 package hostsudo

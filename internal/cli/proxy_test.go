@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/limatemplate"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/limatemplate"
 )
 
 func proxyCfg() *config.Config {
@@ -69,7 +69,7 @@ no_proxy=localhost
 	if got["https_proxy"] != "http://192.168.5.2:3128" {
 		t.Errorf("https_proxy: got %q", got["https_proxy"])
 	}
-	// no_proxy is klimax's to compute, never inherited.
+	// no_proxy is marina's to compute, never inherited.
 	if _, ok := got["no_proxy"]; ok {
 		t.Error("no_proxy should not be lifted from the guest")
 	}
@@ -89,40 +89,40 @@ func TestParseEnvironmentProxyEmptyWhenNoProxySet(t *testing.T) {
 	}
 }
 
-// klimax writes its own block into /etc/environment. Reading it back as "the
+// marina writes its own block into /etc/environment. Reading it back as "the
 // host's proxy" would make a configured proxy self-sustaining: removing
 // network.proxy would never take effect.
-func TestStripKlimaxEnvBlock(t *testing.T) {
+func TestStripMarinaEnvBlock(t *testing.T) {
 	const content = `PATH="/usr/bin"
 #LIMA-START
 http_proxy=http://host-proxy:3128
 #LIMA-END
-#KLIMAX-START
-http_proxy=http://klimax-configured:8888
-https_proxy=http://klimax-configured:8888
-#KLIMAX-END
+#MARINA-START
+http_proxy=http://marina-configured:8888
+https_proxy=http://marina-configured:8888
+#MARINA-END
 `
-	got := parseEnvironmentProxy(stripKlimaxEnvBlock(content))
+	got := parseEnvironmentProxy(stripMarinaEnvBlock(content))
 	if got["http_proxy"] != "http://host-proxy:3128" {
 		t.Errorf("should keep Lima's value, got %q", got["http_proxy"])
 	}
-	if strings.Contains(got["http_proxy"], "klimax-configured") {
-		t.Error("klimax's own block was re-inherited")
+	if strings.Contains(got["http_proxy"], "marina-configured") {
+		t.Error("marina's own block was re-inherited")
 	}
 }
 
-func TestStripKlimaxEnvBlockNoBlock(t *testing.T) {
+func TestStripMarinaEnvBlockNoBlock(t *testing.T) {
 	const content = "PATH=\"/usr/bin\"\n#LIMA-START\nhttp_proxy=http://p:3128\n#LIMA-END\n"
-	if got := stripKlimaxEnvBlock(content); got != content {
-		t.Errorf("content without a klimax block should be unchanged:\n%s", got)
+	if got := stripMarinaEnvBlock(content); got != content {
+		t.Errorf("content without a marina block should be unchanged:\n%s", got)
 	}
 }
 
-// With only a klimax block and no host proxy, nothing is inherited — which is
+// With only a marina block and no host proxy, nothing is inherited — which is
 // what lets removal work.
-func TestStripKlimaxEnvBlockLeavesNothingToInherit(t *testing.T) {
-	const content = "PATH=\"/usr/bin\"\n#KLIMAX-START\nhttp_proxy=http://x:1\n#KLIMAX-END\n"
-	if got := parseEnvironmentProxy(stripKlimaxEnvBlock(content)); len(got) != 0 {
+func TestStripMarinaEnvBlockLeavesNothingToInherit(t *testing.T) {
+	const content = "PATH=\"/usr/bin\"\n#MARINA-START\nhttp_proxy=http://x:1\n#MARINA-END\n"
+	if got := parseEnvironmentProxy(stripMarinaEnvBlock(content)); len(got) != 0 {
 		t.Errorf("expected nothing inheritable, got %v", got)
 	}
 }

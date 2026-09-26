@@ -6,20 +6,20 @@ import (
 	"log/slog"
 	"slices"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/localca"
-	"github.com/bcollard/klimax/internal/localdns"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/localca"
+	"github.com/bcollard/marina/internal/localdns"
 )
 
 // A fleet has its own DNS zone, <fleet>.<domain>, beside its members' zones.
 // Fleet-wide names (gateway.<fleet>.<domain>) are published by whichever member
-// annotates a Service with one; klimax only has to let every member write
+// annotates a Service with one; marina only has to let every member write
 // there, give the zone a wildcard certificate, and clean up after a member.
 //
-// Membership is the live klimax.dev/fleet node label, as everywhere else in
-// klimax — never the manifest.
+// Membership is the live marina.run/fleet node label, as everywhere else in
+// marina — never the manifest.
 
 // liveFleetOf returns the fleet a cluster belongs to, or "" when it has none or
 // its API cannot be read.
@@ -78,7 +78,7 @@ func installFleetCA(ctx context.Context, g *guest.Client, cfg *config.Config, cl
 	}
 	if err != nil {
 		slog.Warn("Local CA: could not install the fleet's certificates", "cluster", cluster, "fleet", fleet, "err", err,
-			"fix", "klimax ca attach "+cluster)
+			"fix", "marina ca attach "+cluster)
 		return
 	}
 	fmt.Printf("tls: fleet wildcard %s in Secret default/%s\n", fm.WildcardNames[0], localca.FleetWildcardSecret)

@@ -8,7 +8,7 @@ import (
 
 func TestAutostartPlistIsWellFormed(t *testing.T) {
 	// A path with XML metacharacters must not break the plist.
-	plist := autostartPlist("/usr/local/bin/klimax", "/Users/a&b/<cfg>.yaml", "/tmp/log")
+	plist := autostartPlist("/usr/local/bin/marina", "/Users/a&b/<cfg>.yaml", "/tmp/log")
 
 	dec := xml.NewDecoder(strings.NewReader(plist))
 	for {
