@@ -31,6 +31,9 @@ jobs:
           go-licenses save ./cmd/klimax \
             --save_path=.third_party_licenses \
             --force
+          # go-licenses copies from the read-only module cache; writable copies
+          # let tools that unpack the archive (syft) overwrite nothing by accident.
+          chmod -R u+w .third_party_licenses
 
       - name: Install syft (SBOM generator for goreleaser)
         uses: anchore/sbom-action/download-syft@v0

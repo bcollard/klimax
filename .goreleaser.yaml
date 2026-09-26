@@ -41,9 +41,12 @@ archives:
       - README.md
       - config.example.yaml
       - entitlements.plist
+      # Keep each module's own directory. Flattening (strip_parent) put ~70
+      # LICENSE files on one path, so the archive held duplicate entries and
+      # only the last license survived — and syft, unpacking it for the SBOM,
+      # failed on the second copy of a read-only file (v0.2.2's first attempt).
       - src: .third_party_licenses/**/*
         dst: third_party_licenses
-        strip_parent: true
 
 checksum:
   name_template: checksums.txt
