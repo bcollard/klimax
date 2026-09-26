@@ -7,14 +7,14 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/fleet"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/marina/internal/fleet"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-// Node labels that describe klimax-managed topology or membership rather than
+// Node labels that describe marina-managed topology or membership rather than
 // user intent. They are reconstructed from dedicated manifest fields on apply,
 // so they must not be echoed back into the entry's free-form `labels:` map.
 var exportManagedLabels = map[string]bool{
@@ -30,15 +30,15 @@ func newFleetExportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "export [cluster...]",
 		Short: "Write a Fleet manifest describing existing clusters",
-		Long: `Reverse of 'klimax fleet create -f': reads live clusters and writes a Fleet
+		Long: `Reverse of 'marina fleet create -f': reads live clusters and writes a Fleet
 manifest to stdout, so an ad-hoc lab can be captured into a reproducible file.
 
 Choose clusters by name, by label selector, or — with neither — from an
 interactive picker.
 
-  klimax fleet export dev staging > fleet.yaml
-  klimax fleet export -l klimax.dev/fleet=mesh > fleet.yaml
-  klimax fleet export > fleet.yaml          # interactive picker
+  marina fleet export dev staging > fleet.yaml
+  marina fleet export -l marina.sh/fleet=mesh > fleet.yaml
+  marina fleet export > fleet.yaml          # interactive picker
 
 Captured per cluster: name, num, nodeVersion, region/zone, and custom node
 labels. Not captured, because live clusters do not record it: dependsOn
@@ -195,7 +195,7 @@ func assembleFleet(names []string, numByName map[string]int, infos map[string]*k
 }
 
 // customLabels keeps only labels a user would have set themselves: it drops the
-// kubelet's own infrastructure labels and the ones klimax reconstructs from
+// kubelet's own infrastructure labels and the ones marina reconstructs from
 // dedicated manifest fields.
 func customLabels(labels map[string]string) map[string]string {
 	out := map[string]string{}
@@ -211,7 +211,7 @@ func customLabels(labels map[string]string) map[string]string {
 	return out
 }
 
-// deriveFleetName uses the clusters' shared klimax.dev/fleet label when they all
+// deriveFleetName uses the clusters' shared marina.sh/fleet label when they all
 // agree, so re-applying an exported fleet keeps its identity. Falls back to
 // "exported" when the set is mixed or unlabelled.
 func deriveFleetName(names []string, infos map[string]*kind.ClusterInfo) string {

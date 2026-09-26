@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/hostsudo"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/hostsudo"
 )
 
 // ResolverDir is where macOS looks for per-domain resolver files (man 5
@@ -16,9 +16,14 @@ import (
 // to the nameserver it lists; everything else is untouched.
 const ResolverDir = "/etc/resolver"
 
-// resolverMarker is the first line of every file klimax writes, so removal
+// resolverMarker is the first line of every file marina writes, so removal
 // never touches a resolver file someone else put there.
-const resolverMarker = "# Managed by klimax"
+const resolverMarker = "# Managed by marina"
+
+// legacyResolverMarker is what klimax (marina before v1.0) wrote. Its files
+// are cleaned up like marina's own: after a migration, /etc/resolver/klimax.internal
+// would otherwise keep pointing macOS at a zone nothing serves.
+const legacyResolverMarker = "# Managed by klimax"
 
 // ResolverPath is the resolver file for the configured zone.
 func ResolverPath(cfg *config.Config) string {
@@ -40,16 +45,16 @@ func HostResolverOK(cfg *config.Config) bool {
 }
 
 // EnsureHostResolver reconciles /etc/resolver with network.dns: writes the
-// zone's file when enabled, and removes any klimax-written file that no longer
+// zone's file when enabled, and removes any marina-written file that no longer
 // matches (the feature turned off, or the domain changed).
 //
 // Needs root, and only when something changes: a current file is left alone
-// without invoking sudo, so re-running `klimax up` never prompts for it.
+// without invoking sudo, so re-running `marina up` never prompts for it.
 //
 // interactive=false (launchd, CI) uses `sudo -n`: it succeeds with cached
 // credentials or a NOPASSWD rule and otherwise fails fast with a message,
 // instead of hanging on a password prompt nobody can answer. There is
-// deliberately no sudoers rule for this in `klimax sudoers` — a NOPASSWD tee
+// deliberately no sudoers rule for this in `marina sudoers` — a NOPASSWD tee
 // on /etc/resolver would let anything on the Mac redirect any domain.
 func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 	want := ""
@@ -58,7 +63,7 @@ func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 	}
 
 	for _, stale := range staleResolverFiles(want) {
-		slog.Info("Removing klimax resolver file", "path", stale)
+		slog.Info("Removing marina resolver file", "path", stale)
 		if err := hostsudo.Run(interactive, nil, "/bin/rm", "-f", stale); err != nil {
 			return fmt.Errorf("removing %s: %w", stale, err)
 		}
@@ -77,8 +82,8 @@ func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 	return nil
 }
 
-// RemoveHostResolvers deletes every resolver file klimax wrote. Used by
-// `klimax destroy`.
+// RemoveHostResolvers deletes every resolver file marina wrote. Used by
+// `marina destroy`.
 func RemoveHostResolvers(interactive bool) error {
 	for _, p := range staleResolverFiles("") {
 		if err := hostsudo.Run(interactive, nil, "/bin/rm", "-f", p); err != nil {
@@ -88,7 +93,7 @@ func RemoveHostResolvers(interactive bool) error {
 	return nil
 }
 
-// staleResolverFiles lists klimax-written resolver files other than keep.
+// staleResolverFiles lists marina-written resolver files other than keep.
 func staleResolverFiles(keep string) []string {
 	entries, err := os.ReadDir(ResolverDir)
 	if err != nil {
@@ -101,7 +106,7 @@ func staleResolverFiles(keep string) []string {
 			continue
 		}
 		b, err := os.ReadFile(p)
-		if err == nil && strings.HasPrefix(string(b), resolverMarker) {
+		if err == nil && (strings.HasPrefix(string(b), resolverMarker) || strings.HasPrefix(string(b), legacyResolverMarker)) {
 			out = append(out, p)
 		}
 	}

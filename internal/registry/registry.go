@@ -1,5 +1,5 @@
 // Package registry manages the pull-through mirror containers running inside
-// the klimax Lima VM.
+// the marina Lima VM.
 package registry
 
 import (
@@ -12,8 +12,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 const (
@@ -96,14 +96,14 @@ func ensureMirror(ctx context.Context, g *guest.Client, m config.RegistryMirror,
 }
 
 // mirrorCacheDir returns the cache directory path for a mirror (guest-side path for both strategies).
-// For "host": Lima mounts ~/.klimax/registry-cache at the same absolute path in the guest via virtiofs.
-// For "guest": a VM-local path under /var/lib/klimax/registry-cache.
+// For "host": Lima mounts ~/.marina/registry-cache at the same absolute path in the guest via virtiofs.
+// For "guest": a VM-local path under /var/lib/marina/registry-cache.
 func mirrorCacheDir(mirrorName, cacheStorage string) string {
 	if cacheStorage == "guest" {
-		return "/var/lib/klimax/registry-cache/" + mirrorName
+		return "/var/lib/marina/registry-cache/" + mirrorName
 	}
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".klimax", "registry-cache", mirrorName)
+	return filepath.Join(home, ".marina", "registry-cache", mirrorName)
 }
 
 // buildMirrorConfig generates a distribution/registry v2 config YAML for a pull-through mirror.
@@ -239,7 +239,7 @@ func shellQuote(s string) string {
 }
 
 // hostCABundle is the guest trust store, which update-ca-certificates rewrites
-// to include klimax's extra anchors. Debian and Alpine both read this path, so
+// to include marina's extra anchors. Debian and Alpine both read this path, so
 // mounting it into the mirror covers the registry image whatever it is based on.
 const hostCABundle = "/etc/ssl/certs/ca-certificates.crt"
 
@@ -255,7 +255,7 @@ func caMountArg(trustHostCA bool) string {
 // mirrorNeedsRecreate reports whether a running mirror's proxy environment or
 // CA mount differs from what the config now asks for.
 //
-// Only what klimax manages is compared: the container carries plenty of other
+// Only what marina manages is compared: the container carries plenty of other
 // environment (PATH, the registry image's own defaults) that must not trigger a
 // recreate.
 func mirrorNeedsRecreate(ctx context.Context, g *guest.Client, name string, want map[string]string, trustHostCA bool) (bool, error) {
@@ -302,7 +302,7 @@ func mirrorProxyIsStale(ctx context.Context, g *guest.Client, name string, want 
 	return false, nil
 }
 
-// isProxyVar reports whether an environment variable name is one klimax manages
+// isProxyVar reports whether an environment variable name is one marina manages
 // for proxying, in either spelling.
 func isProxyVar(k string) bool {
 	switch strings.ToLower(k) {

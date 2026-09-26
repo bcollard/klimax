@@ -1,5 +1,5 @@
-BINARY     := klimax
-MODULE     := github.com/bcollard/klimax
+BINARY     := marina
+MODULE     := github.com/bcollard/marina
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS    := -ldflags "-s -w -X main.version=$(VERSION)"
 BUILD_DIR  := ./dist
@@ -12,7 +12,7 @@ ENTITLEMENTS := entitlements.plist
 .PHONY: build sign test lint install dev-install clean tidy snapshot release-check
 
 build:
-	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/klimax/...
+	go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY) ./cmd/marina/...
 	codesign --sign - --entitlements $(ENTITLEMENTS) --force $(BUILD_DIR)/$(BINARY)
 
 test:
@@ -22,11 +22,11 @@ lint:
 	golangci-lint run ./...
 
 install:
-	go install $(LDFLAGS) ./cmd/klimax/...
+	go install $(LDFLAGS) ./cmd/marina/...
 
 dev-install: build
 	@if pgrep -qf '$(BINARY) hostagent'; then \
-		echo "ERROR: klimax hostagent is running. Run 'klimax down' first, or:"; \
+		echo "ERROR: marina hostagent is running. Run 'marina down' first, or:"; \
 		echo "  kill \$$(pgrep -f '$(BINARY) hostagent')"; \
 		exit 1; \
 	fi

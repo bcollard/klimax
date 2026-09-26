@@ -6,14 +6,14 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 	"github.com/spf13/cobra"
 )
 
 func newConfigCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "config",
-		Short: "Manage klimax configuration",
+		Short: "Manage marina configuration",
 	}
 	cmd.AddCommand(newConfigEditCmd())
 	return cmd
@@ -22,7 +22,7 @@ func newConfigCmd() *cobra.Command {
 func newConfigEditCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "edit",
-		Short: "Open the klimax config file in $EDITOR",
+		Short: "Open the marina config file in $EDITOR",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runConfigEdit()
 		},

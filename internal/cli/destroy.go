@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/localdns"
-	"github.com/bcollard/klimax/internal/routing"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/localdns"
+	"github.com/bcollard/marina/internal/routing"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -31,7 +31,7 @@ func runDestroy(ctx context.Context) error {
 		return err
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 
 	// Delete kind clusters first (while VM is still running).
 	inst, err := mgr.Inspect(ctx)
@@ -65,7 +65,7 @@ func runDestroy(ctx context.Context) error {
 	// The resolver file would otherwise point macOS at an address nothing
 	// answers on, and every lookup under the zone would wait for a timeout.
 	if err := localdns.RemoveHostResolvers(term.IsTerminal(int(os.Stdin.Fd()))); err != nil {
-		slog.Warn("Failed to remove the klimax resolver file (continuing)", "err", err)
+		slog.Warn("Failed to remove the marina resolver file (continuing)", "err", err)
 	}
 
 	// Remove macOS route.
@@ -73,6 +73,6 @@ func runDestroy(ctx context.Context) error {
 		slog.Warn("Failed to delete route (continuing)", "err", err)
 	}
 
-	slog.Info("klimax destroy complete", "vm", cfg.VM.Name)
+	slog.Info("marina destroy complete", "vm", cfg.VM.Name)
 	return nil
 }

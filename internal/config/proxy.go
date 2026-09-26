@@ -7,15 +7,15 @@ import (
 	"strings"
 )
 
-// ProxyConfig configures an HTTP(S) proxy for everything klimax runs in the VM:
+// ProxyConfig configures an HTTP(S) proxy for everything marina runs in the VM:
 // dockerd, the registry mirrors, and — via the environment kind inherits — the
 // containerd inside every kind node.
 //
 // Lima already reads the Mac's system proxy settings and writes them into the
-// guest's /etc/environment (propagateProxyEnv, on by default), and klimax's own
+// guest's /etc/environment (propagateProxyEnv, on by default), and marina's own
 // SSH commands pick those up through pam_env. That covers anything run from a
 // login session. It does NOT cover systemd services: dockerd never reads
-// /etc/environment, so without klimax writing a drop-in it pulls directly and
+// /etc/environment, so without marina writing a drop-in it pulls directly and
 // fails. That gap is what this config exists to close.
 type ProxyConfig struct {
 	// InheritFromHost uses the Mac's system proxy settings when HTTP/HTTPS are
@@ -26,7 +26,7 @@ type ProxyConfig struct {
 	// HTTPS is the proxy URL for HTTPS. Usually the same value as HTTP —
 	// the URL names the proxy, not the scheme it forwards.
 	HTTPS string `yaml:"https,omitempty"`
-	// NoProxy is appended to the destinations klimax always exempts
+	// NoProxy is appended to the destinations marina always exempts
 	// (see NoProxy). Use it for internal hosts that must bypass the proxy.
 	NoProxy []string `yaml:"noProxy,omitempty"`
 }
@@ -47,8 +47,8 @@ func (p ProxyConfig) InheritsFromHost() bool {
 //
 // A corporate proxy has no route to any of these, so letting cluster-internal
 // traffic reach it turns every in-cluster call into a timeout that looks like a
-// klimax bug. Computing this list is the main reason proxy support belongs in
-// klimax rather than in a documentation page: the user does not know the bridge
+// marina bug. Computing this list is the main reason proxy support belongs in
+// marina rather than in a documentation page: the user does not know the bridge
 // CIDR, the mirror names, or the subnets kind will allocate.
 var noProxyAlways = []string{
 	"localhost",
@@ -57,7 +57,7 @@ var noProxyAlways = []string{
 	// kind's in-cluster DNS.
 	".svc",
 	".cluster.local",
-	// Service and pod subnets. klimax allocates 10.<num>.0.0/16 and
+	// Service and pod subnets. marina allocates 10.<num>.0.0/16 and
 	// 10.1<num>.0.0/16 per cluster, so the whole private range is exempted
 	// rather than enumerating a CIDR per possible cluster number.
 	//
@@ -65,11 +65,11 @@ var noProxyAlways = []string{
 	// 10.0.0.0/8, those hosts bypass the proxy too. That is usually correct
 	// (internal ranges are normally directly routable, and typically already
 	// in the site's own no_proxy), and the alternative — omitting it — breaks
-	// every cluster klimax creates.
+	// every cluster marina creates.
 	"10.0.0.0/8",
 }
 
-// NoProxy returns the full no_proxy value for the VM: the destinations klimax
+// NoProxy returns the full no_proxy value for the VM: the destinations marina
 // must always exempt, the kind bridge CIDR, the registry mirror names, the
 // host↔VM subnet, and finally the user's own additions.
 //

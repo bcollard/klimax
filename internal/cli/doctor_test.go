@@ -48,7 +48,7 @@ func TestAnyFixable(t *testing.T) {
 	}
 }
 
-// applyDoctorFixes must never touch a check that is passing or that klimax
+// applyDoctorFixes must never touch a check that is passing or that marina
 // cannot repair itself — a nil env would panic if it tried.
 func TestApplyDoctorFixesSkipsIneligibleChecks(t *testing.T) {
 	rep := &doctorReport{Checks: []doctorCheck{
@@ -132,16 +132,16 @@ func TestProcessExePathDeadPid(t *testing.T) {
 	}
 }
 
-// Homebrew installs klimax as a symlink into the Caskroom, and ps and
+// Homebrew installs marina as a symlink into the Caskroom, and ps and
 // os.Executable disagree about which side of it they report — so a plain string
 // compare produces a false "different binary" warning.
 func TestSameFileFollowsSymlinks(t *testing.T) {
 	dir := t.TempDir()
-	real := filepath.Join(dir, "klimax-real")
+	real := filepath.Join(dir, "marina-real")
 	if err := os.WriteFile(real, []byte("binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	link := filepath.Join(dir, "klimax-link")
+	link := filepath.Join(dir, "marina-link")
 	if err := os.Symlink(real, link); err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestSameFileFollowsSymlinks(t *testing.T) {
 		t.Error("identical paths must compare equal")
 	}
 
-	other := filepath.Join(dir, "klimax-other")
+	other := filepath.Join(dir, "marina-other")
 	if err := os.WriteFile(other, []byte("binary"), 0o755); err != nil {
 		t.Fatal(err)
 	}

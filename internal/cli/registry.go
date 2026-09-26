@@ -25,7 +25,7 @@ func newRegistryCleanCacheCmd() *cobra.Command {
 		Short: "Remove all registry mirror cache data and their containers",
 		Long: `Stops and removes all mirror containers, then deletes their cached blob data.
 
-Run 'klimax up' afterwards to restart the registries fresh.`,
+Run 'marina up' afterwards to restart the registries fresh.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRegistryCleanCache(cmd.Context())
 		},
@@ -48,19 +48,19 @@ func runRegistryCleanCache(ctx context.Context) error {
 
 		// Delete the cache directory.
 		if cfg.Registries.CacheStorage == "guest" {
-			dir := "/var/lib/klimax/registry-cache/" + m.Name
+			dir := "/var/lib/marina/registry-cache/" + m.Name
 			if _, err := g.Run(ctx, fmt.Sprintf("rm -rf %q", dir)); err != nil {
 				slog.Warn("Failed to remove guest cache dir", "dir", dir, "err", err)
 			}
 		} else {
 			home, _ := os.UserHomeDir()
-			dir := filepath.Join(home, ".klimax", "registry-cache", m.Name)
+			dir := filepath.Join(home, ".marina", "registry-cache", m.Name)
 			if err := os.RemoveAll(dir); err != nil {
 				slog.Warn("Failed to remove host cache dir", "dir", dir, "err", err)
 			}
 		}
 	}
 
-	fmt.Println("Cache cleared. Run 'klimax up' to restart the registries.")
+	fmt.Println("Cache cleared. Run 'marina up' to restart the registries.")
 	return nil
 }

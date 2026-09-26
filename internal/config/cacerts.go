@@ -32,9 +32,9 @@ func (c CACerts) Enabled() bool { return len(c.Files) > 0 }
 func GuestCertName(hostPath string) string {
 	base := filepath.Base(hostPath)
 	base = strings.TrimSuffix(base, filepath.Ext(base))
-	// Namespaced so klimax's certificates are identifiable, and removable,
+	// Namespaced so marina's certificates are identifiable, and removable,
 	// without touching anything the image shipped with.
-	return "klimax-" + sanitizeCertName(base) + ".crt"
+	return "marina-" + sanitizeCertName(base) + ".crt"
 }
 
 // sanitizeCertName reduces a filename to characters that are safe in a shell

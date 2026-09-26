@@ -11,15 +11,15 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/docker"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/hostres"
-	"github.com/bcollard/klimax/internal/limatemplate"
-	"github.com/bcollard/klimax/internal/localdns"
-	"github.com/bcollard/klimax/internal/registry"
-	"github.com/bcollard/klimax/internal/routing"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/docker"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/hostres"
+	"github.com/bcollard/marina/internal/limatemplate"
+	"github.com/bcollard/marina/internal/localdns"
+	"github.com/bcollard/marina/internal/registry"
+	"github.com/bcollard/marina/internal/routing"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/docker/go-units"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/sirupsen/logrus"
@@ -45,6 +45,11 @@ func newUpCmd() *cobra.Command {
 }
 
 func runUp(ctx context.Context, showVMLogs bool) error {
+	// A fresh marina install beside an unmigrated klimax one would run two VMs
+	// on the same kind CIDR and fight over the host route.
+	if legacyInstallPresent() && configFile == filepath.Join(MarinaHome(), "config.yaml") {
+		return fmt.Errorf("found a klimax installation at %s — run 'marina migrate' first (or remove it to start fresh)", legacyHome())
+	}
 	if err := ensureConfig(); err != nil {
 		return err
 	}
@@ -63,7 +68,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	}
 
 	// 1. Ensure VM is running.
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 
 	// An Inspect failure is not fatal here: both branches below are advisory
 	// pre-flight work, and EnsureRunning re-inspects and reports properly.
@@ -134,7 +139,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	containerProxyEnv := effectiveCfg.ContainerProxyEnv(lima0IP, cfg.KindBridgeGateway())
 
 	// Put the proxy in the guest environment as well. Lima only writes what the
-	// Mac's system settings say; a proxy that came from the klimax config would
+	// Mac's system settings say; a proxy that came from the marina config would
 	// otherwise be invisible to every SSH session — and therefore to
 	// `kind create cluster`, which reads its own environment to decide what to
 	// inject into each node, and to the in-guest `kubectl apply -f https://…`
@@ -185,13 +190,13 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	// 12. Local CA for the zone: create the root on first use, trust it.
 	reconcileLocalCA(cfg)
 
-	slog.Info("klimax up complete",
+	slog.Info("marina up complete",
 		"vm", cfg.VM.Name,
 		"kindCIDR", cfg.Network.KindBridgeCIDR,
 		"lima0IP", lima0IP,
 		"dockerSocket", "~/."+cfg.VM.Name+".docker.sock",
 	)
-	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n")
+	fmt.Printf("\nVM ready.\n  eval $(marina docker-env)          # use VM Docker daemon\n  marina cluster create <name>       # create a kind cluster\n")
 	if cfg.DNSEnabled() {
 		fmt.Printf("  LoadBalancer Services resolve as %s\n", cfg.DNSNameExample(""))
 	}
@@ -205,7 +210,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 // Lima only warns about a non-existent mount location and carries on, handing
 // Virtualization.framework a share for a path that does not exist. That surfaces
 // much later as an opaque VM start failure rather than as "you typed the path
-// wrong", so klimax refuses up front, naming the config key.
+// wrong", so marina refuses up front, naming the config key.
 func checkMountLocations(cfg *config.Config) error {
 	var errs []error
 	for i, m := range cfg.VM.Mounts {
@@ -232,7 +237,7 @@ func checkMountLocations(cfg *config.Config) error {
 //
 // Mounts are the one Lima instance setting worth reconciling in place. Adding a
 // directory is a casual, frequent thing to want, and the alternative — the
-// `klimax destroy && klimax up` that vm.imageDisk and disablePortMirroring
+// `marina destroy && marina up` that vm.imageDisk and disablePortMirroring
 // require — throws away every kind cluster on the VM in order to share a folder.
 // A mount has no on-disk state and no guest-side migration either: Lima reads
 // the list when it starts, so a stopped VM plus an edited instance config is the
@@ -267,7 +272,7 @@ func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instan
 
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		slog.Warn("Non-interactive: leaving the VM's mounts unchanged",
-			"apply", "klimax down && klimax up")
+			"apply", "marina down && marina up")
 		fmt.Println()
 		return nil
 	}
@@ -276,7 +281,7 @@ func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instan
 	var answer string
 	_, _ = fmt.Scanln(&answer)
 	if a := strings.ToLower(strings.TrimSpace(answer)); a != "y" && a != "yes" {
-		fmt.Printf("Left unchanged. Apply later with: klimax down && klimax up\n\n")
+		fmt.Printf("Left unchanged. Apply later with: marina down && marina up\n\n")
 		return nil
 	}
 
@@ -284,10 +289,10 @@ func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instan
 		return fmt.Errorf("stopping the VM to apply mounts: %w", err)
 	}
 	if err := vm.WriteInstanceMounts(limaYAML, desired); err != nil {
-		// The VM is stopped and the config is untouched, so the next `klimax up`
+		// The VM is stopped and the config is untouched, so the next `marina up`
 		// starts it exactly as it was. Say so rather than leaving the user
 		// wondering what state they are in.
-		return fmt.Errorf("updating mounts in %s (the VM is stopped; 'klimax up' restarts it unchanged): %w", limaYAML, err)
+		return fmt.Errorf("updating mounts in %s (the VM is stopped; 'marina up' restarts it unchanged): %w", limaYAML, err)
 	}
 	// EnsureRunning re-inspects, finds the VM stopped, and starts it with the
 	// new mounts.
@@ -296,14 +301,14 @@ func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instan
 }
 
 // reviewConfigBeforeCreate runs just before a VM is created. It surfaces config
-// evolution (options added in newer klimax versions that the user's config
+// evolution (options added in newer marina versions that the user's config
 // doesn't set) and, if the pinned kind.nodeVersion drifts from this version's
 // default (matched to the bundled kind CLI), interactively offers to update it.
 func reviewConfigBeforeCreate(cfg *config.Config) error {
 	// 1. New options available but not set (config likely predates this version).
 	if raw, err := os.ReadFile(configFile); err == nil {
 		if missing, err := config.MissingKeys(raw); err == nil && len(missing) > 0 {
-			fmt.Printf("Note: %s does not set these options available in this klimax version (defaults apply):\n  %s\n"+
+			fmt.Printf("Note: %s does not set these options available in this marina version (defaults apply):\n  %s\n"+
 				"  What each option does: %s\n"+
 				"  Annotated example:     %s\n\n",
 				configFile, strings.Join(missing, ", "), config.ConfigDocsURL, config.ExampleConfigURL)
@@ -314,7 +319,7 @@ func reviewConfigBeforeCreate(cfg *config.Config) error {
 	if cfg.Kind.NodeVersion == config.DefaultKindNodeVersion {
 		return nil
 	}
-	fmt.Printf("⚠ Your config pins kind.nodeVersion=%q, but this klimax version's default is %q\n"+
+	fmt.Printf("⚠ Your config pins kind.nodeVersion=%q, but this marina version's default is %q\n"+
 		"  (matched to the bundled kind CLI %s). A mismatched node version is unsupported and\n"+
 		"  can make cluster creation fail.\n",
 		cfg.Kind.NodeVersion, config.DefaultKindNodeVersion, limatemplate.KindCLIVersion)
@@ -367,7 +372,7 @@ func ensureConfig() error {
 		return fmt.Errorf("writing default config: %w", err)
 	}
 	fmt.Printf("No config found — created default config at %s\n", configFile)
-	fmt.Printf("Edit it to customise VM resources, then re-run 'klimax up'.\n\n")
+	fmt.Printf("Edit it to customise VM resources, then re-run 'marina up'.\n\n")
 	return nil
 }
 
@@ -402,7 +407,7 @@ func warnImageDiskDrift(diskName, want string) {
 	case liveBytes < wantBytes:
 		slog.Warn("Image disk is smaller than vm.imageDisk in the config — the size in the config only applies when the disk is first created",
 			"live", units.BytesSize(float64(liveBytes)), "configured", want,
-			"fix", "klimax down && klimax disk resize-image "+want+" && klimax up")
+			"fix", "marina down && marina disk resize-image "+want+" && marina up")
 	case liveBytes > wantBytes:
 		slog.Warn("Image disk is larger than vm.imageDisk in the config — the config value is stale and would apply only to a freshly created disk",
 			"live", units.BytesSize(float64(liveBytes)), "configured", want)
@@ -414,7 +419,7 @@ func warnImageDiskDrift(diskName, want string) {
 // swap rather than refuse), and refusing to start over a heuristic would be worse
 // than a slow VM. Each warning carries the specific key to change.
 func warnOverCommittedResources(cfg *config.Config) {
-	res := hostres.ReadFor(KlimaxHome())
+	res := hostres.ReadFor(MarinaHome())
 	warnings := hostres.CheckResources(res, cfg.VM.CPUs, cfg.VM.Memory, cfg.VM.Disk, cfg.VM.ImageDisk)
 	if len(warnings) == 0 {
 		return
@@ -422,13 +427,13 @@ func warnOverCommittedResources(cfg *config.Config) {
 	for _, w := range warnings {
 		slog.Warn(w.Message, "hint", w.Hint)
 	}
-	fmt.Printf("  Adjust with: klimax config edit   (reference: %s)\n\n", config.ConfigDocsURL)
+	fmt.Printf("  Adjust with: marina config edit   (reference: %s)\n\n", config.ConfigDocsURL)
 }
 
 // raiseLimaLogLevelForVMLogs makes --show-vm-logs do what its name says.
 //
 // The flag enables Lima's cloud-init progress reporting, but Lima emits those
-// lines through logrus at Info, and klimax deliberately quiets logrus to Error
+// lines through logrus at Info, and marina deliberately quiets logrus to Error
 // (see resolveLimaLogLevel). So on its own the flag turned the reporting on and
 // then swallowed it — you also had to pass --debug, which nobody would guess.
 //
@@ -444,7 +449,7 @@ func raiseLimaLogLevelForVMLogs(cmd *cobra.Command) {
 }
 
 // reconcileDockerProxy writes the dockerd proxy drop-in and restarts Docker when
-// it changed. Called on every `klimax up`, so editing network.proxy takes effect
+// it changed. Called on every `marina up`, so editing network.proxy takes effect
 // without recreating the VM — the drop-in has no on-disk or guest-side state
 // beyond the file itself.
 //
@@ -490,7 +495,7 @@ func reconcileDockerProxy(ctx context.Context, g *guest.Client, cfg *config.Conf
 	return err
 }
 
-// effectiveProxy resolves the proxy klimax should apply, returning a copy of cfg
+// effectiveProxy resolves the proxy marina should apply, returning a copy of cfg
 // with network.proxy filled in.
 //
 // An explicit http/https in the config wins. Otherwise, when inheritFromHost is
@@ -520,26 +525,26 @@ func guestEnvironmentProxy(ctx context.Context, g *guest.Client) (map[string]str
 	if err != nil {
 		return nil, err
 	}
-	// Strip klimax's own block first. It is written from the config, so reading
+	// Strip marina's own block first. It is written from the config, so reading
 	// it back as "the host's proxy" would make a configured proxy self-
 	// sustaining: removing network.proxy would never take effect, because the
 	// previous run's value would be re-inherited every time.
-	return parseEnvironmentProxy(stripKlimaxEnvBlock(out)), nil
+	return parseEnvironmentProxy(stripMarinaEnvBlock(out)), nil
 }
 
-// stripKlimaxEnvBlock removes the #KLIMAX-START..#KLIMAX-END section, leaving
+// stripMarinaEnvBlock removes the #MARINA-START..#MARINA-END section, leaving
 // Lima's block and anything the image shipped with.
-func stripKlimaxEnvBlock(content string) string {
-	start := strings.Index(content, klimaxEnvStart)
+func stripMarinaEnvBlock(content string) string {
+	start := strings.Index(content, marinaEnvStart)
 	if start < 0 {
 		return content
 	}
 	rest := content[start:]
-	end := strings.Index(rest, klimaxEnvEnd)
+	end := strings.Index(rest, marinaEnvEnd)
 	if end < 0 {
 		return content[:start]
 	}
-	return content[:start] + rest[end+len(klimaxEnvEnd):]
+	return content[:start] + rest[end+len(marinaEnvEnd):]
 }
 
 // parseEnvironmentProxy extracts the proxy variables from /etc/environment
@@ -592,9 +597,9 @@ func reconcileCACerts(ctx context.Context, g *guest.Client, cfg *config.Config) 
 		return false, err
 	}
 
-	// Only klimax-managed files are considered; the image's own trust store is
+	// Only marina-managed files are considered; the image's own trust store is
 	// never touched.
-	listed, _ := g.Run(ctx, "ls "+caCertDir+"/klimax-*.crt 2>/dev/null || true")
+	listed, _ := g.Run(ctx, "ls "+caCertDir+"/marina-*.crt 2>/dev/null || true")
 	have := map[string]bool{}
 	for _, line := range strings.Fields(listed) {
 		have[filepath.Base(line)] = true
@@ -618,7 +623,7 @@ func reconcileCACerts(ctx context.Context, g *guest.Client, cfg *config.Config) 
 		changed = true
 	}
 
-	// Anything left in have is klimax-managed but no longer configured.
+	// Anything left in have is marina-managed but no longer configured.
 	for name := range have {
 		slog.Info("Removing CA certificate no longer in the config", "name", name)
 		if _, err := g.Run(ctx, "sudo rm -f "+caCertDir+"/"+name); err != nil {
@@ -636,18 +641,18 @@ func reconcileCACerts(ctx context.Context, g *guest.Client, cfg *config.Config) 
 	return true, nil
 }
 
-// klimaxEnvStart and klimaxEnvEnd delimit klimax's own block in
+// marinaEnvStart and marinaEnvEnd delimit marina's own block in
 // /etc/environment. Lima owns a #LIMA-START/#LIMA-END block in the same file;
-// the two must not tread on each other, and klimax's block is appended last so
+// the two must not tread on each other, and marina's block is appended last so
 // its values win when both set the same name.
 const (
-	klimaxEnvStart = "#KLIMAX-START"
-	klimaxEnvEnd   = "#KLIMAX-END"
+	marinaEnvStart = "#MARINA-START"
+	marinaEnvEnd   = "#MARINA-END"
 )
 
-// reconcileGuestProxyEnv maintains klimax's block in the guest's
+// reconcileGuestProxyEnv maintains marina's block in the guest's
 // /etc/environment, so SSH sessions — and everything they launch — see the
-// proxy from the klimax config.
+// proxy from the marina config.
 //
 // Only the proxy variables go in. This is not a general-purpose env mechanism,
 // and /etc/environment is read by every login on the VM.
@@ -659,42 +664,42 @@ func reconcileGuestProxyEnv(ctx context.Context, g *guest.Client, cfg *config.Co
 		env = nil
 	}
 	if len(env) > 0 {
-		block.WriteString(klimaxEnvStart + "\n")
+		block.WriteString(marinaEnvStart + "\n")
 		for _, k := range sortedKeys(env) {
 			fmt.Fprintf(&block, "%s=%s\n", k, env[k])
 		}
-		block.WriteString(klimaxEnvEnd + "\n")
+		block.WriteString(marinaEnvEnd + "\n")
 	}
 
 	current, _ := g.Run(ctx, "cat /etc/environment 2>/dev/null || true")
-	if extractKlimaxEnvBlock(current) == strings.TrimSuffix(block.String(), "\n") {
+	if extractMarinaEnvBlock(current) == strings.TrimSuffix(block.String(), "\n") {
 		return nil
 	}
 
 	slog.Info("Updating guest proxy environment", "vars", len(env))
-	// sed deletes any previous klimax block; the new one is appended.
+	// sed deletes any previous marina block; the new one is appended.
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
 sudo sed -i '/%s/,/%s/d' /etc/environment
-`, klimaxEnvStart, klimaxEnvEnd)
+`, marinaEnvStart, marinaEnvEnd)
 	if block.Len() > 0 {
-		script += fmt.Sprintf("sudo tee -a /etc/environment >/dev/null <<'KLIMAX_ENV_EOF'\n%sKLIMAX_ENV_EOF\n", block.String())
+		script += fmt.Sprintf("sudo tee -a /etc/environment >/dev/null <<'MARINA_ENV_EOF'\n%sMARINA_ENV_EOF\n", block.String())
 	}
 	return g.RunScript(ctx, "update guest proxy environment", script)
 }
 
-// extractKlimaxEnvBlock returns klimax's block from /etc/environment content,
+// extractMarinaEnvBlock returns marina's block from /etc/environment content,
 // without a trailing newline, or "" when absent.
-func extractKlimaxEnvBlock(content string) string {
-	start := strings.Index(content, klimaxEnvStart)
+func extractMarinaEnvBlock(content string) string {
+	start := strings.Index(content, marinaEnvStart)
 	if start < 0 {
 		return ""
 	}
-	end := strings.Index(content[start:], klimaxEnvEnd)
+	end := strings.Index(content[start:], marinaEnvEnd)
 	if end < 0 {
 		return ""
 	}
-	return strings.TrimSpace(content[start : start+end+len(klimaxEnvEnd)])
+	return strings.TrimSpace(content[start : start+end+len(marinaEnvEnd)])
 }
 
 // reconcileDockerDaemonConfig points dockerd at the Docker Hub pull-through
@@ -708,9 +713,9 @@ func extractKlimaxEnvBlock(content string) string {
 // skips the legacy merge once hosts.toml supplies more than one host.
 //
 // Both are written, because which one applies depends on the image store, and
-// a user can switch stores without klimax running again.
+// a user can switch stores without marina running again.
 //
-// klimax only owns the registry-mirrors key. An existing daemon.json with other
+// marina only owns the registry-mirrors key. An existing daemon.json with other
 // settings is left alone apart from that one field.
 func reconcileDockerDaemonConfig(ctx context.Context, g *guest.Client, cfg *config.Config) error {
 	want := registry.HubMirrorEndpoint(cfg.Registries)
@@ -718,10 +723,10 @@ func reconcileDockerDaemonConfig(ctx context.Context, g *guest.Client, cfg *conf
 	current, _ := g.Run(ctx, "cat "+registry.DaemonConfigPath+" 2>/dev/null")
 	merged, changed, err := registry.MergeDaemonConfig(current, want)
 	if err != nil {
-		// A daemon.json klimax cannot parse is the user's, not ours: say so and
+		// A daemon.json marina cannot parse is the user's, not ours: say so and
 		// leave it rather than overwriting hand-written settings.
 		slog.Warn("Leaving "+registry.DaemonConfigPath+" alone: it is not valid JSON",
-			"err", err, "fix", "repair or remove it, then re-run klimax up")
+			"err", err, "fix", "repair or remove it, then re-run marina up")
 		return nil
 	}
 	if !changed {
@@ -769,7 +774,7 @@ func reconcileDockerRegistryHosts(ctx context.Context, g *guest.Client, cfg *con
 		want[h.Host] = h.DockerHostsTOML()
 	}
 
-	// Remove files for mirrors that are no longer configured. Only klimax's own
+	// Remove files for mirrors that are no longer configured. Only marina's own
 	// hosts.toml is deleted, never the directory's other contents: the same
 	// path is where a user drops a registry CA (ca.crt, client certs), and
 	// taking those out with it would break pulls in a way that looks unrelated.
@@ -786,7 +791,7 @@ func reconcileDockerRegistryHosts(ctx context.Context, g *guest.Client, cfg *con
 		if err != nil {
 			return err
 		}
-		if !strings.Contains(out, "Managed by klimax") {
+		if !strings.Contains(out, "Managed by marina") {
 			continue // someone else's file
 		}
 		slog.Info("Removing the dockerd mirror for a registry no longer configured", "registry", host)

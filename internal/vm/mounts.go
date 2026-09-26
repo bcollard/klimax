@@ -14,7 +14,7 @@ import (
 )
 
 // limaYAMLIndent is the indentation of a Lima instance config. Both Lima and
-// klimax write these files with gopkg.in/yaml.v3 at its default indent, so
+// marina write these files with gopkg.in/yaml.v3 at its default indent, so
 // re-encoding at anything else would reflow the whole document for no reason.
 const limaYAMLIndent = 4
 
@@ -23,7 +23,7 @@ func InstanceYAMLPath(instDir string) string {
 	return filepath.Join(instDir, filenames.LimaYAML)
 }
 
-// NormalizedMount is a mount reduced to the three fields klimax controls, with
+// NormalizedMount is a mount reduced to the three fields marina controls, with
 // Lima's defaults filled in, so two mount sets can be compared directly.
 type NormalizedMount struct {
 	// HostPath is the shared directory on macOS.
@@ -112,7 +112,7 @@ func ReadInstanceMounts(path string) ([]limatype.Mount, error) {
 // The edit is done on the parsed node tree rather than by regenerating the file
 // from limatemplate.Build: the instance config carries provisioning scripts that
 // the guest has already run, and rewriting those on an existing VM would mean a
-// klimax upgrade silently changed how a live guest is provisioned. Node-level
+// marina upgrade silently changed how a live guest is provisioned. Node-level
 // surgery keeps the blast radius to the one key.
 //
 // The VM must be stopped: Lima reads this file at start, so an edit under a

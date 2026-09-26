@@ -86,7 +86,7 @@ func (c *Client) Run(ctx context.Context, cmd string) (string, error) {
 
 // RunScript uploads and runs a multi-line shell script (via stdin) in the guest
 // with root privileges. Lima always configures passwordless sudo for the guest
-// user, so all klimax provisioning scripts can rely on this.
+// user, so all marina provisioning scripts can rely on this.
 func (c *Client) RunScript(ctx context.Context, description, script string) error {
 	slog.Info("guest script", "description", description)
 	slog.Debug("guest script content", "script", script)
@@ -141,7 +141,7 @@ func (c *Client) RunScriptStream(ctx context.Context, script string) error {
 func (c *Client) WriteFile(ctx context.Context, path, content string) error {
 	slog.Debug("guest write file", "path", path)
 	// Remove stale directory if present (may be root-owned), then write via sudo tee.
-	script := fmt.Sprintf("sudo rm -rf %q && sudo tee %q <<'__KLIMAX_EOF__' > /dev/null\n%s\n__KLIMAX_EOF__\n", path, path, content)
+	script := fmt.Sprintf("sudo rm -rf %q && sudo tee %q <<'__MARINA_EOF__' > /dev/null\n%s\n__MARINA_EOF__\n", path, path, content)
 	_, err := c.Run(ctx, script)
 	return err
 }
@@ -179,7 +179,7 @@ func (c *Client) WriteSecretFile(ctx context.Context, path, content string) erro
 }
 
 // safeGuestPathRE is the charset WriteSecretFile accepts. Its paths are always
-// built by klimax, so a strict allowlist is simpler and safer than quoting.
+// built by marina, so a strict allowlist is simpler and safer than quoting.
 var safeGuestPathRE = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 
 // SSHArgs returns the arguments needed to exec the system ssh binary for an

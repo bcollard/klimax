@@ -16,24 +16,24 @@ import (
 )
 
 const (
-	// autostartLabel is the launchd job label (reverse-DNS of klimax.dev, matching
-	// the klimax.dev/* label namespace used for cluster nodes).
-	autostartLabel = "dev.klimax.autostart"
+	// autostartLabel is the launchd job label (reverse-DNS of marina.sh, matching
+	// the marina.sh/* label namespace used for cluster nodes).
+	autostartLabel = "sh.marina.autostart"
 )
 
 func newAutostartCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "autostart",
-		Short: "Manage a launchd agent that starts the klimax VM at login",
-		Long: `Installs a per-user launchd agent that runs 'klimax up' when you log in.
+		Short: "Manage a launchd agent that starts the marina VM at login",
+		Long: `Installs a per-user launchd agent that runs 'marina up' when you log in.
 
-'klimax up' needs root only to add the macOS host route, and launchd cannot answer
+'marina up' needs root only to add the macOS host route, and launchd cannot answer
 a password prompt — so install the sudoers snippet first, or the VM will come up
 without the route:
 
-  klimax sudoers | sudo tee /etc/sudoers.d/klimax >/dev/null && sudo chmod 0440 /etc/sudoers.d/klimax
+  marina sudoers | sudo tee /etc/sudoers.d/marina >/dev/null && sudo chmod 0440 /etc/sudoers.d/marina
 
-Output is appended to ~/.klimax/logs/autostart.log.`,
+Output is appended to ~/.marina/logs/autostart.log.`,
 	}
 	cmd.AddCommand(
 		newAutostartInstallCmd(),
@@ -94,7 +94,7 @@ func plistString(s string) string {
 	return buf.String()
 }
 
-// autostartPlist renders the launchd job. The klimax binary path and config path
+// autostartPlist renders the launchd job. The marina binary path and config path
 // are baked in so the agent behaves like the invocation that installed it.
 func autostartPlist(binPath, cfgPath, logPath string) string {
 	binPath, cfgPath, logPath = plistString(binPath), plistString(cfgPath), plistString(logPath)
@@ -131,18 +131,18 @@ func runAutostartInstall(printOnly bool) error {
 	}
 	binPath, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("resolving the klimax binary path: %w", err)
+		return fmt.Errorf("resolving the marina binary path: %w", err)
 	}
 	binPath, err = filepath.Abs(binPath)
 	if err != nil {
-		return fmt.Errorf("resolving the klimax binary path: %w", err)
+		return fmt.Errorf("resolving the marina binary path: %w", err)
 	}
 	cfgPath, err := filepath.Abs(configFile)
 	if err != nil {
 		return fmt.Errorf("resolving the config path: %w", err)
 	}
 
-	logDir := filepath.Join(KlimaxHome(), "logs")
+	logDir := filepath.Join(MarinaHome(), "logs")
 	logPath := filepath.Join(logDir, "autostart.log")
 
 	if printOnly {
@@ -170,7 +170,7 @@ func runAutostartInstall(printOnly bool) error {
 	fmt.Printf("Installed launchd agent %s\n  plist:  %s\n  runs:   %s up --config %s\n  logs:   %s\n",
 		autostartLabel, plistPath, binPath, cfgPath, logPath)
 	fmt.Printf("\nThe VM starts at your next login (it was also started now, if it wasn't already).\n")
-	fmt.Printf("Check that the host route can be added without a password, or the VM will start without it:\n  klimax sudoers --check\n")
+	fmt.Printf("Check that the host route can be added without a password, or the VM will start without it:\n  marina sudoers --check\n")
 	return nil
 }
 
@@ -203,7 +203,7 @@ func runAutostartStatus() error {
 		return err
 	}
 	if _, err := os.Stat(plistPath); err != nil {
-		fmt.Printf("Autostart: not installed\n  install with: klimax autostart install\n")
+		fmt.Printf("Autostart: not installed\n  install with: marina autostart install\n")
 		return nil
 	}
 	fmt.Printf("Autostart: plist present at %s\n", plistPath)
@@ -211,7 +211,7 @@ func runAutostartStatus() error {
 	domain := "gui/" + strconv.Itoa(os.Getuid())
 	out, err := exec.Command("launchctl", "print", domain+"/"+autostartLabel).CombinedOutput()
 	if err != nil {
-		fmt.Printf("  launchd:  not loaded (run 'klimax autostart install' to load it)\n")
+		fmt.Printf("  launchd:  not loaded (run 'marina autostart install' to load it)\n")
 		return nil
 	}
 	fmt.Printf("  launchd:  loaded\n")
@@ -227,6 +227,6 @@ func runAutostartStatus() error {
 			}
 		}
 	}
-	fmt.Printf("  logs:     %s\n", filepath.Join(KlimaxHome(), "logs", "autostart.log"))
+	fmt.Printf("  logs:     %s\n", filepath.Join(MarinaHome(), "logs", "autostart.log"))
 	return nil
 }

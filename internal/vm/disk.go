@@ -20,7 +20,7 @@ import (
 // container image store (/var/lib/containerd), if it does not already exist.
 //
 // Named Lima disks live in $LIMA_HOME/_disk/<name> — outside the instance
-// directory — and deliberately survive `klimax destroy`. That is the whole
+// directory — and deliberately survive `marina destroy`. That is the whole
 // point: `destroy` otherwise discards the unpacked image store (kindest/node,
 // registry:2, and any locally built images, which no mirror can restore).
 //
@@ -65,13 +65,13 @@ func EnsureImageDisk(ctx context.Context, name, size string) error {
 // ResizeImageDisk grows the persistent Lima data disk backing the guest's
 // container image store to size (e.g. "30GiB"). It fails if the disk does not
 // exist yet (nothing to resize — EnsureImageDisk creates it at the next
-// 'klimax up'), if size is smaller than the disk's current size (shrinking a
+// 'marina up'), if size is smaller than the disk's current size (shrinking a
 // live filesystem is unsafe), or if it is currently attached to a running VM
 // (Lima's own disk resize has the same restriction — the backing file must be
 // closed).
 //
 // Resizing here only grows the backing image file; the guest's ext4
-// filesystem on top of it is grown separately by klimax-image-disk.sh on the
+// filesystem on top of it is grown separately by marina-image-disk.sh on the
 // next boot (see imageDiskProvisions in internal/limatemplate).
 func ResizeImageDisk(ctx context.Context, name, size string) error {
 	newBytes, err := units.RAMInBytes(size)
@@ -82,7 +82,7 @@ func ResizeImageDisk(ctx context.Context, name, size string) error {
 	disk, err := store.InspectDisk(name, nil)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("image disk %q does not exist yet — it is created at the size configured in imageDisk on the next 'klimax up'", name)
+			return fmt.Errorf("image disk %q does not exist yet — it is created at the size configured in imageDisk on the next 'marina up'", name)
 		}
 		return fmt.Errorf("inspecting image disk %q: %w", name, err)
 	}
@@ -97,7 +97,7 @@ func ResizeImageDisk(ctx context.Context, name, size string) error {
 
 	if disk.Instance != "" {
 		if inst, ierr := store.Inspect(ctx, disk.Instance); ierr == nil && inst.Status == limatype.StatusRunning {
-			return fmt.Errorf("cannot resize image disk %q: VM %q is running — stop it first (klimax down)", name, disk.Instance)
+			return fmt.Errorf("cannot resize image disk %q: VM %q is running — stop it first (marina down)", name, disk.Instance)
 		}
 	}
 

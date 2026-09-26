@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 )
 
 func mirrorsCfg() config.RegistryConfig {
@@ -84,7 +84,7 @@ func TestMergeDaemonConfigIdempotent(t *testing.T) {
 }
 
 func TestMergeDaemonConfigRemovesKeyAndFile(t *testing.T) {
-	// Only klimax's key present -> the whole file should go.
+	// Only marina's key present -> the whole file should go.
 	out, changed, err := MergeDaemonConfig(`{"registry-mirrors":["http://127.0.0.1:5030"]}`, "")
 	if err != nil || !changed {
 		t.Fatalf("err=%v changed=%v", err, changed)
@@ -111,7 +111,7 @@ func TestMergeDaemonConfigRemovesKeyAndFile(t *testing.T) {
 	}
 }
 
-// A file klimax cannot parse is the user's problem to fix, not ours to replace.
+// A file marina cannot parse is the user's problem to fix, not ours to replace.
 func TestMergeDaemonConfigRefusesInvalidJSON(t *testing.T) {
 	if _, _, err := MergeDaemonConfig(`{ this is not json`, "http://127.0.0.1:5030"); err == nil {
 		t.Error("expected an error rather than silently overwriting")

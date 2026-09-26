@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 )
 
 // DockerCertsDir is where dockerd looks for per-registry hosts.toml files.
@@ -62,7 +62,7 @@ func (h RegistryHost) DockerHostsTOML() string {
 		server = "https://" + h.Host
 	}
 	return fmt.Sprintf(
-		"# Managed by klimax. Edits are overwritten by `klimax up`.\n"+
+		"# Managed by marina. Edits are overwritten by `marina up`.\n"+
 			"server = %q\n\n[host.%q]\n  capabilities = [\"pull\", \"resolve\"]\n",
 		server, h.Endpoint)
 }

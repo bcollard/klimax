@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 )
 
 // DaemonConfigPath is dockerd's configuration file in the guest.
@@ -30,7 +30,7 @@ func HubMirrorEndpoint(cfg config.RegistryConfig) string {
 }
 
 // DaemonConfig renders the contents of daemon.json for a config, or "" when
-// there is nothing for klimax to set.
+// there is nothing for marina to set.
 //
 // Only registry-mirrors is managed. dockerd's mirror support is Docker
 // Hub-only — there is no per-registry equivalent — so quay.io, gcr.io and
@@ -60,10 +60,10 @@ func DaemonConfig(cfg config.RegistryConfig) string {
 // whether anything changed, and an error if the existing file is not valid JSON.
 //
 // Merging rather than overwriting matters: daemon.json is a file users edit —
-// insecure-registries, log-driver, default-address-pools — and klimax has no
+// insecure-registries, log-driver, default-address-pools — and marina has no
 // business discarding that to set one field. An unparseable file is reported
 // rather than replaced, because it is more likely to be a user's typo than
-// something klimax should clean up.
+// something marina should clean up.
 //
 // An empty want removes the key, and returns "" when that leaves the document
 // empty so the caller can delete the file instead of leaving `{}` behind.

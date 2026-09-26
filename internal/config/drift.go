@@ -8,7 +8,7 @@ import (
 
 // MissingKeys returns dotted key paths that the current default config schema
 // defines but the user's raw config omits. It's a best-effort signal that a
-// config file predates options added in a newer klimax version (defaults apply
+// config file predates options added in a newer marina version (defaults apply
 // for the missing keys). A freshly generated config yields an empty list.
 func MissingKeys(rawUser []byte) ([]string, error) {
 	def := &Config{}

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/bcollard/klimax/internal/routing"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/routing"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/spf13/cobra"
 )
 
@@ -36,11 +36,11 @@ func runDown(ctx context.Context, removeRoute bool) error {
 		}
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	if err := mgr.Stop(ctx); err != nil {
 		return fmt.Errorf("stopping VM: %w", err)
 	}
 
-	slog.Info("klimax down complete", "vm", cfg.VM.Name)
+	slog.Info("marina down complete", "vm", cfg.VM.Name)
 	return nil
 }

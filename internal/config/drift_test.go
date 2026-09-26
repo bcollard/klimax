@@ -25,7 +25,7 @@ func TestMissingKeysFullConfigHasNone(t *testing.T) {
 
 func TestMissingKeysOldConfig(t *testing.T) {
 	old := []byte(`vm:
-  name: klimax
+  name: marina
   cpus: 4
 network:
   kindBridgeCIDR: "172.30.0.0/16"
