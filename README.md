@@ -598,7 +598,7 @@ klimax dns list                     # every published name and its VIP (-o json|
 klimax dns attach <cluster>...      # add a cluster created before network.dns was on
 ```
 
-- **Names:** `<service>.<namespace>.<cluster>.klimax.internal` automatically. Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.klimax.internal` (it must sit under the cluster's own zone). Ingress hosts under `*.<cluster>.klimax.internal` are published too.
+- **Names:** `<service>.<namespace>.<cluster>.klimax.internal` automatically, for LoadBalancer Services only — ClusterIP, headless and NodePort Services are not published (their addresses are not reachable from the Mac). Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.klimax.internal` (it must sit under the cluster's own zone). Ingress hosts under `*.<cluster>.klimax.internal` are published too.
 - **How:** `klimax up` runs etcd and CoreDNS on the kind network (`172.30.255.52` / `.53`); each cluster runs ExternalDNS, which writes its Services into etcd; `/etc/resolver/klimax.internal` sends the Mac's lookups to CoreDNS through the existing host route. The resolver file needs **sudo once** — its address never changes, so it is never rewritten.
 - **Turn it off** with `network.dns.enabled: false` and `klimax up`: the containers, the iptables exemption and the resolver file are removed.
 - **A new name appears within ~15 s** (ExternalDNS's sync interval). A lookup made before that is cached as "no such name" for 5 s.

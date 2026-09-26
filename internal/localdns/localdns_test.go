@@ -74,6 +74,8 @@ func TestExternalDNSManifest(t *testing.T) {
 		"--txt-owner-id=dev",
 		"--domain-filter=dev.klimax.internal",
 		"--policy=sync",
+		// Without it, headless Services publish pod IPs and host-network pods node IPs.
+		"--service-type-filter=LoadBalancer",
 		// Must reach the pod unrendered: the Helm chart's tpl turned this into
 		// "..dev.klimax.internal" and every record landed under an empty name.
 		"--fqdn-template={{.Name}}.{{.Namespace}}.dev.klimax.internal",
