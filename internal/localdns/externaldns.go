@@ -42,7 +42,7 @@ const ExternalDNSNamespace = "external-dns"
 // external-dns.kubernetes.io/hostname annotation adds a custom one.
 //
 // fleet, when set, adds the fleet's zone (<fleet>.<domain>) to the filter, so a
-// member cluster can publish fleet-wide names such as kong-gw.<fleet>.<domain>
+// member cluster can publish fleet-wide names such as gateway.<fleet>.<domain>
 // through the hostname annotation. Automatic names always stay in the
 // cluster's own zone.
 func ExternalDNSManifest(cfg *config.Config, cluster, fleet string) string {

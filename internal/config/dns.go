@@ -138,7 +138,7 @@ func (c *Config) ClusterDNSZone(cluster string) string {
 }
 
 // FleetDNSZone is a fleet's shared zone, for fleet-wide names such as
-// kong-gw.<fleet>.<domain>. It sits beside the cluster zones, which is why a
+// gateway.<fleet>.<domain>. It sits beside the cluster zones, which is why a
 // fleet may not share its name with a cluster.
 func (c *Config) FleetDNSZone(fleet string) string {
 	return fleet + "." + c.DNSDomain()

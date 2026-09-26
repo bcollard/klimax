@@ -16,7 +16,7 @@
 //	│   ├── wildcard.crt                *.<cluster>.<domain> + <cluster>.<domain>, then the intermediate
 //	│   └── private/wildcard.key
 //	└── fleets/<fleet>/                 same layout, for the fleet's shared zone
-//	                                    (kong-gw.<fleet>.<domain>), installed into every member
+//	                                    (gateway.<fleet>.<domain>), installed into every member
 //
 // The constraints are the point. The root goes into the System keychain, where
 // it would otherwise vouch for any site; constrained, nothing below it is
