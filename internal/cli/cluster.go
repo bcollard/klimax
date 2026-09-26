@@ -145,7 +145,7 @@ func newClusterDeleteCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a Fleet manifest (- for stdin)")
-	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Delete clusters whose nodes match this label selector (e.g. marina.sh/fleet=f1)")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Delete clusters whose nodes match this label selector (e.g. marina.run/fleet=f1)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
 	return cmd
 }
@@ -394,7 +394,7 @@ func newClusterListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "text", "Output format: text, json, yaml")
-	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Filter by node label selector (e.g. marina.sh/fleet=f1)")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Filter by node label selector (e.g. marina.run/fleet=f1)")
 	return cmd
 }
 

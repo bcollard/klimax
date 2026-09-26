@@ -35,7 +35,7 @@ untouched (apply is additive).
 
 The minimal manifest only lists cluster names:
 
-  apiVersion: marina.sh/v1alpha1
+  apiVersion: marina.run/v1alpha1
   kind: Fleet
   spec:
     clusters:
@@ -80,7 +80,7 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 	}
 	// Pre-flight: validate labels (merged with defaults, plus the fleet label).
 	if cs.Metadata.Name != "" {
-		if err := config.ValidateLabels(map[string]string{"marina.sh/fleet": cs.Metadata.Name}); err != nil {
+		if err := config.ValidateLabels(map[string]string{"marina.run/fleet": cs.Metadata.Name}); err != nil {
 			return fmt.Errorf("metadata.name %q is not a valid label value: %w", cs.Metadata.Name, err)
 		}
 	}
@@ -148,7 +148,7 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 }
 
 // foreignExisting returns the set of already-running clusters that the manifest
-// lists but that do not currently carry this fleet's marina.sh/fleet label.
+// lists but that do not currently carry this fleet's marina.run/fleet label.
 // Empty when the manifest has no metadata.name (no fleet identity to adopt into).
 func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan *fleet.Plan) (map[string]bool, error) {
 	if cs.Metadata.Name == "" {
@@ -186,7 +186,7 @@ func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan
 }
 
 // adoptIntoFleet relabels pre-existing clusters so they join the fleet: it applies
-// the marina.sh/fleet label plus the manifest entry's merged labels.
+// the marina.run/fleet label plus the manifest entry's merged labels.
 func adoptIntoFleet(ctx context.Context, g *guest.Client, cfg *config.Config, cs *fleet.Fleet, plan *fleet.Plan, foreign map[string]bool) error {
 	byName := map[string]fleet.PlannedCluster{}
 	for _, pc := range plan.Clusters {
@@ -328,7 +328,7 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetNa
 	labels := map[string]string{}
 	maps.Copy(labels, pc.Labels)
 	if fleetName != "" {
-		labels["marina.sh/fleet"] = fleetName
+		labels["marina.run/fleet"] = fleetName
 	}
 
 	cl := config.ClusterConfig{Name: pc.Name, Num: pc.Num, Region: pc.Region, Zone: pc.Zone, Labels: labels}

@@ -37,7 +37,7 @@ Choose clusters by name, by label selector, or — with neither — from an
 interactive picker.
 
   marina fleet export dev staging > fleet.yaml
-  marina fleet export -l marina.sh/fleet=mesh > fleet.yaml
+  marina fleet export -l marina.run/fleet=mesh > fleet.yaml
   marina fleet export > fleet.yaml          # interactive picker
 
 Captured per cluster: name, num, nodeVersion, region/zone, and custom node
@@ -211,7 +211,7 @@ func customLabels(labels map[string]string) map[string]string {
 	return out
 }
 
-// deriveFleetName uses the clusters' shared marina.sh/fleet label when they all
+// deriveFleetName uses the clusters' shared marina.run/fleet label when they all
 // agree, so re-applying an exported fleet keeps its identity. Falls back to
 // "exported" when the set is mixed or unlabelled.
 func deriveFleetName(names []string, infos map[string]*kind.ClusterInfo) string {

@@ -6,7 +6,7 @@
 //
 // The minimal manifest a user must write only lists cluster names:
 //
-//	apiVersion: marina.sh/v1alpha1
+//	apiVersion: marina.run/v1alpha1
 //	kind: Fleet
 //	spec:
 //	  clusters:
@@ -29,7 +29,7 @@ import (
 
 const (
 	// APIVersion is the manifest apiVersion accepted by `marina cluster apply`.
-	APIVersion = "marina.sh/v1alpha1"
+	APIVersion = "marina.run/v1alpha1"
 	// Kind is the only manifest kind supported today.
 	Kind = "Fleet"
 

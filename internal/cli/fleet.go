@@ -17,14 +17,14 @@ import (
 )
 
 // fleetLabelKey is the node label that records which fleet a cluster belongs to.
-const fleetLabelKey = "marina.sh/fleet"
+const fleetLabelKey = "marina.run/fleet"
 
 func newFleetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fleet",
-		Short: "Manage fleets of kind clusters (grouped by the marina.sh/fleet label)",
+		Short: "Manage fleets of kind clusters (grouped by the marina.run/fleet label)",
 		Long: `A fleet is a set of kind clusters created from a Fleet manifest. Members are
-tracked by the marina.sh/fleet=<name> node label, so fleet operations work on
+tracked by the marina.run/fleet=<name> node label, so fleet operations work on
 live clusters regardless of the original manifest.`,
 	}
 	cmd.AddCommand(
@@ -44,7 +44,7 @@ live clusters regardless of the original manifest.`,
 func newFleetAdoptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adopt <fleet> <cluster> [cluster...]",
-		Short: "Adopt existing clusters into a fleet (sets their marina.sh/fleet label)",
+		Short: "Adopt existing clusters into a fleet (sets their marina.run/fleet label)",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFleetAdopt(cmd.Context(), args[0], args[1:])
@@ -360,7 +360,7 @@ func runFleetList(ctx context.Context, outputFmt string) error {
 		return err
 	}
 
-	// Only real fleets (skip clusters with no marina.sh/fleet label).
+	// Only real fleets (skip clusters with no marina.run/fleet label).
 	names := make([]string, 0, len(byFleet))
 	for name := range byFleet {
 		if name != "" {

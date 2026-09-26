@@ -157,7 +157,7 @@ func runMigrate(ctx context.Context, yes, dryRun bool) error {
 		fmt.Println("\nDone. Next:")
 	}
 	fmt.Println("  marina up                        # new VM; reuses the registry cache")
-	fmt.Println("  marina cluster create <name>     # or: marina fleet create -f <file>  (apiVersion: marina.sh/v1alpha1)")
+	fmt.Println("  marina cluster create <name>     # or: marina fleet create -f <file>  (apiVersion: marina.run/v1alpha1)")
 	if hadAutostart {
 		fmt.Println("  marina autostart install")
 	}
@@ -168,7 +168,7 @@ func runMigrate(ctx context.Context, yes, dryRun bool) error {
 			filepath.Join(oldHome, "pki", legacyDNSDomain, "root.crt"))
 	}
 	fmt.Println("\nHostnames change from *.klimax.internal to *.marina.internal, and the fleet")
-	fmt.Println("label from klimax.dev/fleet to marina.sh/fleet. Remove ~/.klimax once marina works.")
+	fmt.Println("label from klimax.dev/fleet to marina.run/fleet. Remove ~/.klimax once marina works.")
 	return nil
 }
 

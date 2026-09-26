@@ -74,7 +74,7 @@ homebrew_casks:
       owner: bcollard
       name: homebrew-marina
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: https://marina.sh
+    homepage: https://marina.run
     description: Lima-based macOS VZ VM + multi-kind cluster manager
     # Transition alias for scripts written against klimax (marina before v1.0):
     # `klimax …` keeps working and runs marina. Drop it in a later release.

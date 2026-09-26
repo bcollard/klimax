@@ -160,7 +160,7 @@ mappings (including its Kubernetes API server) and Lima's port mirroring both la
 Feature-wise, Docker Desktop gives you a polished GUI, a single-node Kubernetes toggle,
 and organisation policy controls. marina has none of those and is not trying to: it is a
 provisioner for multi-cluster kind labs, and it can also serve as a plain Docker host
-(see [using marina as a Docker host](https://marina.sh/docs/docker-host.html)) if you
+(see [using marina as a Docker host](https://marina.run/docs/docker-host.html)) if you
 would rather not install Docker Desktop at all.
 
 **OrbStack** also uses Apple Virtualization.framework (not Lima). It runs its own VM with a

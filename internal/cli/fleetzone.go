@@ -18,7 +18,7 @@ import (
 // annotates a Service with one; marina only has to let every member write
 // there, give the zone a wildcard certificate, and clean up after a member.
 //
-// Membership is the live marina.sh/fleet node label, as everywhere else in
+// Membership is the live marina.run/fleet node label, as everywhere else in
 // marina — never the manifest.
 
 // liveFleetOf returns the fleet a cluster belongs to, or "" when it has none or

@@ -70,7 +70,7 @@ To bring up a whole set of clusters declaratively, write a **Fleet** manifest an
 
 ```yaml
 # fleet.yaml
-apiVersion: marina.sh/v1alpha1
+apiVersion: marina.run/v1alpha1
 kind: Fleet
 spec:
   clusters:
@@ -94,9 +94,9 @@ marina fleet adopt dev-fleet legacy1          # pull an existing standalone clus
 
 If a manifest lists a cluster that already exists but isn't in the fleet, `fleet create` warns and skips it (no silent relabel); re-run with `--adopt` to pull them in.
 
-`create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `marina.sh/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
+`create` is additive and synchronous — each cluster is fully ready when it returns. Fleet membership is tracked by the `marina.run/fleet=<name>` node label, so `fleet list/label/delete <name>` work on live clusters. Optional per-cluster fields: `dependsOn` (ordering), `num`, `region`/`zone`, `nodeVersion`, `registries` (cherry-pick mirrors), `addons.metricsServer`, and `labels`. `spec.maxParallel` builds independent clusters concurrently (dependsOn is always honoured); `spec.defaults` supplies values inherited by every cluster. See the annotated `examples/fleet.yaml` in the repo for the full reference.
 
-You can also filter/select clusters by label: `marina cluster list -l marina.sh/fleet=dev-fleet` and `marina cluster delete -l env=test --yes`. (`marina cluster apply -f` / `cluster delete -f` remain as lower-level equivalents of `fleet create` / `fleet delete -f`.)
+You can also filter/select clusters by label: `marina cluster list -l marina.run/fleet=dev-fleet` and `marina cluster delete -l env=test --yes`. (`marina cluster apply -f` / `cluster delete -f` remain as lower-level equivalents of `fleet create` / `fleet delete -f`.)
 
 ## Ephemeral cluster for testing (agent recipe)
 
@@ -153,7 +153,7 @@ Public images pull transparently through the built-in pull-through mirrors (dock
 - The kind Docker network is **shared across clusters** (subnet from `network.kindBridgeCIDR`, default `172.30.0.0/16`). Don't recreate it.
 - Cluster API server is exposed on port `70<num>`. By default (`network.disablePortMirroring: true`) the kubeconfig points at the VM's `lima0` IP (e.g. `https://192.168.64.3:7001`); set `disablePortMirroring: false` and it points at `https://127.0.0.1:7001` instead. Either way, just use the exported kubeconfig — don't hardcode the address.
 - Per-cluster pod/service subnets: `serviceSubnet: 10.<num>.0.0/16`, `podSubnet: 10.1<num>.0.0/16`. Keep cluster num 1–9 to avoid overlap.
-- Cluster nodes are labelled with `managed-by=marina`, `topology.kubernetes.io/region` + `zone` (overridable via `--region` / `--zone`), and `marina.sh/fleet=<name>` for clusters created from a Fleet. Add custom node labels with `marina cluster create -l key=value` (repeatable), the Fleet `labels:` / `defaults.labels` fields, or relabel an existing cluster with `marina cluster label <name> -l key=value` (`-l key-` removes).
+- Cluster nodes are labelled with `managed-by=marina`, `topology.kubernetes.io/region` + `zone` (overridable via `--region` / `--zone`), and `marina.run/fleet=<name>` for clusters created from a Fleet. Add custom node labels with `marina cluster create -l key=value` (repeatable), the Fleet `labels:` / `defaults.labels` fields, or relabel an existing cluster with `marina cluster label <name> -l key=value` (`-l key-` removes).
 - Docker socket on the host: `~/.marina.docker.sock`. Use `eval $(marina docker-env)` or `marina docker-context` to point your local docker CLI at it.
 - To run anything inside the VM (kind, ctr, iptables, docker), use `marina shell <cmd> [args...]` — it is non-interactive, passes stdin/stdout through, and exits with the remote command's exit code. Bare `marina shell` opens an interactive session and **will hang a non-interactive agent**. Put `--` before the command if its flags could be mistaken for marina's: `marina shell -- bash -c '...'`.
 - Move files with `marina copy ./file vm:/tmp/file` (and back with `marina copy vm:/tmp/file ./file`); `-r` for directories.
