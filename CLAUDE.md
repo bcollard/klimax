@@ -467,6 +467,11 @@ Facts that shaped it, all verified on the live VM:
 - **ExternalDNS v0.22 changed the annotation prefix** to
   `external-dns.kubernetes.io/`, with no fallback; `external-dns.alpha.…` is ignored silently.
   `--combine-fqdn-annotation` keeps the automatic name alongside a custom one.
+- **`--service-type-filter=LoadBalancer` is required.** The service source
+  publishes every Service type by default, and `--fqdn-template` names them all:
+  headless Services resolve to pod IPs (10.x, unroutable from the Mac) and
+  host-network pods to node IPs. Shipped without it in v0.2.0; fixed in v0.2.1
+  (existing clusters: `klimax dns attach`, and `policy: sync` removes the extras).
 - **Each cluster owns a disjoint subzone** (`--domain-filter=<cluster>.<domain>`,
   `--txt-owner-id=<cluster>`), which makes `--policy=sync` safe.
 - **The etcd plugin serves TTL 300 for ExternalDNS's TTL-0 records, and a fixed

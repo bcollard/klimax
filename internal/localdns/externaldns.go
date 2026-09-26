@@ -31,6 +31,12 @@ const ExternalDNSNamespace = "external-dns"
 //   - together they make --policy=sync safe, so records are deleted when their
 //     Service is, instead of piling up under upsert-only.
 //
+// --service-type-filter=LoadBalancer is what keeps the zone to Services the Mac
+// can actually reach. Without it the service source publishes every type, and
+// --fqdn-template names them all: headless Services resolve to pod IPs (10.x,
+// unroutable from the host) and host-network pods to node IPs — found on a real
+// cluster running kube-prometheus-stack.
+//
 // --fqdn-template gives every LoadBalancer Service a name with no annotation
 // (OrbStack-style); --combine-fqdn-annotation keeps that name when an
 // external-dns.kubernetes.io/hostname annotation adds a custom one.
@@ -110,6 +116,7 @@ spec:
           args:
             - --source=service
             - --source=ingress
+            - --service-type-filter=LoadBalancer
             - --provider=coredns
             - --registry=txt
             - --txt-owner-id=%[3]s
