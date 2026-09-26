@@ -22,7 +22,7 @@ func TestCustomLabelsDropsInfraAndManaged(t *testing.T) {
 		"topology.kubernetes.io/region":         "europe-west1",
 		"topology.kubernetes.io/zone":           "europe-west1-b",
 		"managed-by":                            "marina",
-		"marina.run/fleet":                       "mesh",
+		"marina.run/fleet":                      "mesh",
 		"env":                                   "prod",
 		"team":                                  "platform",
 	})
@@ -104,7 +104,7 @@ func TestAssembleFleetCapturesLiveState(t *testing.T) {
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
 			"topology.kubernetes.io/zone":   "europe-west1-b",
-			"marina.run/fleet":               "mesh",
+			"marina.run/fleet":              "mesh",
 			"kubernetes.io/hostname":        "dev-control-plane",
 			"env":                           "dev",
 		}),
@@ -165,7 +165,7 @@ func TestAssembleFleetRoundTripsThroughParse(t *testing.T) {
 	infos := map[string]*kind.ClusterInfo{
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
-			"marina.run/fleet":               "mesh",
+			"marina.run/fleet":              "mesh",
 			"env":                           "dev",
 		}),
 	}
