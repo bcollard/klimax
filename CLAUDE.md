@@ -38,7 +38,9 @@ binding **before** renaming it; buy `marina.run`; re-export the draw.io diagrams
 **Logo:** `docs/logo/marina-mark.svg` (mark) and `docs/logo/marina-logo.svg`
 (mark + wordmark + tagline) are the sources; every `docs/marina-logo-*.png` is
 rendered from them with `rsvg-convert -w <W> -h <H>` at the sizes already in the
-repo. The wordmark uses Avenir Next Heavy, which rsvg finds on macOS.
+repo. The mark is three container ships moored between piles (no mountain,
+no helm wheel — the Kubernetes logo is a helm wheel and CNCF restricts its
+reuse). The wordmark is Futura Medium, wide-spaced caps; rsvg finds it on macOS.
 
 ## Workspace rules (CRITICAL)
 

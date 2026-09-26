@@ -1,35 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- marina mark: mountain, water, ship wheel. Source for docs/marina-logo-01*.png. -->
+<!-- marina mark: three container ships moored between four piles — many clusters
+     in one VM. Source for docs/marina-logo-01*.png. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 168" width="200" height="168">
-  <defs>
-    <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#38bdf8"/><stop offset="100%" stop-color="#0369a1"/></linearGradient>
-    <linearGradient id="word" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="45%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient>
-  </defs>
+  <defs><linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0ea5e9" stop-opacity="0.35"/><stop offset="100%" stop-color="#0ea5e9" stop-opacity="0"/></linearGradient><linearGradient id="word" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e0f2fe"/><stop offset="55%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#0ea5e9"/></linearGradient></defs>
   <rect width="200" height="168" fill="#1c2127"/>
-  <g transform="translate(0,8)">
-    <!-- Mountain -->
-    <path d="M18 118 L66 40 L82 62 L104 22 L162 118 Z" fill="url(#rock)"/>
-    <!-- Snow -->
-    <path d="M104 22 L118 45 L110 41 L103 50 L96 42 L91 47 Z" fill="#ffffff"/>
-    <path d="M66 40 L76 56 L70 53 L65 60 L60 52 L57 55 Z" fill="#ffffff" opacity="0.95"/>
-    <!-- Water -->
-    <path d="M10 128 Q25 121 40 128 T70 128 T100 128 T130 128 T160 128 T190 128" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
-    <path d="M22 142 Q37 135 52 142 T82 142 T112 142 T142 142 T172 142" fill="none" stroke="#0ea5e9" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
-    <!-- Ship wheel -->
-    <g transform="translate(90,112)">
-      <g stroke="#ffffff" stroke-width="5" stroke-linecap="round">
-        <line x1="0" y1="-40" x2="0" y2="40"/>
-        <line x1="-40" y1="0" x2="40" y2="0"/>
-        <line x1="-28.3" y1="-28.3" x2="28.3" y2="28.3"/>
-        <line x1="-28.3" y1="28.3" x2="28.3" y2="-28.3"/>
-      </g>
-      <g fill="#ffffff">
-        <circle cx="0" cy="-41" r="5"/><circle cx="0" cy="41" r="5"/><circle cx="-41" cy="0" r="5"/><circle cx="41" cy="0" r="5"/>
-        <circle cx="-29" cy="-29" r="5"/><circle cx="29" cy="29" r="5"/><circle cx="-29" cy="29" r="5"/><circle cx="29" cy="-29" r="5"/>
-      </g>
-      <circle r="26" fill="none" stroke="#ffffff" stroke-width="6"/>
-      <circle r="13" fill="#0ea5e9" stroke="#ffffff" stroke-width="5"/>
-      <circle r="4" fill="#ffffff"/>
-    </g>
+  <g transform="translate(0,4)">
+  <!-- Piles (berth posts) -->
+  <g fill="#cbd5e1">
+    <rect x="19" y="52" width="7" height="78" rx="3.5"/><rect x="71" y="44" width="7" height="86" rx="3.5"/>
+    <rect x="123" y="44" width="7" height="86" rx="3.5"/><rect x="175" y="52" width="7" height="78" rx="3.5"/>
   </g>
+  <!-- Boat 1: two containers + one on top -->
+  <g>
+    <rect x="33" y="86" width="15" height="17" rx="1.5" fill="#38bdf8"/><rect x="49" y="86" width="15" height="17" rx="1.5" fill="#7dd3fc"/>
+    <rect x="41" y="68" width="15" height="17" rx="1.5" fill="#e0f2fe"/>
+    <path d="M29 104 H68 L61 121 H36 Z" fill="#0369a1"/>
+  </g>
+  <!-- Boat 2 (largest): three + two -->
+  <g>
+    <rect x="82" y="80" width="12" height="20" rx="1.5" fill="#7dd3fc"/><rect x="95" y="80" width="12" height="20" rx="1.5" fill="#e0f2fe"/><rect x="108" y="80" width="12" height="20" rx="1.5" fill="#38bdf8"/>
+    <rect x="88" y="59" width="12" height="20" rx="1.5" fill="#38bdf8"/><rect x="101" y="59" width="12" height="20" rx="1.5" fill="#7dd3fc"/>
+    <path d="M79 101 H123 L115 121 H87 Z" fill="#0369a1"/>
+  </g>
+  <!-- Boat 3: two containers -->
+  <g>
+    <rect x="137" y="87" width="15" height="17" rx="1.5" fill="#e0f2fe"/><rect x="153" y="87" width="15" height="17" rx="1.5" fill="#38bdf8"/>
+    <path d="M133 105 H172 L165 121 H140 Z" fill="#0369a1"/>
+  </g>
+  <!-- Water -->
+  <path d="M6 119 Q22 112 38 119 T70 119 T102 119 T134 119 T166 119 T198 119" fill="none" stroke="#38bdf8" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 134 Q38 127 54 134 T86 134 T118 134 T150 134 T182 134" fill="none" stroke="#0ea5e9" stroke-width="3.5" stroke-linecap="round" opacity="0.7"/>
+</g>
 </svg>
