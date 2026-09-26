@@ -518,6 +518,16 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
 | Intermediate, per cluster | `clusters/<cluster>/ca.crt` + `chain.crt` | `.<cluster>.<domain>` and `<cluster>.<domain>` | ~6 years |
 | Wildcard leaf, per cluster | `clusters/<cluster>/wildcard.crt` (leaf + intermediate) | — | 365 days; `EnsureCluster` re-issues within 30 days |
 
+- **Apple's verifier needs ONE DNS subtree per intermediate.** It requires a name
+  to match every permitted subtree, not any (RFC 5280 says any). v0.2.2–0.2.3
+  constrained intermediates to both `.zone` and `zone`; the wildcard's bare `zone`
+  SAN then failed `.zone` and macOS rejected the whole certificate as a
+  name-constraint violation — Safari, Go on darwin, and curl (which defers to
+  `SecTrust` without `--cacert`) all failed, while `curl --cacert` (LibreSSL's own
+  verifier) passed, which is how it slipped through. Now a single `zone` subtree;
+  `macos_test.go` runs `security verify-cert` so it cannot regress. Measured with
+  the fix and the root in the keychain: `/usr/bin/curl`, Homebrew curl (`Native:
+  Apple SecTrust`), Apple's python3 and Go all verify with no `--cacert`.
 - **Constraints are what make keychain trust safe.** Verified: a `github.com` leaf
   signed with a cluster intermediate is rejected by Go (`CANotAuthorizedForThisName`),
   curl (`permitted subtree violation`) and macOS. cert-manager does **not** check

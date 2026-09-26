@@ -6,6 +6,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -62,4 +63,11 @@ func signWildcardExpiring(t *testing.T, s *Store, cluster string, left time.Dura
 
 func asInvalid(err error, target *x509.CertificateInvalidError) bool {
 	return errors.As(err, target)
+}
+
+func writePEM(t *testing.T, path string, der []byte) {
+	t.Helper()
+	if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }

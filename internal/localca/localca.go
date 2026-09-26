@@ -191,8 +191,15 @@ func (s *Store) ensureZone(kind Kind, name string) (*Cluster, error) {
 	caCrt, caKey := filepath.Join(dir, "ca.crt"), filepath.Join(dir, "private", "ca.key")
 
 	inter, interKey, err := loadPair(caCrt, caKey)
-	if err != nil || pki.VerifyIntermediate(inter, root) != nil || !constrainedTo(inter, "."+zone) {
-		nc := pki.NameConstraints{}.PermitDNS("."+zone, zone)
+	if err != nil || pki.VerifyIntermediate(inter, root) != nil || !constrainedExactly(inter, zone) {
+		// One subtree, without a leading dot: RFC 5280 reads "zone" as the zone
+		// and everything under it, and so do Go and Chrome. Apple's verifier
+		// (Safari, Go on darwin, `security`) instead requires a name to match
+		// EVERY permitted DNS subtree: with ".zone" and "zone" both listed, the
+		// wildcard's bare "zone" SAN fails ".zone", and the certificate is
+		// rejected as a name-constraint violation. v0.2.2–0.2.3 issued exactly
+		// that, so an intermediate with any other constraint set is re-issued.
+		nc := pki.NameConstraints{}.PermitDNS(zone)
 		if interKey, err = pki.GenerateKey(keyType); err != nil {
 			return nil, err
 		}
@@ -315,6 +322,12 @@ func loadPair(certPath, keyPath string) (*x509.Certificate, crypto.Signer, error
 		return nil, nil, err
 	}
 	return cert, key, nil
+}
+
+// constrainedExactly reports whether a CA certificate's permitted DNS subtrees
+// are exactly [want].
+func constrainedExactly(c *x509.Certificate, want string) bool {
+	return len(c.PermittedDNSDomains) == 1 && strings.EqualFold(c.PermittedDNSDomains[0], want)
 }
 
 // constrainedTo reports whether a CA certificate's permitted DNS subtrees

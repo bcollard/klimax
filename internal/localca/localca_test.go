@@ -123,7 +123,7 @@ func TestIntermediateCannotSignOutsideItsZone(t *testing.T) {
 		t.Fatal(err)
 	}
 	inter := parseChain(t, c.ChainPEM)[0]
-	if !constrainedTo(inter, ".dev.klimax.internal") || inter.MaxPathLen != 0 || !inter.MaxPathLenZero {
+	if !constrainedExactly(inter, "dev.klimax.internal") || inter.MaxPathLen != 0 || !inter.MaxPathLenZero {
 		t.Fatalf("intermediate: constraints=%v pathlen=%d", inter.PermittedDNSDomains, inter.MaxPathLen)
 	}
 	for _, name := range []string{"github.com", "web.staging.klimax.internal"} {
