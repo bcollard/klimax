@@ -121,7 +121,7 @@ echo "kind cluster %s created"
 	}
 
 	// Before the mirrors: a node that cannot verify TLS cannot use them either.
-	if err := configureCACerts(ctx, g, cl.Name, caCerts); err != nil {
+	if err := ConfigureCACerts(ctx, g, cl.Name, caCerts); err != nil {
 		return fmt.Errorf("installing CA certificates for cluster %q: %w", cl.Name, err)
 	}
 
@@ -205,7 +205,7 @@ func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName 
 	return g.RunScript(ctx, fmt.Sprintf("configure registry mirrors on cluster %q", clusterName), sb.String())
 }
 
-// configureCACerts installs extra trust anchors into every node of a cluster.
+// ConfigureCACerts installs extra trust anchors into every node of a cluster.
 //
 // A kind node is a container with its own trust store, so the certificates
 // cloud-init put in the VM do not reach it. Without this, containerd inside the
@@ -214,7 +214,7 @@ func configureRegistryMirrors(ctx context.Context, g *guest.Client, clusterName 
 //
 // containerd reads the trust store when it starts, so it is restarted after —
 // this runs immediately after cluster creation, before any workload exists.
-func configureCACerts(ctx context.Context, g *guest.Client, clusterName string, certs map[string]string) error {
+func ConfigureCACerts(ctx context.Context, g *guest.Client, clusterName string, certs map[string]string) error {
 	if len(certs) == 0 {
 		return nil
 	}

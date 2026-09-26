@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -144,6 +145,42 @@ func (c *Client) WriteFile(ctx context.Context, path, content string) error {
 	_, err := c.Run(ctx, script)
 	return err
 }
+
+// WriteSecretFile writes content to path in the guest, mode 0600, root-owned.
+//
+// Unlike WriteFile, the content travels on the SSH session's stdin rather than
+// inside the command line, so it never reaches a log: Run logs every command at
+// debug level, and RunScript logs whole script bodies. Use this for private keys.
+func (c *Client) WriteSecretFile(ctx context.Context, path, content string) error {
+	slog.Debug("guest write secret file", "path", path)
+	cl, err := c.dial()
+	if err != nil {
+		return err
+	}
+	defer cl.Close()
+
+	sess, err := cl.NewSession()
+	if err != nil {
+		return fmt.Errorf("new SSH session: %w", err)
+	}
+	defer sess.Close()
+
+	if !safeGuestPathRE.MatchString(path) {
+		return fmt.Errorf("refusing unsafe guest path %q", path)
+	}
+	var stderr bytes.Buffer
+	sess.Stdin = strings.NewReader(content)
+	sess.Stderr = &stderr
+	cmd := fmt.Sprintf("sudo install -d -m 0700 %s && sudo sh -c 'umask 077 && cat > %s'", path[:strings.LastIndex(path, "/")], path)
+	if err := sess.Run(cmd); err != nil {
+		return fmt.Errorf("writing %s: %w (stderr: %s)", path, err, stderr.String())
+	}
+	return nil
+}
+
+// safeGuestPathRE is the charset WriteSecretFile accepts. Its paths are always
+// built by klimax, so a strict allowlist is simpler and safer than quoting.
+var safeGuestPathRE = regexp.MustCompile(`^/[A-Za-z0-9._/-]+$`)
 
 // SSHArgs returns the arguments needed to exec the system ssh binary for an
 // interactive session into the given running Lima instance.

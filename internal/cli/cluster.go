@@ -92,10 +92,12 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 		return err
 	}
 
+	localCA, caCerts := localCAForCluster(cfg, name, caCerts)
 	if err := kind.CreateCluster(ctx, g, cl, withLocalDNSForward(cfg, cfg.Kind), cfg.Registries, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
 	installLocalDNS(ctx, g, cfg, name)
+	installLocalCA(ctx, g, localCA)
 
 	if *cfg.Kind.AutoMergeKubeconfig {
 		if err := runClusterMerge(name); err != nil {

@@ -51,6 +51,9 @@ func runDestroy(ctx context.Context) error {
 			if err := kind.DeleteCluster(ctx, g, name); err != nil {
 				slog.Warn("Failed to delete kind cluster (continuing)", "cluster", name, "err", err)
 			}
+			// The root survives destroy (like the registry cache); per-cluster
+			// intermediates die with their clusters.
+			removeLocalCA(cfg, name)
 		}
 	}
 

@@ -84,3 +84,43 @@ func TestNoProxyIncludesDNSZone(t *testing.T) {
 		t.Errorf("no_proxy should not list the zone when DNS is off")
 	}
 }
+
+func TestDNSNameTemplate(t *testing.T) {
+	cfg := &Config{}
+	applyDefaults(cfg)
+	if got := cfg.DNSNameExample("dev"); got != "<service>.<namespace>.dev.klimax.internal" {
+		t.Errorf("default example = %q", got)
+	}
+	cfg.Network.DNS.NameTemplate = "{{.Name}}-{{.Namespace}}"
+	if got := cfg.DNSNameExample("dev"); got != "<service>-<namespace>.dev.klimax.internal" {
+		t.Errorf("flat example = %q", got)
+	}
+	for tmpl, wantErr := range map[string]string{
+		"{{.Name}}-{{.Namespace}}": "",
+		"{{.Name}}":                "",
+		"{{.Name":                  "nameTemplate",
+		"{{.Name}}_{{.Namespace}}": "not a valid relative DNS name",
+		"{{.Name}}.":               "not a valid relative DNS name",
+	} {
+		cfg.Network.DNS.NameTemplate = tmpl
+		err := Validate(cfg)
+		switch {
+		case wantErr == "" && err != nil:
+			t.Errorf("%q: unexpected error %v", tmpl, err)
+		case wantErr != "" && (err == nil || !strings.Contains(err.Error(), wantErr)):
+			t.Errorf("%q: error = %v, want %q", tmpl, err, wantErr)
+		}
+	}
+}
+
+func TestTLSEnabled(t *testing.T) {
+	cfg := &Config{}
+	applyDefaults(cfg)
+	if !cfg.TLSEnabled() {
+		t.Error("tls should default to enabled")
+	}
+	cfg.Network.DNS.Enabled = boolPtr(false)
+	if cfg.TLSEnabled() {
+		t.Error("tls must be off when the DNS zone is off")
+	}
+}

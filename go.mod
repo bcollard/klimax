@@ -3,6 +3,7 @@ module github.com/bcollard/klimax
 go 1.26.0
 
 require (
+	github.com/bcollard/homepki v0.7.1
 	github.com/docker/go-units v0.5.0
 	github.com/lima-vm/lima/v2 v2.2.0
 	github.com/sirupsen/logrus v1.10.2

@@ -54,7 +54,7 @@ func installLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config, c
 			"cluster", cluster, "err", err, "fix", "klimax dns attach "+cluster)
 		return
 	}
-	fmt.Printf("dns: LoadBalancer Services resolve as <service>.<namespace>.%s\n", cfg.ClusterDNSZone(cluster))
+	fmt.Printf("dns: LoadBalancer Services resolve as %s\n", cfg.DNSNameExample(cluster))
 }
 
 // deleteCluster deletes a cluster and its DNS records. ExternalDNS goes down
@@ -69,6 +69,7 @@ func deleteCluster(ctx context.Context, g *guest.Client, cfg *config.Config, nam
 			slog.Warn("Could not remove the cluster's DNS records", "cluster", name, "err", err)
 		}
 	}
+	removeLocalCA(cfg, name)
 	return nil
 }
 
@@ -180,7 +181,7 @@ zone) and restarts CoreDNS, which briefly interrupts in-cluster DNS.`,
 					failed = append(failed, name)
 					continue
 				}
-				fmt.Printf("✓ %s: Services resolve as <service>.<namespace>.%s\n", name, cfg.ClusterDNSZone(name))
+				fmt.Printf("✓ %s: Services resolve as %s\n", name, cfg.DNSNameExample(name))
 			}
 			if len(failed) > 0 {
 				return fmt.Errorf("%d cluster(s) not attached: %v", len(failed), failed)

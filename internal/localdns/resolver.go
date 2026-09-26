@@ -1,15 +1,14 @@
 package localdns
 
 import (
-	"bytes"
 	"fmt"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/klimax/internal/hostsudo"
 )
 
 // ResolverDir is where macOS looks for per-domain resolver files (man 5
@@ -60,7 +59,7 @@ func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 
 	for _, stale := range staleResolverFiles(want) {
 		slog.Info("Removing klimax resolver file", "path", stale)
-		if err := sudo(interactive, nil, "/bin/rm", "-f", stale); err != nil {
+		if err := hostsudo.Run(interactive, nil, "/bin/rm", "-f", stale); err != nil {
 			return fmt.Errorf("removing %s: %w", stale, err)
 		}
 	}
@@ -69,10 +68,10 @@ func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 		return nil
 	}
 	slog.Info("Writing macOS resolver file (needs sudo, once)", "path", want, "nameserver", cfg.DNSServerIP())
-	if err := sudo(interactive, nil, "/bin/mkdir", "-p", ResolverDir); err != nil {
+	if err := hostsudo.Run(interactive, nil, "/bin/mkdir", "-p", ResolverDir); err != nil {
 		return err
 	}
-	if err := sudo(interactive, strings.NewReader(ResolverContent(cfg)), "/usr/bin/tee", want); err != nil {
+	if err := hostsudo.Run(interactive, strings.NewReader(ResolverContent(cfg)), "/usr/bin/tee", want); err != nil {
 		return err
 	}
 	return nil
@@ -82,7 +81,7 @@ func EnsureHostResolver(cfg *config.Config, interactive bool) error {
 // `klimax destroy`.
 func RemoveHostResolvers(interactive bool) error {
 	for _, p := range staleResolverFiles("") {
-		if err := sudo(interactive, nil, "/bin/rm", "-f", p); err != nil {
+		if err := hostsudo.Run(interactive, nil, "/bin/rm", "-f", p); err != nil {
 			return err
 		}
 	}
@@ -107,24 +106,4 @@ func staleResolverFiles(keep string) []string {
 		}
 	}
 	return out
-}
-
-func sudo(interactive bool, stdin *strings.Reader, args ...string) error {
-	full := args
-	if !interactive {
-		full = append([]string{"-n"}, args...)
-	}
-	cmd := exec.Command("sudo", full...)
-	if stdin != nil {
-		cmd.Stdin = stdin
-	} else if interactive {
-		cmd.Stdin = os.Stdin
-	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	cmd.Stdout = nil
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("sudo %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
-	}
-	return nil
 }

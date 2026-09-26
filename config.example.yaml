@@ -130,6 +130,18 @@ network:
     # .internal is reserved by ICANN for private use. Keep a subdomain: GCP and
     # many corporate networks already use other names under .internal.
     domain: "klimax.internal"
+    # Automatic name, relative to <cluster>.<domain> (ExternalDNS --fqdn-template;
+    # fields .Name .Namespace .Labels .Annotations). Override per Service with the
+    # external-dns.kubernetes.io/hostname annotation.
+    nameTemplate: "{{.Name}}.{{.Namespace}}"
+    # Local CA for the zone. klimax creates a root in ~/.klimax/pki/<domain>/,
+    # name-constrained to .<domain> and trusted in the System keychain (sudo once),
+    # an intermediate per cluster constrained to .<cluster>.<domain>, and a
+    # *.<cluster>.<domain> wildcard as the Secret default/klimax-wildcard-tls.
+    # With cert-manager in the cluster, `klimax ca attach` adds a klimax-ca
+    # ClusterIssuer. klimax never installs cert-manager itself.
+    tls:
+      enabled: true
 
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:

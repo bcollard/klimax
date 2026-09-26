@@ -34,11 +34,19 @@ type statusReport struct {
 // file is readable without the VM; ServerRunning needs it and is nil when the
 // VM is not running.
 type statusDNS struct {
-	Enabled       bool   `json:"enabled"                 yaml:"enabled"`
-	Domain        string `json:"domain,omitempty"        yaml:"domain,omitempty"`
-	Server        string `json:"server,omitempty"        yaml:"server,omitempty"`
-	HostResolver  bool   `json:"hostResolver"            yaml:"hostResolver"`
-	ServerRunning *bool  `json:"serverRunning,omitempty" yaml:"serverRunning,omitempty"`
+	Enabled       bool       `json:"enabled"                 yaml:"enabled"`
+	Domain        string     `json:"domain,omitempty"        yaml:"domain,omitempty"`
+	Server        string     `json:"server,omitempty"        yaml:"server,omitempty"`
+	HostResolver  bool       `json:"hostResolver"            yaml:"hostResolver"`
+	ServerRunning *bool      `json:"serverRunning,omitempty" yaml:"serverRunning,omitempty"`
+	TLS           *statusTLS `json:"tls,omitempty"         yaml:"tls,omitempty"`
+}
+
+// statusTLS reports the local CA (network.dns.tls). Nil when it is off.
+type statusTLS struct {
+	Root    string `json:"root,omitempty" yaml:"root,omitempty"`
+	Exists  bool   `json:"exists"         yaml:"exists"`
+	Trusted bool   `json:"trusted"        yaml:"trusted"`
 }
 
 // statusMounts reports the host directories shared into the guest over virtiofs.
@@ -165,6 +173,13 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 		rep.DNS.Server = cfg.DNSServerIP()
 		rep.DNS.HostResolver = localdns.HostResolverOK(cfg)
 	}
+	if cfg.TLSEnabled() {
+		store := caStore(cfg)
+		rep.DNS.TLS = &statusTLS{}
+		if _, err := store.Root(); err == nil {
+			rep.DNS.TLS.Exists, rep.DNS.TLS.Root, rep.DNS.TLS.Trusted = true, store.RootCertPath(), store.Trusted()
+		}
+	}
 
 	// Clusters and iptables need a running VM.
 	if inst == nil || inst.Status != limatype.StatusRunning {
@@ -288,6 +303,16 @@ func printStatusText(rep *statusReport) {
 			fmt.Printf("  resolver: /etc/resolver/%s → present\n", rep.DNS.Domain)
 		} else {
 			fmt.Printf("  resolver: /etc/resolver/%s → MISSING — run: klimax up\n", rep.DNS.Domain)
+		}
+		switch t := rep.DNS.TLS; {
+		case t == nil:
+			fmt.Println("  tls:      disabled (network.dns.tls.enabled: false)")
+		case !t.Exists:
+			fmt.Println("  tls:      no root CA yet — run: klimax up")
+		case t.Trusted:
+			fmt.Printf("  tls:      local CA trusted in the System keychain (klimax ca status)\n")
+		default:
+			fmt.Printf("  tls:      local CA NOT trusted — run: klimax ca trust\n")
 		}
 	}
 
