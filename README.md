@@ -206,6 +206,7 @@ After `klimax up`, the kind bridge CIDR is routed from your Mac directly to the 
 | Networking | Routes `kindBridgeCIDR` from macOS → VM via `lima0`; no SNAT so source IPs are preserved |
 | MetalLB | Installed in every cluster with a dedicated IP pool slice |
 | CoreDNS | Adds custom domain forwarding (e.g. `runlocal.dev`) at cluster creation |
+| Local DNS | Publishes every LoadBalancer Service as `<service>.<namespace>.<cluster>.klimax.internal`, resolvable from the Mac, the VM and pods — no domain needed (ExternalDNS → etcd → CoreDNS, `/etc/resolver` on the Mac) |
 | kubeconfig | Exports per-cluster kubeconfig to `~/.kube/klimax/<name>.kubeconfig`; auto-merges into `~/.kube/config` |
 
 
@@ -255,6 +256,10 @@ network:
   # software (CrowdStrike) blocking vzNAT IPs. ⚠ VM-level: only takes effect on new
   # VMs (klimax destroy && up).
   # disablePortMirroring: true
+
+  dns:                              # local DNS for LoadBalancer Services
+    enabled: true                   # default; false removes the containers, rules and resolver file
+    domain: "klimax.internal"       # names: <service>.<namespace>.<cluster>.<domain>
 
 # ── Kind defaults (applied to every `klimax cluster create`) ─────────────────
 kind:
@@ -579,6 +584,25 @@ klimax registry clean-cache   # remove all mirror cache dirs + containers; run '
 ```
 
 Mirror cache data is stored at `~/.klimax/registry-cache/<mirror-name>/` by default (`cacheStorage: "host"`), virtiofs-mounted into the VM and bind-mounted into each registry container. Blobs survive `klimax down`/`up` cycles and even `klimax destroy`.
+
+### Local DNS (`network.dns`)
+
+Every LoadBalancer Service gets a name, with no domain to buy and no DNS provider:
+
+```sh
+klimax cluster create dev
+kubectl create deploy web --image=nginx && kubectl expose deploy web --port 80 --type LoadBalancer
+curl http://web.default.dev.klimax.internal/      # from the Mac, the VM, or any pod
+
+klimax dns list                     # every published name and its VIP (-o json|yaml)
+klimax dns attach <cluster>...      # add a cluster created before network.dns was on
+```
+
+- **Names:** `<service>.<namespace>.<cluster>.klimax.internal` automatically. Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.klimax.internal` (it must sit under the cluster's own zone). Ingress hosts under `*.<cluster>.klimax.internal` are published too.
+- **How:** `klimax up` runs etcd and CoreDNS on the kind network (`172.30.255.52` / `.53`); each cluster runs ExternalDNS, which writes its Services into etcd; `/etc/resolver/klimax.internal` sends the Mac's lookups to CoreDNS through the existing host route. The resolver file needs **sudo once** — its address never changes, so it is never rewritten.
+- **Turn it off** with `network.dns.enabled: false` and `klimax up`: the containers, the iptables exemption and the resolver file are removed.
+- **A new name appears within ~15 s** (ExternalDNS's sync interval). A lookup made before that is cached as "no such name" for 5 s.
+- **Caveats:** tools that do their own DNS skip `/etc/resolver` — `dig` (use `dig @172.30.255.53` or `dscacheutil -q host -a name <name>`), Go programs built with the pure-Go resolver, and Chrome with a custom Secure DNS provider. No public CA issues certificates for `.internal`; use a private CA.
 
 ### AI coding tools (Agent Skill)
 

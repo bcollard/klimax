@@ -10,6 +10,7 @@ import (
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/kind"
 	"github.com/bcollard/klimax/internal/limatemplate"
+	"github.com/bcollard/klimax/internal/localdns"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
@@ -26,6 +27,18 @@ type statusReport struct {
 	Mounts   *statusMounts   `json:"mounts,omitempty"   yaml:"mounts,omitempty"`
 	Clusters *statusClusters `json:"clusters,omitempty" yaml:"clusters,omitempty"`
 	IPTables *statusIPTables `json:"iptables,omitempty" yaml:"iptables,omitempty"`
+	DNS      statusDNS       `json:"dns"                yaml:"dns"`
+}
+
+// statusDNS reports the local DNS zone (network.dns). The host-side resolver
+// file is readable without the VM; ServerRunning needs it and is nil when the
+// VM is not running.
+type statusDNS struct {
+	Enabled       bool   `json:"enabled"                 yaml:"enabled"`
+	Domain        string `json:"domain,omitempty"        yaml:"domain,omitempty"`
+	Server        string `json:"server,omitempty"        yaml:"server,omitempty"`
+	HostResolver  bool   `json:"hostResolver"            yaml:"hostResolver"`
+	ServerRunning *bool  `json:"serverRunning,omitempty" yaml:"serverRunning,omitempty"`
 }
 
 // statusMounts reports the host directories shared into the guest over virtiofs.
@@ -146,6 +159,13 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 		rep.Mounts = collectMounts(inst, cfg)
 	}
 
+	rep.DNS = statusDNS{Enabled: cfg.DNSEnabled()}
+	if rep.DNS.Enabled {
+		rep.DNS.Domain = cfg.DNSDomain()
+		rep.DNS.Server = cfg.DNSServerIP()
+		rep.DNS.HostResolver = localdns.HostResolverOK(cfg)
+	}
+
 	// Clusters and iptables need a running VM.
 	if inst == nil || inst.Status != limatype.StatusRunning {
 		return rep, nil
@@ -170,6 +190,11 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 		rep.IPTables.Error = err.Error()
 	} else {
 		rep.IPTables.NoNATExemption = ok
+	}
+
+	if rep.DNS.Enabled {
+		ok, _ := localdns.ServerRunning(ctx, g)
+		rep.DNS.ServerRunning = &ok
 	}
 
 	return rep, nil
@@ -244,6 +269,26 @@ func printStatusText(rep *statusReport) {
 	}
 	if rep.Mounts != nil && rep.Mounts.PendingRestart {
 		fmt.Println("  ⚠ vm.mounts in the config differs — apply with: klimax up")
+	}
+
+	fmt.Println("\n=== Local DNS ===")
+	if !rep.DNS.Enabled {
+		fmt.Println("  disabled (network.dns.enabled: false)")
+	} else {
+		fmt.Printf("  zone:     *.%s → %s\n", rep.DNS.Domain, rep.DNS.Server)
+		switch {
+		case rep.DNS.ServerRunning == nil:
+			fmt.Println("  server:   (VM is not running)")
+		case *rep.DNS.ServerRunning:
+			fmt.Println("  server:   running")
+		default:
+			fmt.Println("  server:   NOT RUNNING — run: klimax up")
+		}
+		if rep.DNS.HostResolver {
+			fmt.Printf("  resolver: /etc/resolver/%s → present\n", rep.DNS.Domain)
+		} else {
+			fmt.Printf("  resolver: /etc/resolver/%s → MISSING — run: klimax up\n", rep.DNS.Domain)
+		}
 	}
 
 	fmt.Println("\n=== Kind Clusters ===")

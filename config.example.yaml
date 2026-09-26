@@ -112,6 +112,25 @@ network:
   # ⚠ VM-level setting: only takes effect on new VMs (klimax destroy && klimax up).
   # disablePortMirroring: true
 
+  # Local DNS for LoadBalancer Services, with no domain to own.
+  # Every LoadBalancer Service gets <service>.<namespace>.<cluster>.<domain>,
+  # resolvable from the Mac, the VM and every pod. Ingress hosts under
+  # *.<cluster>.<domain> are published too, and an
+  # external-dns.kubernetes.io/hostname annotation adds a custom name.
+  #
+  # What klimax runs for it:
+  #   - etcd + CoreDNS containers on the kind network (x.y.255.52 / x.y.255.53)
+  #   - ExternalDNS in each cluster created while this is on
+  #     (existing clusters: klimax dns attach <cluster>)
+  #   - /etc/resolver/<domain> on the Mac — written once, needs sudo once
+  #
+  # Applied on every `klimax up`; false removes all of the above.
+  dns:
+    enabled: true
+    # .internal is reserved by ICANN for private use. Keep a subdomain: GCP and
+    # many corporate networks already use other names under .internal.
+    domain: "klimax.internal"
+
 # ── Kind clusters ────────────────────────────────────────────────────────────
 kind:
   # kindest/node image tag used when creating clusters.

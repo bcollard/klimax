@@ -83,10 +83,14 @@ internal/registry/dockerhosts.go     DockerdRegistryHosts, DockerHostsTOML — p
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
 internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
+internal/localdns/localdns.go        Ensure/Remove (etcd + CoreDNS containers at x.y.255.52/.53), Corefile, PurgeCluster, ListRecords, ProbeFromHost
+internal/localdns/externaldns.go     ExternalDNSManifest / InstallExternalDNS (plain kubectl, not Helm), ClusterForward (CoreDNS stanza)
+internal/localdns/resolver.go        EnsureHostResolver / RemoveHostResolvers — /etc/resolver/<domain> on the Mac (marker-guarded, sudo only on change)
+internal/config/dns.go               DNSConfig, DNSEnabled/DNSDomain/DNSServerIP/DNSEtcdIP/ClusterDNSZone, validateDNS
 internal/fleet/fleet.go              Fleet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
 internal/fleet/plan.go               Resolve → Plan (num pre-assignment, defaults merge, existence marking), DeletionOrder
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
-internal/routing/iptables.go         InstallNoNat, CheckNoNatRule
+internal/routing/iptables.go         InstallNoNat (+ Rule 4: local-DNS raw exemption and VM link DNS), CheckNoNatRule, CheckDNSRule
 
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
 internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
@@ -118,6 +122,7 @@ internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/dns.go                  `klimax dns list|attach`; helpers wired into up/create/delete (withLocalDNSForward, installLocalDNS, deleteCluster)
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
 internal/cli/docker_env.go           `klimax docker-env` — prints DOCKER_HOST export (current shell only)
@@ -172,6 +177,10 @@ network:
                                      # Set false to force loopback (127.0.0.1) — e.g. host security software
                                      # (CrowdStrike) blocking vzNAT IPs.
                                      # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
+  dns:
+    enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
+    domain: "klimax.internal"        # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
+                                     # NOT VM-level: reconciled on every `klimax up`; false removes everything
 
 kind:
   nodeVersion: "v1.36.1"             # kindest/node image tag (default)
@@ -318,9 +327,9 @@ klimax up                              Start VM + infra (idempotent; alias: star
 klimax down                            Stop VM (no sudo required; aliases: stop, d)
 klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
 klimax destroy                         Delete all clusters, delete VM, remove route
-klimax status                          Show VM state, host mounts, clusters, route, iptables
+klimax status                          Show VM state, host mounts, local DNS, clusters, route, iptables
   -o text|json|yaml                    Output format (json/yaml for tooling; `clusters.names` is always a list)
-klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state)
+klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state, local DNS path)
   -o text|json|yaml                    Output format; each check has a stable `id`, `status`, `fixable`
   --fix                                Apply the repairs klimax can perform: route, iptables, IP forwarding.
                                        VM creation/start, Rosetta install and hostagent cleanup stay advisory.
@@ -399,6 +408,9 @@ klimax fleet label <name> -l key=value Apply node labels to every cluster in the
 
 klimax registry clean-cache            Stop mirror containers + delete cache dirs; run 'klimax up' to restart
 
+klimax dns list [-o text|json|yaml]    List names published in the local DNS zone (A records only; TXT ownership records hidden)
+klimax dns attach <cluster>...         Install ExternalDNS + the CoreDNS forward on existing clusters (restarts their CoreDNS)
+
 klimax skill install                   Install the embedded Agent Skill into ~/.claude/skills/klimax/SKILL.md
   --claude                             Target Claude Code's user skills dir (default true)
   --print                              Write the skill to stdout instead of installing
@@ -413,6 +425,67 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 **Logging:** klimax's own logs use `log/slog`; Lima's library logs use `logrus`. By default klimax raises logrus to `error` so only klimax logs (and genuine Lima errors) show — the noisy `INFO[…]`/`WARN[…]` Lima lines are hidden. `--debug` surfaces Lima at `info` (and klimax at debug); `--lima-log-level trace|debug|info|warn|error|off` overrides explicitly (`off`→panic-only). Set in `root.go` `PersistentPreRunE` (`resolveLimaLogLevel`). The `hostagent` subcommand re-sets logrus to debug/JSON in `initHostagentLogrus`, so quieting the parent never affects VM readiness detection.
 
 ---
+
+## Local DNS (`network.dns`)
+
+Every LoadBalancer Service (and Ingress host) resolves as
+`<svc>.<ns>.<cluster>.<domain>` from the Mac, the VM and every pod, with no
+domain to own. On by default. The real-domain alternative (ExternalDNS + a
+cloud provider) is documented on the website and is still the only way to get
+publicly trusted certificates.
+
+| Piece | Where | Written by |
+|---|---|---|
+| etcd `klimax-dns-etcd` | kind network, `x.y.255.52` | `localdns.Ensure` in `up` |
+| CoreDNS `klimax-dns` (etcd plugin) | kind network, `x.y.255.53` | `localdns.Ensure` in `up` |
+| ExternalDNS, provider `coredns` | each cluster, ns `external-dns` | `installLocalDNS` after `CreateCluster` |
+| CoreDNS forward of the zone | each cluster | `withLocalDNSForward` → `ApplyCoreDNSPatch` |
+| raw-table exemption + VM link DNS | no-NAT script (Rule 4) | `routing.InstallNoNat` |
+| `/etc/resolver/<domain>` | Mac | `localdns.EnsureHostResolver` in `up` |
+
+Facts that shaped it, all verified on the live VM:
+
+- **Docker drops host traffic to container IPs.** Docker 29 installs a
+  per-container `raw PREROUTING -d <ip> ! -i br-… -j DROP`. The `raw` table runs
+  before `filter`, so klimax's `DOCKER-USER` ACCEPTs never see the packet.
+  MetalLB VIPs are unaffected because they are not container IPs. Rule 4 inserts
+  `-i lima0 -s <host gw> -d <dns ip>/32 -m comment --comment klimax-dns -j ACCEPT`
+  at the top; Docker **appends** its own rules, so the insert stays ahead of
+  them. Only the DNS server is exempted — etcd takes unauthenticated writes and
+  stays unreachable from the Mac.
+- **The resolver file never goes stale.** Its nameserver is on the kind network,
+  which the host route already follows across lima0 IP changes. So it is
+  written once, and `up` skips sudo when it matches. No NOPASSWD rule on purpose:
+  a passwordless `tee` on `/etc/resolver` would let anything on the Mac redirect
+  any domain. Non-interactive runs use `sudo -n` and warn.
+- **The VM resolves the zone via a route-only link domain** (`resolvectl dns/
+  domain ~<domain>/default-route false` on the kind bridge), re-applied by the
+  no-NAT script because Docker recreates the bridge link on restart.
+- **ExternalDNS is applied as plain manifests, not the Helm chart.** The chart
+  runs `extraArgs` through `tpl`, which renders `--fqdn-template`'s
+  `{{.Name}}` itself — every record lands under an empty name.
+- **ExternalDNS v0.22 changed the annotation prefix** to
+  `external-dns.kubernetes.io/`, with no fallback; `external-dns.alpha.…` is ignored silently.
+  `--combine-fqdn-annotation` keeps the automatic name alongside a custom one.
+- **Each cluster owns a disjoint subzone** (`--domain-filter=<cluster>.<domain>`,
+  `--txt-owner-id=<cluster>`), which makes `--policy=sync` safe.
+- **The etcd plugin serves TTL 300 for ExternalDNS's TTL-0 records, and a fixed
+  30s SOA minimum for negative answers.** The Corefile's `cache { success 9984 30;
+  denial 9984 5 }` caps both in the replies (authority section included — which
+  `rewrite ttl` does not touch). So a Service moved to a new VIP is not cached
+  for five minutes, and a name looked up before ExternalDNS's first sync shows
+  up ~6s after it is published instead of 30s. No wildcard records.
+- **`cluster delete` purges `/skydns/<reversed zone>/`** — ExternalDNS dies with
+  its cluster and never cleans up.
+- **Clients that skip `/etc/resolver`:** `dig`, Go's pure-Go resolver
+  (`PreferGo`/`netgo`), Chrome with a custom Secure DNS provider. Go's default
+  resolver on macOS (cgo or not) and Chrome's default setting work.
+- `validateDNS` rejects `.local` (mDNS: resolves in some tools and not others)
+  and a bare TLD, and requires a /16-ish `kindBridgeCIDR` so `x.y.255.53` is inside it.
+
+The no-NAT script's bridge lookup was fixed alongside: it used to yield the
+network id without the `br-` prefix, so Rule 3 (`-o <name>`) silently matched
+nothing. The script now removes that dead rule.
 
 ## Registry mirrors reach dockerd and the clusters differently
 

@@ -16,6 +16,7 @@ import (
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/hostres"
 	"github.com/bcollard/klimax/internal/limatemplate"
+	"github.com/bcollard/klimax/internal/localdns"
 	"github.com/bcollard/klimax/internal/registry"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
@@ -152,6 +153,12 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("registries: %w", err)
 	}
 
+	// Local DNS containers. Before the routing rules: they exempt the DNS
+	// container's address, and the container should exist when they do.
+	if err := localdns.Ensure(ctx, g, cfg); err != nil {
+		return fmt.Errorf("local dns: %w", err)
+	}
+
 	// 8. Route dockerd's own pulls through the mirrors, so `docker pull` and
 	// `docker compose` benefit from the cache too — not just cluster pulls.
 	if err := reconcileDockerDaemonConfig(ctx, g, cfg); err != nil {
@@ -162,7 +169,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	}
 
 	// 9. Install no-NAT rules + systemd persistence in guest.
-	if err := routing.InstallNoNat(ctx, g, cfg.Network.KindBridgeCIDR); err != nil {
+	if err := routing.InstallNoNat(ctx, g, cfg.Network.KindBridgeCIDR, localDNSRouting(cfg)); err != nil {
 		return fmt.Errorf("routing rules: %w", err)
 	}
 
@@ -171,13 +178,21 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 		return fmt.Errorf("macOS route: %w", err)
 	}
 
+	// 11. Point the Mac's resolver at the local DNS zone. After the route: the
+	// nameserver is on the kind network, reachable only through it.
+	reconcileHostResolver(cfg)
+
 	slog.Info("klimax up complete",
 		"vm", cfg.VM.Name,
 		"kindCIDR", cfg.Network.KindBridgeCIDR,
 		"lima0IP", lima0IP,
 		"dockerSocket", "~/."+cfg.VM.Name+".docker.sock",
 	)
-	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n\n")
+	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n")
+	if cfg.DNSEnabled() {
+		fmt.Printf("  LoadBalancer Services resolve as <service>.<namespace>.<cluster>.%s\n", cfg.DNSDomain())
+	}
+	fmt.Println()
 	return nil
 }
 

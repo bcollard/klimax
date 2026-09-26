@@ -17,10 +17,12 @@ import (
 	"github.com/bcollard/klimax/internal/config"
 	"github.com/bcollard/klimax/internal/guest"
 	"github.com/bcollard/klimax/internal/limatemplate"
+	"github.com/bcollard/klimax/internal/localdns"
 	"github.com/bcollard/klimax/internal/routing"
 	"github.com/bcollard/klimax/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,6 +45,7 @@ const (
 	checkIDIPForward   = "ip-forward"
 	checkIDRosettaVM   = "rosetta-vm"
 	checkIDProxy       = "proxy"
+	checkIDDNS         = "dns"
 )
 
 // doctorCheck is one diagnosis. Fixable marks the checks `--fix` can repair
@@ -259,6 +262,9 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 	// is the first question when pulls fail on a corporate network.
 	rep.Checks = append(rep.Checks, checkProxy(ctx, g, cfg))
 
+	// Local DNS zone.
+	rep.Checks = append(rep.Checks, checkLocalDNS(ctx, g, cfg))
+
 	// Rosetta inside the VM.
 	rosettaActive := false
 	if out, rerr := g.Run(ctx, "test -e /proc/sys/fs/binfmt_misc/rosetta && echo yes || echo no"); rerr == nil {
@@ -308,7 +314,13 @@ func applyDoctorFixes(ctx context.Context, rep *doctorReport, env *doctorEnv) {
 			if env.guest == nil {
 				err = fmt.Errorf("VM is not running")
 			} else {
-				err = routing.InstallNoNat(ctx, env.guest, env.cfg.Network.KindBridgeCIDR)
+				err = routing.InstallNoNat(ctx, env.guest, env.cfg.Network.KindBridgeCIDR, localDNSRouting(env.cfg))
+			}
+		case checkIDDNS:
+			if env.guest == nil {
+				err = fmt.Errorf("VM is not running")
+			} else {
+				err = fixLocalDNS(ctx, env)
 			}
 		case checkIDIPForward:
 			if env.guest == nil {
@@ -583,4 +595,46 @@ func checkProxy(ctx context.Context, g *guest.Client, cfg *config.Config) doctor
 		return doctorCheck{ID: checkIDProxy, Status: checkOK,
 			Message: fmt.Sprintf("dockerd is using a proxy (from %s)", src)}
 	}
+}
+
+// checkLocalDNS verifies each hop a Mac lookup under network.dns takes: the DNS
+// container, the raw-table exemption that lets the host reach it, a real query
+// over that path, and the /etc/resolver file that sends macOS there. It names
+// the first broken hop, since the later ones cannot work without it.
+func checkLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config) doctorCheck {
+	if !cfg.DNSEnabled() {
+		return doctorCheck{ID: checkIDDNS, Status: checkOK, Message: "Local DNS is disabled (network.dns.enabled: false)"}
+	}
+	fail := func(msg, detail string) doctorCheck {
+		return doctorCheck{ID: checkIDDNS, Status: checkFail, Message: msg, Detail: detail,
+			Fix: fmt.Sprintf("klimax up -c %s", configFile), Fixable: true}
+	}
+	if ok, err := localdns.ServerRunning(ctx, g); err != nil || !ok {
+		return fail(fmt.Sprintf("Local DNS server container %q is not running", localdns.ServerContainer), "")
+	}
+	if ok, err := routing.CheckDNSRule(ctx, g, cfg.DNSServerIP()); err != nil || !ok {
+		return fail("The iptables exemption that lets the Mac reach the DNS server is missing",
+			"Docker drops host traffic to container addresses in the raw table; without the exemption every lookup times out.")
+	}
+	if err := localdns.ProbeFromHost(ctx, cfg); err != nil {
+		return fail(fmt.Sprintf("The Mac gets no answer from the DNS server at %s", cfg.DNSServerIP()),
+			fmt.Sprintf("%v — check the macOS route (above) first", err))
+	}
+	if !localdns.HostResolverOK(cfg) {
+		return fail(fmt.Sprintf("%s is missing or out of date", localdns.ResolverPath(cfg)),
+			"The server answers, but macOS is not sending the zone to it.")
+	}
+	return doctorCheck{ID: checkIDDNS, Status: checkOK,
+		Message: fmt.Sprintf("Local DNS serves %s at %s, and the Mac resolves through it", cfg.DNSDomain(), cfg.DNSServerIP())}
+}
+
+// fixLocalDNS re-runs the same reconciliation `klimax up` does for network.dns.
+func fixLocalDNS(ctx context.Context, env *doctorEnv) error {
+	if err := localdns.Ensure(ctx, env.guest, env.cfg); err != nil {
+		return err
+	}
+	if err := routing.InstallNoNat(ctx, env.guest, env.cfg.Network.KindBridgeCIDR, localDNSRouting(env.cfg)); err != nil {
+		return err
+	}
+	return localdns.EnsureHostResolver(env.cfg, term.IsTerminal(int(os.Stdin.Fd())))
 }

@@ -138,7 +138,7 @@ echo "kind cluster %s created"
 	}
 
 	if len(kindCfg.CustomDNSResolvers) > 0 {
-		if err := applyCoreDNSPatch(ctx, g, cl.Name, kindCfg.CustomDNSResolvers); err != nil {
+		if err := ApplyCoreDNSPatch(ctx, g, cl.Name, kindCfg.CustomDNSResolvers); err != nil {
 			return fmt.Errorf("applying CoreDNS patch for cluster %q: %w", cl.Name, err)
 		}
 	}
@@ -384,9 +384,9 @@ func kindKubeconfigPath(clusterName string) string {
 	return filepath.Join(home, ".kube", "klimax", clusterName+".kubeconfig")
 }
 
-// applyCoreDNSPatch patches the CoreDNS ConfigMap to forward the given custom DNS
+// ApplyCoreDNSPatch patches the CoreDNS ConfigMap to forward the given custom DNS
 // zones to their configured upstream resolvers, while preserving the default .:53 block.
-func applyCoreDNSPatch(ctx context.Context, g *guest.Client, clusterName string, resolvers []config.CustomDNSResolver) error {
+func ApplyCoreDNSPatch(ctx context.Context, g *guest.Client, clusterName string, resolvers []config.CustomDNSResolver) error {
 	slog.Info("Applying CoreDNS patch", "cluster", clusterName, "zones", len(resolvers))
 
 	// Build a stanza per extra zone with its configured upstream resolvers.

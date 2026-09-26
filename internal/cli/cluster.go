@@ -92,9 +92,10 @@ func runClusterCreate(ctx context.Context, name string, region, zone string, lab
 		return err
 	}
 
-	if err := kind.CreateCluster(ctx, g, cl, cfg.Kind, cfg.Registries, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
+	if err := kind.CreateCluster(ctx, g, cl, withLocalDNSForward(cfg, cfg.Kind), cfg.Registries, caCerts, cfg.Network.KindBridgeCIDR, cfg.Network.PortMirroringDisabled()); err != nil {
 		return err
 	}
+	installLocalDNS(ctx, g, cfg, name)
 
 	if *cfg.Kind.AutoMergeKubeconfig {
 		if err := runClusterMerge(name); err != nil {
@@ -178,7 +179,7 @@ func confirmAndDeleteClusters(ctx context.Context, g *guest.Client, cfg *config.
 	var failed []string
 	for _, name := range targets {
 		fmt.Printf("→ deleting cluster %q\n", name)
-		if err := kind.DeleteCluster(ctx, g, name); err != nil {
+		if err := deleteCluster(ctx, g, cfg, name); err != nil {
 			slog.Error("Delete failed", "cluster", name, "err", err)
 			failed = append(failed, name)
 			continue
@@ -201,7 +202,7 @@ func runClusterDelete(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := kind.DeleteCluster(ctx, g, name); err != nil {
+	if err := deleteCluster(ctx, g, cfg, name); err != nil {
 		return err
 	}
 	if *cfg.Kind.AutoRemoveKubeconfig {
@@ -246,7 +247,7 @@ func runClusterDeleteInteractive(ctx context.Context) error {
 
 	for _, name := range selected {
 		fmt.Printf("Deleting cluster %q...\n", name)
-		if err := kind.DeleteCluster(ctx, g, name); err != nil {
+		if err := deleteCluster(ctx, g, cfg, name); err != nil {
 			slog.Warn("Delete failed", "cluster", name, "err", err)
 			continue
 		}
