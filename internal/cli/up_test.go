@@ -59,11 +59,11 @@ func TestRewriteNodeVersionMissingLine(t *testing.T) {
 }
 
 // --show-vm-logs must raise Lima's log level itself: it turns on Lima's
-// cloud-init reporting, which klimax would otherwise swallow by quieting logrus
+// cloud-init reporting, which marina would otherwise swallow by quieting logrus
 // to Error.
 func TestRaiseLimaLogLevelForVMLogs(t *testing.T) {
 	newCmd := func(explicit string) *cobra.Command {
-		root := &cobra.Command{Use: "klimax"}
+		root := &cobra.Command{Use: "marina"}
 		root.PersistentFlags().String("lima-log-level", "", "")
 		child := &cobra.Command{Use: "up"}
 		root.AddCommand(child)

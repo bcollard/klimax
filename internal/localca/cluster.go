@@ -6,22 +6,22 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // In-cluster names. The wildcard Secret lives in default because a Secret can
-// only be mounted in its own namespace; `klimax ca secret` copies it elsewhere.
+// only be mounted in its own namespace; `marina ca secret` copies it elsewhere.
 const (
-	WildcardSecret = "klimax-wildcard-tls"
-	RootConfigMap  = "klimax-root-ca"
-	IssuerName     = "klimax-ca"
+	WildcardSecret = "marina-wildcard-tls"
+	RootConfigMap  = "marina-root-ca"
+	IssuerName     = "marina-ca"
 	// FleetWildcardSecret and FleetIssuerName are the fleet zone's
 	// counterparts, installed into every member beside the cluster's own.
-	FleetWildcardSecret = "klimax-fleet-wildcard-tls"
-	FleetIssuerName     = "klimax-fleet-ca"
+	FleetWildcardSecret = "marina-fleet-wildcard-tls"
+	FleetIssuerName     = "marina-fleet-ca"
 	secretNamespace     = "default"
 	// NodeCAFile is the name the root gets in each node's trust store.
-	NodeCAFile = "klimax-local-ca.crt"
+	NodeCAFile = "marina-local-ca.crt"
 )
 
 // SecretName is the wildcard Secret this zone's material is installed as.
@@ -43,18 +43,18 @@ func (c *Cluster) IssuerName() string {
 // InstallResult says what InstallInCluster set up.
 type InstallResult struct {
 	// IssuerNamespace is where cert-manager runs, when it does: the
-	// klimax-ca ClusterIssuer was created and its Secret put there. Empty when
+	// marina-ca ClusterIssuer was created and its Secret put there. Empty when
 	// the cluster has no cert-manager.
 	IssuerNamespace string
 }
 
 // InstallInCluster puts a cluster's CA material into the cluster:
-//   - default/klimax-wildcard-tls — the wildcard, as a kubernetes.io/tls Secret
+//   - default/marina-wildcard-tls — the wildcard, as a kubernetes.io/tls Secret
 //     (tls.crt carries the intermediate after the leaf; ca.crt is the root);
-//   - default/klimax-root-ca — the root, as a ConfigMap to mount into clients;
-//   - when cert-manager is already installed, a klimax-ca ClusterIssuer backed
-//     by the cluster's intermediate. klimax never installs cert-manager itself:
-//     a Helm-managed cert-manager added later would collide with one klimax
+//   - default/marina-root-ca — the root, as a ConfigMap to mount into clients;
+//   - when cert-manager is already installed, a marina-ca ClusterIssuer backed
+//     by the cluster's intermediate. marina never installs cert-manager itself:
+//     a Helm-managed cert-manager added later would collide with one marina
 //     applied.
 //
 // Key material reaches the guest through WriteSecretFile, never through a
@@ -65,7 +65,7 @@ type InstallResult struct {
 // for a fleet zone.
 func InstallInCluster(ctx context.Context, g *guest.Client, target string, c *Cluster) (InstallResult, error) {
 	var res InstallResult
-	dir := fmt.Sprintf("/tmp/klimax-ca-%s-%s-%s", target, c.Kind, c.Name)
+	dir := fmt.Sprintf("/tmp/marina-ca-%s-%s-%s", target, c.Kind, c.Name)
 	files := map[string]string{
 		"wildcard.crt": c.WildcardPEM,
 		"wildcard.key": c.WildcardKeyPEM,
@@ -91,7 +91,7 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} get deploy -A -l app.kubernetes.io/name=
 		issuer = fmt.Sprintf(`
 kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[1]s create secret tls %[2]s \
   --cert=${D}/chain.crt --key=${D}/ca.key --dry-run=client -o yaml \
-  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=klimax -o yaml \
+  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=marina -o yaml \
   | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f - >/dev/null
 # cert-manager's webhook may not be serving yet on a cluster that just got it.
 DEADLINE=$((SECONDS + 60))
@@ -101,7 +101,7 @@ kind: ClusterIssuer
 metadata:
   name: %[2]s
   labels:
-    app.kubernetes.io/managed-by: klimax
+    app.kubernetes.io/managed-by: marina
 spec:
   ca:
     secretName: %[2]s
@@ -121,11 +121,11 @@ trap 'rm -rf ${D}' EXIT
 kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[3]s create secret generic %[4]s --type=kubernetes.io/tls \
   --from-file=tls.crt=${D}/wildcard.crt --from-file=tls.key=${D}/wildcard.key --from-file=ca.crt=${D}/root.crt \
   --dry-run=client -o yaml \
-  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=klimax -o yaml \
+  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=marina -o yaml \
   | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f - >/dev/null
 kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[3]s create configmap %[5]s --from-file=ca.crt=${D}/root.crt \
   --dry-run=client -o yaml \
-  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=klimax -o yaml \
+  | kubectl --kubeconfig ${KIND_KUBECONFIG} label --local -f - app.kubernetes.io/managed-by=marina -o yaml \
   | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f - >/dev/null
 %[6]s`, dir, kube, secretNamespace, c.SecretName(), RootConfigMap, issuer)
 
@@ -152,5 +152,5 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} -n %[3]s get secret %[4]s -o json \
 }
 
 func kubeconfigPrelude(cluster string) string {
-	return fmt.Sprintf("KIND_KUBECONFIG=/tmp/klimax-kube-%[1]s.yaml; kind get kubeconfig --name %[1]s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG};", cluster)
+	return fmt.Sprintf("KIND_KUBECONFIG=/tmp/marina-kube-%[1]s.yaml; kind get kubeconfig --name %[1]s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG};", cluster)
 }

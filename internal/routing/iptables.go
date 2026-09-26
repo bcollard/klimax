@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // noNatScript is installed at /usr/local/sbin/no-nat-kind.sh in the guest.
@@ -77,7 +77,7 @@ DNS_DOMAIN="{{ .DNSDomain }}"
 # rules, so an insert at the top stays ahead of them. Tagged with a comment so
 # it can be found and removed without knowing the address it was written for.
 # grep exits 1 on no match, which pipefail + set -e would turn into a failed run.
-DNS_RULES=$(iptables -t raw -S PREROUTING | grep -- '--comment klimax-dns' || true)
+DNS_RULES=$(iptables -t raw -S PREROUTING | grep -- '--comment marina-dns' || true)
 while read -r RULE; do
   [ -z "${RULE}" ] && continue
   if [ -n "${DNS_IP}" ] && [[ "${RULE}" == *"-d ${DNS_IP}/32"* ]] && [[ "${RULE}" == *"-s ${HOST_GW}/32"* ]]; then
@@ -87,11 +87,11 @@ while read -r RULE; do
 done <<< "${DNS_RULES}"
 if [ -n "${DNS_IP}" ]; then
   iptables -t raw -C PREROUTING -i "${HOST_IF}" -s "${HOST_GW}/32" -d "${DNS_IP}/32" \
-    -m comment --comment klimax-dns -j ACCEPT 2>/dev/null \
+    -m comment --comment marina-dns -j ACCEPT 2>/dev/null \
     || iptables -t raw -I PREROUTING 1 -i "${HOST_IF}" -s "${HOST_GW}/32" -d "${DNS_IP}/32" \
-         -m comment --comment klimax-dns -j ACCEPT
+         -m comment --comment marina-dns -j ACCEPT
 
-  # Route the zone for the VM itself (dockerd pulls, klimax shell). A
+  # Route the zone for the VM itself (dockerd pulls, marina shell). A
   # route-only domain on the kind bridge link: only names under it go to the
   # DNS container, and the bridge never becomes a default DNS route. Re-applied
   # here because Docker recreates the bridge link on restart.
@@ -109,7 +109,7 @@ echo "no-nat-kind rules applied successfully"
 
 // noNatServiceUnit is the systemd service that runs noNatScript at boot.
 const noNatServiceUnit = `[Unit]
-Description=Klimax no-NAT kind routing rules
+Description=Marina no-NAT kind routing rules
 After=docker.service
 Requires=docker.service
 
@@ -192,7 +192,7 @@ func renderNoNatScript(kindCIDR string, dns LocalDNS) string {
 // the container.
 func CheckDNSRule(ctx context.Context, g *guest.Client, serverIP string) (bool, error) {
 	out, err := g.Run(ctx, fmt.Sprintf(
-		`sudo iptables -t raw -S PREROUTING | grep -- '--comment klimax-dns' | grep -q -- '-d %s/32' && echo yes || echo no`, serverIP))
+		`sudo iptables -t raw -S PREROUTING | grep -- '--comment marina-dns' | grep -q -- '-d %s/32' && echo yes || echo no`, serverIP))
 	if err != nil {
 		return false, fmt.Errorf("checking DNS iptables rule: %w", err)
 	}

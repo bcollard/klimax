@@ -53,10 +53,10 @@ func guestAgentArch() string {
 // module version is cached. The filename is version-stamped, so bumping the Lima
 // module points at a new path and the matching agent is re-downloaded (guest and
 // host agents must be the same version — a stale cached agent could break the
-// hostagent protocol). Earlier versions linger until 'klimax prune' removes them.
-func GuestAgentCachePath(klimaxHome string) string {
+// hostagent protocol). Earlier versions linger until 'marina prune' removes them.
+func GuestAgentCachePath(marinaHome string) string {
 	ver := strings.TrimPrefix(limaModuleVersion(), "v")
-	return filepath.Join(klimaxHome, "share", "lima",
+	return filepath.Join(marinaHome, "share", "lima",
 		fmt.Sprintf("lima-guestagent.Linux-%s-%s.gz", guestAgentArch(), ver))
 }
 
@@ -64,13 +64,13 @@ func GuestAgentCachePath(klimaxHome string) string {
 // the current host architecture, downloading it from Lima's GitHub release if
 // not already present.
 //
-// Cache location: <klimaxHome>/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz
-func EnsureGuestAgent(ctx context.Context, klimaxHome string) (string, error) {
+// Cache location: <marinaHome>/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz
+func EnsureGuestAgent(ctx context.Context, marinaHome string) (string, error) {
 	guestArch := guestAgentArch()
 
 	limaVer := limaModuleVersion()
 	ver := strings.TrimPrefix(limaVer, "v")
-	cached := GuestAgentCachePath(klimaxHome)
+	cached := GuestAgentCachePath(marinaHome)
 	cacheDir := filepath.Dir(cached)
 	if _, err := os.Stat(cached); err == nil {
 		slog.Debug("Lima guest agent already cached", "path", cached)

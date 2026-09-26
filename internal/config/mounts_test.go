@@ -148,7 +148,7 @@ func TestDefaultConfigDeclaresMounts(t *testing.T) {
 	}
 
 	// And a config without the key is reported as missing it.
-	missing, err := MissingKeys([]byte("vm:\n  name: klimax\n"))
+	missing, err := MissingKeys([]byte("vm:\n  name: marina\n"))
 	if err != nil {
 		t.Fatal(err)
 	}

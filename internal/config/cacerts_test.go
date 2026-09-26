@@ -35,7 +35,7 @@ func TestCACertsLoad(t *testing.T) {
 		t.Fatal(err)
 	}
 	// update-ca-certificates only reads *.crt, whatever the source was called.
-	if _, ok := got["klimax-corp-root.crt"]; !ok {
+	if _, ok := got["marina-corp-root.crt"]; !ok {
 		t.Errorf("unexpected guest names: %v", SortedNames(got))
 	}
 }
@@ -102,9 +102,9 @@ func TestCACertsRejectsCollidingGuestNames(t *testing.T) {
 
 func TestGuestCertNameSanitizes(t *testing.T) {
 	for in, want := range map[string]string{
-		"corp root CA.pem":   "klimax-corp-root-CA.crt",
-		"a/b/../evil;rm.pem": "klimax-evil-rm.crt",
-		".pem":               "klimax-cert.crt",
+		"corp root CA.pem":   "marina-corp-root-CA.crt",
+		"a/b/../evil;rm.pem": "marina-evil-rm.crt",
+		".pem":               "marina-cert.crt",
 	} {
 		if got := GuestCertName(in); got != want {
 			t.Errorf("GuestCertName(%q) = %q, want %q", in, got, want)

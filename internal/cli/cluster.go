@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -26,7 +26,7 @@ func newClusterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "cluster",
 		Aliases: []string{"cl", "c"},
-		Short:   "Manage kind clusters inside the klimax VM",
+		Short:   "Manage kind clusters inside the marina VM",
 	}
 	cmd.AddCommand(
 		newClusterCreateCmd(),
@@ -145,7 +145,7 @@ func newClusterDeleteCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&filename, "filename", "f", "", "Delete the clusters listed in a Fleet manifest (- for stdin)")
-	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Delete clusters whose nodes match this label selector (e.g. klimax.dev/fleet=f1)")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Delete clusters whose nodes match this label selector (e.g. marina.sh/fleet=f1)")
 	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
 	return cmd
 }
@@ -394,7 +394,7 @@ func newClusterListCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "text", "Output format: text, json, yaml")
-	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Filter by node label selector (e.g. klimax.dev/fleet=f1)")
+	cmd.Flags().StringVarP(&selector, "selector", "l", "", "Filter by node label selector (e.g. marina.sh/fleet=f1)")
 	return cmd
 }
 
@@ -466,7 +466,7 @@ func newClusterUseCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:        "use <name>",
 		Short:      "Print the export command to set KUBECONFIG for the given cluster",
-		Deprecated: "use 'klimax kubeconfig env <name>' (or 'klimax kubeconfig use <name>' to switch context).",
+		Deprecated: "use 'marina kubeconfig env <name>' (or 'marina kubeconfig use <name>' to switch context).",
 		Args:       cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return printKubeconfigEnv(args[0])
@@ -480,7 +480,7 @@ func newClusterMergeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:        "merge <name>",
 		Short:      "Merge cluster kubeconfig into ~/.kube/config",
-		Deprecated: "use 'klimax kubeconfig merge <name>'.",
+		Deprecated: "use 'marina kubeconfig merge <name>'.",
 		Args:       cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runClusterMerge(args[0])
@@ -491,7 +491,7 @@ func newClusterMergeCmd() *cobra.Command {
 func runClusterMerge(name string) error {
 	srcPath := kind.KindKubeconfigPath(name)
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("kubeconfig not found at %s — run 'klimax cluster create %s' first", srcPath, name)
+		return fmt.Errorf("kubeconfig not found at %s — run 'marina cluster create %s' first", srcPath, name)
 	}
 
 	srcData, err := os.ReadFile(srcPath)
@@ -564,7 +564,7 @@ type kubeconfigFile struct {
 }
 
 // removeFromKubeconfig removes the context, cluster, and user entries for the
-// given cluster name from ~/.kube/config. klimax strips the "kind-" prefix
+// given cluster name from ~/.kube/config. marina strips the "kind-" prefix
 // during exportKubeconfig, so entries are stored under the bare cluster name.
 func removeFromKubeconfig(clusterName string) error {
 	home, _ := os.UserHomeDir()
@@ -666,7 +666,7 @@ func runClusterLabel(ctx context.Context, name string, specs []string) error {
 		return err
 	}
 	if !slices.Contains(names, name) {
-		return fmt.Errorf("cluster %q not found (see 'klimax cluster list')", name)
+		return fmt.Errorf("cluster %q not found (see 'marina cluster list')", name)
 	}
 
 	if err := kind.LabelNodes(ctx, g, name, kubeArgs); err != nil {
@@ -810,13 +810,13 @@ func connectToRunningVM(ctx context.Context) (*config.Config, *guest.Client, err
 		return nil, nil, err
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("inspecting VM: %w", err)
 	}
 	if inst == nil {
-		return nil, nil, errors.New("VM does not exist; run 'klimax up' first")
+		return nil, nil, errors.New("VM does not exist; run 'marina up' first")
 	}
 
 	g, err := guest.NewClient(inst)

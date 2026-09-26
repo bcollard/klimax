@@ -18,8 +18,8 @@ var (
 )
 
 // resolveLimaLogLevel maps the --lima-log-level flag to a logrus level. Lima's
-// packages log via logrus; by default klimax hides those (Error level) so only
-// klimax's own logs show. --debug surfaces them at info; an explicit flag wins.
+// packages log via logrus; by default marina hides those (Error level) so only
+// marina's own logs show. --debug surfaces them at info; an explicit flag wins.
 func resolveLimaLogLevel(v string, debug bool) (logrus.Level, error) {
 	switch strings.ToLower(strings.TrimSpace(v)) {
 	case "":
@@ -38,19 +38,19 @@ func resolveLimaLogLevel(v string, debug bool) (logrus.Level, error) {
 	}
 }
 
-// KlimaxHome returns the klimax state directory (~/.klimax).
-func KlimaxHome() string {
+// MarinaHome returns the marina state directory (~/.marina).
+func MarinaHome() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".klimax")
+	return filepath.Join(home, ".marina")
 }
 
-// NewRootCmd builds the root cobra command for klimax.
+// NewRootCmd builds the root cobra command for marina.
 func NewRootCmd(version string) *cobra.Command {
-	defaultConfig := filepath.Join(KlimaxHome(), "config.yaml")
+	defaultConfig := filepath.Join(MarinaHome(), "config.yaml")
 	root := &cobra.Command{
-		Use:   "klimax",
+		Use:   "marina",
 		Short: "Lima-based VZ VM + multi-kind cluster manager",
-		Long: `klimax manages a macOS Virtualization.framework (VZ) Lima VM,
+		Long: `marina manages a macOS Virtualization.framework (VZ) Lima VM,
 installs Docker, creates and manages kind clusters, and sets up
 pure L3 routing from the host into the kind bridge subnet.`,
 		SilenceUsage: true,
@@ -61,7 +61,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 			}
 			slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
 
-			// Quiet Lima's (logrus) logs by default so only klimax logs show.
+			// Quiet Lima's (logrus) logs by default so only marina logs show.
 			// The hostagent subcommand re-configures logrus for its JSON event
 			// stream, so this does not affect VM readiness detection.
 			lvl, err := resolveLimaLogLevel(limaLogLevel, debug)
@@ -73,7 +73,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 		},
 	}
 
-	root.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfig, "Path to klimax config file")
+	root.PersistentFlags().StringVarP(&configFile, "config", "c", defaultConfig, "Path to marina config file")
 	root.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging (also surfaces Lima logs at info)")
 	root.PersistentFlags().StringVar(&limaLogLevel, "lima-log-level", "", "Show Lima VM logs at this level (trace|debug|info|warn|error|off); hidden by default")
 
@@ -91,6 +91,7 @@ pure L3 routing from the host into the kind bridge subnet.`,
 		newRegistryCmd(),
 		newDNSCmd(),
 		newCACmd(),
+		newMigrateCmd(),
 		newConfigCmd(),
 		newShellCmd(),
 		newCopyCmd(),

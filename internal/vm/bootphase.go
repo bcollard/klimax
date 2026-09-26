@@ -19,7 +19,7 @@ const bootPhaseTailBytes = 64 * 1024
 //	Waiting for the final requirement 1 of 1: `boot scripts must have finished`
 //
 // These are the only progress Lima reports during a start, and they go to
-// logrus, which klimax quiets to error by default (resolveLimaLogLevel). Reading
+// logrus, which marina quiets to error by default (resolveLimaLogLevel). Reading
 // them back out of the log is what lets the heartbeat say something more useful
 // than "still starting".
 var requirementRE = regexp.MustCompile("^Waiting for the (?:essential|optional|final) requirement [0-9]+ of [0-9]+: `(.+)`$")

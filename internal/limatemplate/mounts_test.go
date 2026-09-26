@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 )
 
 func TestBuildMountsIncludesRegistryCache(t *testing.T) {
@@ -20,7 +20,7 @@ func TestBuildMountsIncludesRegistryCache(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("got %d mounts, want 1", len(got))
 	}
-	want := filepath.Join(home, ".klimax", "registry-cache")
+	want := filepath.Join(home, ".marina", "registry-cache")
 	if got[0].Location != want {
 		t.Errorf("Location = %q, want %q", got[0].Location, want)
 	}
@@ -57,7 +57,7 @@ func TestBuildMountsAppendsUserMounts(t *testing.T) {
 	}
 
 	// The cache comes first; user mounts keep their config order after it.
-	if got[0].Location != filepath.Join(home, ".klimax", "registry-cache") {
+	if got[0].Location != filepath.Join(home, ".marina", "registry-cache") {
 		t.Errorf("mounts[0] = %q, want the registry cache first", got[0].Location)
 	}
 

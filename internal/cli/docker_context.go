@@ -15,12 +15,12 @@ func newDockerContextCmd() *cobra.Command {
 	var unset bool
 	cmd := &cobra.Command{
 		Use:   "docker-context",
-		Short: "Create/switch to the klimax Docker context",
-		Long: `Creates (or updates) a Docker context pointing to the klimax VM socket
+		Short: "Create/switch to the marina Docker context",
+		Long: `Creates (or updates) a Docker context pointing to the marina VM socket
 and switches to it. Use --unset to switch back to the default context.
 
-  klimax docker-context          # create context + docker context use klimax
-  klimax docker-context --unset  # docker context use default`,
+  marina docker-context          # create context + docker context use marina
+  marina docker-context --unset  # docker context use default`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDockerContext(cmd.Context(), unset)
 		},
@@ -63,7 +63,7 @@ func runDockerContext(ctx context.Context, unset bool) error {
 	fmt.Printf("Switched to Docker context %q (%s)\n", contextName, socketHost)
 	if os.Getenv("DOCKER_HOST") != "" {
 		fmt.Println("Warning: DOCKER_HOST is set in your shell and overrides the active context.")
-		fmt.Println("  Run: eval $(klimax docker-env --unset)")
+		fmt.Println("  Run: eval $(marina docker-env --unset)")
 	}
 	return nil
 }

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/fleet"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/fleet"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +35,7 @@ untouched (apply is additive).
 
 The minimal manifest only lists cluster names:
 
-  apiVersion: klimax.dev/v1alpha1
+  apiVersion: marina.sh/v1alpha1
   kind: Fleet
   spec:
     clusters:
@@ -44,7 +44,7 @@ The minimal manifest only lists cluster names:
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if filename == "" {
-				return errors.New("a manifest is required: klimax cluster apply -f <file>")
+				return errors.New("a manifest is required: marina cluster apply -f <file>")
 			}
 			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel, adopt)
 		},
@@ -80,7 +80,7 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 	}
 	// Pre-flight: validate labels (merged with defaults, plus the fleet label).
 	if cs.Metadata.Name != "" {
-		if err := config.ValidateLabels(map[string]string{"klimax.dev/fleet": cs.Metadata.Name}); err != nil {
+		if err := config.ValidateLabels(map[string]string{"marina.sh/fleet": cs.Metadata.Name}); err != nil {
 			return fmt.Errorf("metadata.name %q is not a valid label value: %w", cs.Metadata.Name, err)
 		}
 	}
@@ -148,7 +148,7 @@ func runClusterApply(ctx context.Context, filename string, dryRun bool, maxParal
 }
 
 // foreignExisting returns the set of already-running clusters that the manifest
-// lists but that do not currently carry this fleet's klimax.dev/fleet label.
+// lists but that do not currently carry this fleet's marina.sh/fleet label.
 // Empty when the manifest has no metadata.name (no fleet identity to adopt into).
 func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan *fleet.Plan) (map[string]bool, error) {
 	if cs.Metadata.Name == "" {
@@ -186,7 +186,7 @@ func foreignExisting(ctx context.Context, g *guest.Client, cs *fleet.Fleet, plan
 }
 
 // adoptIntoFleet relabels pre-existing clusters so they join the fleet: it applies
-// the klimax.dev/fleet label plus the manifest entry's merged labels.
+// the marina.sh/fleet label plus the manifest entry's merged labels.
 func adoptIntoFleet(ctx context.Context, g *guest.Client, cfg *config.Config, cs *fleet.Fleet, plan *fleet.Plan, foreign map[string]bool) error {
 	byName := map[string]fleet.PlannedCluster{}
 	for _, pc := range plan.Clusters {
@@ -328,7 +328,7 @@ func createOne(ctx context.Context, g *guest.Client, cfg *config.Config, fleetNa
 	labels := map[string]string{}
 	maps.Copy(labels, pc.Labels)
 	if fleetName != "" {
-		labels["klimax.dev/fleet"] = fleetName
+		labels["marina.sh/fleet"] = fleetName
 	}
 
 	cl := config.ClusterConfig{Name: pc.Name, Num: pc.Num, Region: pc.Region, Zone: pc.Zone, Labels: labels}

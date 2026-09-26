@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/lima-vm/lima/v2/pkg/ptr"
 )
@@ -108,7 +108,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 if [ ! -b "${DEV}" ]; then
-  echo "klimax: image disk ${DEV} not found; refusing to start Docker on an empty image store" >&2
+  echo "marina: image disk ${DEV} not found; refusing to start Docker on an empty image store" >&2
   exit 1
 fi
 real=$(readlink -f "${DEV}")
@@ -116,7 +116,7 @@ real=$(readlink -f "${DEV}")
 mkdir -p "${TARGET}"
 
 # Already mounted from the right device? Just make sure the filesystem fills
-# the block device (a no-op unless 'klimax disk resize-image' grew it since
+# the block device (a no-op unless 'marina disk resize-image' grew it since
 # last boot — resize2fs is safe to run online and safe to run when there's
 # nothing to grow). Mounted from anything else (e.g. the root filesystem) —
 # unmount before taking over.
@@ -136,13 +136,13 @@ resize2fs "${real}"
 `, diskName)
 
 	unit := `[Unit]
-Description=Mount the klimax persistent image disk at /var/lib/containerd
+Description=Mount the marina persistent image disk at /var/lib/containerd
 Before=containerd.service docker.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/local/sbin/klimax-image-disk.sh
+ExecStart=/usr/local/sbin/marina-image-disk.sh
 
 [Install]
 WantedBy=multi-user.target
@@ -151,8 +151,8 @@ WantedBy=multi-user.target
 	// containerd/docker do not exist yet on first boot (the main provision script
 	// installs Docker); systemd picks these drop-ins up when the units appear.
 	dropIn := `[Unit]
-Requires=klimax-image-disk.service
-After=klimax-image-disk.service
+Requires=marina-image-disk.service
+After=marina-image-disk.service
 `
 
 	// systemctl still needs a script: `data` writes files, not enablement
@@ -161,15 +161,15 @@ After=klimax-image-disk.service
 	enableScript := `#!/bin/bash
 set -eux -o pipefail
 systemctl daemon-reload
-systemctl enable klimax-image-disk.service
-/usr/local/sbin/klimax-image-disk.sh
+systemctl enable marina-image-disk.service
+/usr/local/sbin/marina-image-disk.sh
 `
 
 	return []limatype.Provision{
-		dataFile("/usr/local/sbin/klimax-image-disk.sh", mountScript, "0755"),
-		dataFile("/etc/systemd/system/klimax-image-disk.service", unit, "0644"),
-		dataFile("/etc/systemd/system/containerd.service.d/10-klimax-image-disk.conf", dropIn, "0644"),
-		dataFile("/etc/systemd/system/docker.service.d/10-klimax-image-disk.conf", dropIn, "0644"),
+		dataFile("/usr/local/sbin/marina-image-disk.sh", mountScript, "0755"),
+		dataFile("/etc/systemd/system/marina-image-disk.service", unit, "0644"),
+		dataFile("/etc/systemd/system/containerd.service.d/10-marina-image-disk.conf", dropIn, "0644"),
+		dataFile("/etc/systemd/system/docker.service.d/10-marina-image-disk.conf", dropIn, "0644"),
 		{Mode: limatype.ProvisionModeSystem, Script: &enableScript},
 	}
 }
@@ -189,7 +189,7 @@ set -eux -o pipefail
 # Lima writes the host's proxy settings into /etc/environment, but boot.sh does
 # not export them, so this script would otherwise install Docker with a direct
 # connection and fail behind a proxy. Sourcing it also covers the case where the
-# proxy comes from macOS system settings rather than the klimax config.
+# proxy comes from macOS system settings rather than the marina config.
 if [ -f /etc/environment ]; then
   set -a
   . /etc/environment
@@ -199,12 +199,12 @@ fi
 # Increase inotify limits for kind
 sysctl -w fs.inotify.max_user_watches=524288
 sysctl -w fs.inotify.max_user_instances=512
-echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.d/99-klimax.conf
-echo 'fs.inotify.max_user_instances=512'  >> /etc/sysctl.d/99-klimax.conf
+echo 'fs.inotify.max_user_watches=524288' >> /etc/sysctl.d/99-marina.conf
+echo 'fs.inotify.max_user_instances=512'  >> /etc/sysctl.d/99-marina.conf
 
 # Enable IP forwarding for host<->kind routing
 sysctl -w net.ipv4.ip_forward=1
-echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-klimax-forward.conf
+echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-marina-forward.conf
 
 # Install tools
 export DEBIAN_FRONTEND=noninteractive
@@ -222,12 +222,12 @@ EOF
 fi
 
 # sshd: evict idle sessions after 30s (10 probes × 3s) so interrupted
-# klimax commands don't leave zombie sshd-session processes that exhaust
+# marina commands don't leave zombie sshd-session processes that exhaust
 # vsock connection slots and cause "handshake failed: EOF" on new dials.
 if ! grep -q '^ClientAliveInterval' /etc/ssh/sshd_config; then
   cat >> /etc/ssh/sshd_config <<EOF
 
-# Added by klimax provisioner
+# Added by marina provisioner
 ClientAliveInterval 3
 ClientAliveCountMax 10
 EOF
@@ -305,10 +305,10 @@ func buildPortForwards(cfg *config.Config) []limatype.PortForward {
 }
 
 // BuildMounts returns the full set of host directories shared into the guest,
-// in the order Lima should see them: klimax's own registry cache first, then the
+// in the order Lima should see them: marina's own registry cache first, then the
 // user's vm.mounts.
 //
-// Split out of Build so `klimax up` can compute the desired mount set for an
+// Split out of Build so `marina up` can compute the desired mount set for an
 // existing VM and reconcile it against the live instance config without
 // regenerating the rest of the Lima YAML (which would rewrite provisioning
 // scripts a running guest has already applied).
@@ -324,7 +324,7 @@ func BuildMounts(cfg *config.Config) []limatype.Mount {
 	// /var/lib/registry, so the guest must be able to write to it.
 	if cfg.Registries.CacheStorage == "host" {
 		home, _ := os.UserHomeDir()
-		cacheDir := filepath.Join(home, ".klimax", "registry-cache")
+		cacheDir := filepath.Join(home, ".marina", "registry-cache")
 		mounts = append(mounts, limatype.Mount{Location: cacheDir, Writable: ptr.Of(true)})
 	}
 
@@ -346,7 +346,7 @@ func BuildMounts(cfg *config.Config) []limatype.Mount {
 	return mounts
 }
 
-// Build constructs a limatype.LimaYAML from a klimax config.
+// Build constructs a limatype.LimaYAML from a marina config.
 // The result can be marshaled to YAML and passed to instance.Create().
 func Build(cfg *config.Config) *limatype.LimaYAML {
 	vzNAT := true
@@ -446,14 +446,14 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 }
 
 // DockerProxyDropInPath is the systemd drop-in that gives dockerd the proxy.
-const DockerProxyDropInPath = "/etc/systemd/system/docker.service.d/30-klimax-proxy.conf"
+const DockerProxyDropInPath = "/etc/systemd/system/docker.service.d/30-marina-proxy.conf"
 
 // DockerProxyDropIn renders the drop-in contents for a config, or "" when no
 // explicit proxy is set.
 //
 // A drop-in is required because systemd services do not read /etc/environment —
 // that file is applied by pam_env, which only covers login sessions. dockerd is
-// what pulls kindest/node and registry:2, so without this klimax fails at the
+// what pulls kindest/node and registry:2, so without this marina fails at the
 // first image pull behind a proxy while `curl` from a shell works, which is a
 // thoroughly confusing way to fail.
 func DockerProxyDropIn(cfg *config.Config, lima0IP string) string {
@@ -468,7 +468,7 @@ func DockerProxyDropIn(cfg *config.Config, lima0IP string) string {
 	sort.Strings(keys) // deterministic, so drift detection sees real changes only
 
 	var b strings.Builder
-	b.WriteString("# Managed by klimax. Edits are overwritten on `klimax up`.\n[Service]\n")
+	b.WriteString("# Managed by marina. Edits are overwritten on `marina up`.\n[Service]\n")
 	for _, k := range keys {
 		fmt.Fprintf(&b, "Environment=%q\n", k+"="+env[k])
 	}
@@ -479,7 +479,7 @@ func DockerProxyDropIn(cfg *config.Config, lima0IP string) string {
 // applies before the provision scripts run — so it is in place before Docker is
 // installed, and systemd picks it up when docker.service first appears.
 func proxyProvisions(cfg *config.Config) []limatype.Provision {
-	// lima0 IP is unknowable at creation; `klimax up` rewrites the drop-in with
+	// lima0 IP is unknowable at creation; `marina up` rewrites the drop-in with
 	// it once the VM is running (see cli.reconcileDockerProxy).
 	content := DockerProxyDropIn(cfg, "")
 	if content == "" {

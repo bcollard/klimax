@@ -1,12 +1,12 @@
-# klimax configuration file
+# marina configuration file
 # Copy to config.yaml and adjust to your needs.
-# Run: klimax up -c config.yaml
+# Run: marina up -c config.yaml
 
 # ── VM ──────────────────────────────────────────────────────────────────────
 vm:
-  name: "klimax"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
+  name: "marina"         # Lima instance name; socket exposed at ~/.<name>.docker.sock
   # cpus and memory default to a share of THIS Mac, so the same config suits a
-  # 16GiB Air and a 64GiB Studio. Set them to pin a value instead; klimax warns
+  # 16GiB Air and a 64GiB Studio. Set them to pin a value instead; marina warns
   # on `up` if what you pin exceeds the machine.
   #   cpus:   3/4 of the cores  (10-core M1 Pro -> 8)
   #   memory: half the RAM      (16GiB -> 8GiB, 32GiB -> 16GiB, 64GiB -> 32GiB)
@@ -14,7 +14,7 @@ vm:
   # memory: "20GiB"
   disk: "20GiB"       # default. Only the OS, Docker metadata and volumes live here —
                       # images go on imageDisk below. Sparse: it costs what it holds.
-                      # Grow later without recreating the VM: klimax disk resize 40GiB
+                      # Grow later without recreating the VM: marina disk resize 40GiB
   # Extra certificate authorities to trust — a proxy that terminates TLS
   # (corporate interception), or a private registry with a self-signed chain.
   # Installed in the VM, in every registry mirror, and in every kind node:
@@ -25,23 +25,23 @@ vm:
   # Enable Rosetta 2 for transparent amd64 container support (Apple Silicon only).
   # Requires Rosetta to be installed on the host:  softwareupdate --install-rosetta
   # rosetta: false
-  # Persistent container image store. klimax attaches a separate Lima data disk
+  # Persistent container image store. marina attaches a separate Lima data disk
   # ($LIMA_HOME/_disks/<vm>-img) and mounts it over /var/lib/containerd in the
   # guest, so kindest/node, registry:2 and any locally built images survive
-  # `klimax destroy`. A locally built image is the only kind no registry mirror
+  # `marina destroy`. A locally built image is the only kind no registry mirror
   # can restore.
   # Always on; defaults to "30GiB". There is no way to put the image store back
   # on the root disk — an empty value is treated as unset and re-defaulted.
-  # WARNING: only takes effect on new VMs (klimax destroy && klimax up).
+  # WARNING: only takes effect on new VMs (marina destroy && marina up).
   imageDisk: "30GiB"
   #
   # NOTE: this size applies only when the disk is first created. Raising it later
   # does not grow an existing disk — resize that explicitly, which keeps the
   # cached images instead of re-pulling them:
-  #   klimax down && klimax disk resize-image 30GiB && klimax up
+  #   marina down && marina disk resize-image 30GiB && marina up
 
   # Host directories shared into the guest over virtiofs. Empty by default:
-  # klimax shares nothing of yours, only its own registry cache.
+  # marina shares nothing of yours, only its own registry cache.
   #
   # Each directory appears in the VM at the SAME absolute path, and that is what
   # makes a host-path bind work from macOS:
@@ -57,8 +57,8 @@ vm:
   # thing to hand a container by accident, so opt in per directory.
   #
   # Unlike imageDisk and disablePortMirroring, this list does NOT need the VM
-  # recreated: `klimax up` spots the change and offers to restart the VM
-  # (`klimax status` shows the VM's current shares and flags a pending change).
+  # recreated: `marina up` spots the change and offers to restart the VM
+  # (`marina status` shows the VM's current shares and flags a pending change).
   # A restart still stops every kind cluster on the VM.
   mounts: []
   # mounts:
@@ -72,14 +72,14 @@ vm:
 
 # ── Networking ───────────────────────────────────────────────────────────────
 network:
-  # HTTP(S) proxy for everything klimax runs in the VM: dockerd, the registry
+  # HTTP(S) proxy for everything marina runs in the VM: dockerd, the registry
   # mirrors, and the containerd inside every kind node.
   #
-  # Leave this out on a normal network. klimax already picks up the Mac's system
+  # Leave this out on a normal network. marina already picks up the Mac's system
   # proxy settings on its own — this block is only for pointing at a different
   # proxy, or for a proxy macOS does not know about.
   #
-  # klimax computes no_proxy itself (the kind bridge CIDR, the cluster subnets,
+  # marina computes no_proxy itself (the kind bridge CIDR, the cluster subnets,
   # the mirror names, the host<->VM subnet); noProxy below is appended to that.
   # proxy:
   #   http:  "http://proxy.corp:3128"
@@ -92,24 +92,24 @@ network:
   kindBridgeCIDR: "172.30.0.0/16"
 
   # Disable Lima's automatic TCP port mirroring from the VM to 127.0.0.1 on the host.
-  # Default: true — Lima's TCP auto-mirroring is disabled, so klimax coexists cleanly
+  # Default: true — Lima's TCP auto-mirroring is disabled, so marina coexists cleanly
   # with other Lima-based VMs (kind-on-lima, Rancher Desktop) that also manage kind
   # clusters. Without this, both VMs race to mirror the same API-server port (e.g.
   # 7001) to 127.0.0.1, corrupting each other's kubeconfig connectivity.
   #
   # When true (default):
-  #   - Lima TCP auto-mirroring is disabled for all ports in the klimax VM.
+  #   - Lima TCP auto-mirroring is disabled for all ports in the marina VM.
   #   - Kubeconfigs use the VM's direct lima0 IP (e.g. 192.168.64.3:700N) instead
   #     of 127.0.0.1:700N. The lima0 IP is L2-reachable from the host via vzNAT.
   #   - The API server cert includes the lima0 IP as a SAN (added automatically).
-  #   - Re-run 'klimax kubeconfig merge <name>' after each VM restart to refresh the
+  #   - Re-run 'marina kubeconfig merge <name>' after each VM restart to refresh the
   #     address if the lima0 IP changes (vzNAT assigns IPs dynamically).
   #
   # Set to false to force loopback (127.0.0.1) addressing — e.g. if host-based
   # security software (CrowdStrike) blocks TCP connections to vzNAT IPs, or if you
-  # run only a single klimax VM and prefer stable 127.0.0.1 kubeconfigs.
+  # run only a single marina VM and prefer stable 127.0.0.1 kubeconfigs.
   #
-  # ⚠ VM-level setting: only takes effect on new VMs (klimax destroy && klimax up).
+  # ⚠ VM-level setting: only takes effect on new VMs (marina destroy && marina up).
   # disablePortMirroring: true
 
   # Local DNS for LoadBalancer Services, with no domain to own.
@@ -118,28 +118,28 @@ network:
   # *.<cluster>.<domain> are published too, and an
   # external-dns.kubernetes.io/hostname annotation adds a custom name.
   #
-  # What klimax runs for it:
+  # What marina runs for it:
   #   - etcd + CoreDNS containers on the kind network (x.y.255.52 / x.y.255.53)
   #   - ExternalDNS in each cluster created while this is on
-  #     (existing clusters: klimax dns attach <cluster>)
+  #     (existing clusters: marina dns attach <cluster>)
   #   - /etc/resolver/<domain> on the Mac — written once, needs sudo once
   #
-  # Applied on every `klimax up`; false removes all of the above.
+  # Applied on every `marina up`; false removes all of the above.
   dns:
     enabled: true
     # .internal is reserved by ICANN for private use. Keep a subdomain: GCP and
     # many corporate networks already use other names under .internal.
-    domain: "klimax.internal"
+    domain: "marina.internal"
     # Automatic name, relative to <cluster>.<domain> (ExternalDNS --fqdn-template;
     # fields .Name .Namespace .Labels .Annotations). Override per Service with the
     # external-dns.kubernetes.io/hostname annotation.
     nameTemplate: "{{.Name}}.{{.Namespace}}"
-    # Local CA for the zone. klimax creates a root in ~/.klimax/pki/<domain>/,
+    # Local CA for the zone. marina creates a root in ~/.marina/pki/<domain>/,
     # name-constrained to .<domain> and trusted in the System keychain (sudo once),
     # an intermediate per cluster constrained to .<cluster>.<domain>, and a
-    # *.<cluster>.<domain> wildcard as the Secret default/klimax-wildcard-tls.
-    # With cert-manager in the cluster, `klimax ca attach` adds a klimax-ca
-    # ClusterIssuer. klimax never installs cert-manager itself.
+    # *.<cluster>.<domain> wildcard as the Secret default/marina-wildcard-tls.
+    # With cert-manager in the cluster, `marina ca attach` adds a marina-ca
+    # ClusterIssuer. marina never installs cert-manager itself.
     tls:
       enabled: true
 
@@ -148,7 +148,7 @@ kind:
   # kindest/node image tag used when creating clusters.
   # ⚠ Matched to the kind CLI bundled in the VM. Changing it to another kindest/node
   # tag is UNSUPPORTED and may cause cluster creation to fail or hang (kubeadm/containerd
-  # errors) or behave unexpectedly. 'klimax cluster create' warns when this is overridden.
+  # errors) or behave unexpectedly. 'marina cluster create' warns when this is overridden.
   nodeVersion: "v1.36.1"
 
   # MetalLB manifest version installed in every cluster.
@@ -171,7 +171,7 @@ kind:
     #   resolvers: ["1.1.1.1", "1.0.0.1"]
 
   # Automatically merge the new cluster's context into ~/.kube/config after creation.
-  # Set to false to manage kubeconfig manually via 'klimax cluster merge <name>'.
+  # Set to false to manage kubeconfig manually via 'marina cluster merge <name>'.
   # autoMergeKubeconfig: true
 
   # Automatically remove the cluster's context/cluster/user from ~/.kube/config on deletion.
@@ -180,10 +180,10 @@ kind:
 # ── Registries ───────────────────────────────────────────────────────────────
 registries:
   # Where mirror registry cache data is persisted across container restarts.
-  # "host" (default): ~/.klimax/registry-cache/<name>/ on the macOS host,
-  #   virtiofs-mounted into the guest — cache survives 'klimax destroy'.
-  # "guest": /var/lib/klimax/registry-cache/<name>/ inside the VM only —
-  #   cache is wiped on 'klimax destroy'.
+  # "host" (default): ~/.marina/registry-cache/<name>/ on the macOS host,
+  #   virtiofs-mounted into the guest — cache survives 'marina destroy'.
+  # "guest": /var/lib/marina/registry-cache/<name>/ inside the VM only —
+  #   cache is wiped on 'marina destroy'.
   # cacheStorage: "host"
 
   # Pull-through mirror containers running in the VM.
@@ -195,7 +195,7 @@ registries:
   # the "kind" network, and a name like "quay.io" would make Docker DNS resolve
   # quay.io to the container itself — the proxy could no longer reach the real
   # upstream, silently falling back to slow, unauthenticated direct pulls.
-  # Use names like registry-quayio / registry-dockerio (klimax rejects hostname names).
+  # Use names like registry-quayio / registry-dockerio (marina rejects hostname names).
   mirrors:
     - name: "registry-dockerio"
       port: 5030

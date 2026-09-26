@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/spf13/cobra"
 )
@@ -22,15 +22,15 @@ func newCopyCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "copy <source>... <destination>",
 		Aliases: []string{"cp"},
-		Short:   "Copy files between the host and the klimax VM",
-		Long: `Copies files to or from the klimax VM over SSH.
+		Short:   "Copy files between the host and the marina VM",
+		Long: `Copies files to or from the marina VM over SSH.
 
 Prefix the VM side with "vm:" (the VM's configured name also works). Exactly one
 side of the copy must carry the prefix:
 
-  klimax copy ./script.sh vm:/tmp/script.sh
-  klimax copy vm:/etc/containerd/certs.d/hosts.toml ./hosts.toml
-  klimax copy -r ./manifests vm:/tmp/manifests
+  marina copy ./script.sh vm:/tmp/script.sh
+  marina copy vm:/etc/containerd/certs.d/hosts.toml ./hosts.toml
+  marina copy -r ./manifests vm:/tmp/manifests
 
 Multiple sources are allowed when the destination is a directory.`,
 		Args: cobra.MinimumNArgs(2),
@@ -48,16 +48,16 @@ func runCopy(ctx context.Context, args []string, recursive bool) error {
 		return err
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return fmt.Errorf("inspecting VM: %w", err)
 	}
 	if inst == nil {
-		return errors.New("VM does not exist; run 'klimax up' first")
+		return errors.New("VM does not exist; run 'marina up' first")
 	}
 	if inst.Status != limatype.StatusRunning {
-		return fmt.Errorf("VM is not running (status: %s); run 'klimax up' first", inst.Status)
+		return fmt.Errorf("VM is not running (status: %s); run 'marina up' first", inst.Status)
 	}
 
 	opts, userHost, err := guest.SCPArgs(inst)
@@ -84,7 +84,7 @@ func runCopy(ctx context.Context, args []string, recursive bool) error {
 	case guestSides == 0:
 		return fmt.Errorf("no %q prefix found — one side of the copy must be a VM path (e.g. %s/tmp/file)", guestPathPrefix, guestPathPrefix)
 	case guestSides == len(resolved):
-		return errors.New("both sides are VM paths; use 'klimax shell cp ...' to copy within the VM")
+		return errors.New("both sides are VM paths; use 'marina shell cp ...' to copy within the VM")
 	}
 
 	scpBin, err := exec.LookPath("scp")

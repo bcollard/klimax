@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 )
 
 func dockerHostsTestConfig() config.RegistryConfig {
@@ -95,7 +95,7 @@ func TestDockerHostsTOMLKeepsUpstreamAsFallback(t *testing.T) {
 // out a user's registry CA sitting in the same directory.
 func TestDockerHostsTOMLCarriesOwnershipMarker(t *testing.T) {
 	body := hostFor(t, DockerdRegistryHosts(dockerHostsTestConfig()), "quay.io").DockerHostsTOML()
-	if !strings.Contains(strings.SplitN(body, "\n", 2)[0], "Managed by klimax") {
+	if !strings.Contains(strings.SplitN(body, "\n", 2)[0], "Managed by marina") {
 		t.Errorf("first line must mark ownership:\n%s", body)
 	}
 }

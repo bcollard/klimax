@@ -25,7 +25,7 @@ import (
 func newHostagentCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:    "hostagent INSTANCE",
-		Short:  "Run the Lima host agent (spawned internally by klimax)",
+		Short:  "Run the Lima host agent (spawned internally by marina)",
 		Hidden: true,
 		Args:   cobra.ExactArgs(1),
 		RunE:   runHostagent,

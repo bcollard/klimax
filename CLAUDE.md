@@ -1,12 +1,43 @@
-# Project: klimax
+# Project: marina
 
 Go CLI that wraps **Lima** to manage a macOS Virtualization.framework VM running Docker, with support for multiple kind clusters, pull-through registry mirrors, and pure L3 host↔cluster routing.
 
 ---
 
+## Renamed from klimax (v1.0)
+
+marina was **klimax** until v1.0 ("klimax" reads as "climax" in English). The
+rename is a clean break, not a compatibility layer — see `internal/cli/migrate.go`:
+
+- Every identifier moved: module `github.com/bcollard/marina`, `~/.marina`
+  (LIMA_HOME), VM `marina` / disk `marina-img`, `marina.internal`, labels
+  `marina.sh/fleet` + `managed-by=marina`, `apiVersion: marina.sh/v1alpha1`,
+  `marina-*` Secrets/ClusterIssuers/containers, launchd `sh.marina.autostart`.
+- `marina migrate` deletes the klimax VM (by pointing LIMA_HOME at `~/.klimax` —
+  the klimax binary is gone after `brew upgrade`), rewrites the config (default
+  VM name, DNS zone), moves the registry cache, removes the launchd agent.
+  **It does not move the image disk** (Lima would reformat a renamed disk: it
+  checks the ext4 label `lima-<disk name>`) nor the CA (constrained to
+  `.klimax.internal`).
+- `marina up` refuses to run while an unmigrated `~/.klimax` exists (two VMs on
+  one kind CIDR would fight over the host route).
+- `/etc/resolver` cleanup also removes files carrying the old `# Managed by klimax` marker.
+- The cask installs `klimax` as an alias of `marina` (goreleaser `custom_block`)
+  so existing scripts keep working — drop it in a later release.
+- Historical notes below that cite a version (e.g. "until v0.1.62") refer to
+  klimax releases; the text was renamed wholesale.
+
+Release-time steps outside this repo (not done by code): rename the GitHub repos
+(`klimax` → `marina`, `homebrew-klimax` → `homebrew-marina`, `klimax-website`,
+`klimax-ui`); add `cask_renames.json` `{"klimax": "marina"}` to the tap so
+`brew upgrade` moves users over; add the new website repo to the GCS WIF
+binding **before** renaming it; buy `marina.sh`; new logo wordmark.
+
+---
+
 ## Workspace rules (CRITICAL)
 
-1. **Referenced projects** — `./klimax.code-workspace` lists `../kind-on-lima`, `../lima`, `../colima` as reference folders. **Do NOT read these directories into your main context.** Spawn a sub-agent to search them when needed.
+1. **Referenced projects** — `./marina.code-workspace` lists `../kind-on-lima`, `../lima`, `../colima` as reference folders. **Do NOT read these directories into your main context.** Spawn a sub-agent to search them when needed.
 2. **Sub-agents** — Use the `Explore` agent to look up Lima/Colima internals. Extract only what you need and report back.
 
 ---
@@ -16,8 +47,8 @@ Go CLI that wraps **Lima** to manage a macOS Virtualization.framework VM running
 - **Lima Go packages** (`github.com/lima-vm/lima/v2`) — never shell out to `limactl`.
 - **`vmType: vz` only** — macOS Virtualization.framework; no QEMU.
 - **`up` is infrastructure-only** — it creates/starts the VM, provisions Docker, the kind network, registries, and routing rules. It does **not** create or manage kind clusters.
-- **Cluster lifecycle is CLI-only** — `klimax cluster create/delete/list`. There is no cluster list in the config file. `klimax cluster apply -f <Fleet>` creates a *fleet* declaratively, but the manifest is a **separate, ephemeral input** (like `kubectl apply -f`), never `config.yaml` — the config stays infra-only. `apply` is additive (create-if-absent, skip-if-present).
-- **All provisioning is idempotent** — safe to re-run `klimax up` at any time.
+- **Cluster lifecycle is CLI-only** — `marina cluster create/delete/list`. There is no cluster list in the config file. `marina cluster apply -f <Fleet>` creates a *fleet* declaratively, but the manifest is a **separate, ephemeral input** (like `kubectl apply -f`), never `config.yaml` — the config stays infra-only. `apply` is additive (create-if-absent, skip-if-present).
+- **All provisioning is idempotent** — safe to re-run `marina up` at any time.
 - **Pure L3 routing, no SNAT** — macOS routes `kindBridgeCIDR` to the VM's `lima0` IP; iptables exempts replies from MASQUERADE.
 
 ---
@@ -41,9 +72,9 @@ Lima VM     <guest-side IP>  lima0       (macOS-assigned, e.g. 192.168.64.2)
 ```
 vzNAT uses Apple's `VZNATNetworkDeviceAttachment`. IPs are assigned by macOS and **cannot be specified**. Lima does not store the guest IP in its `Instance` struct — it must be discovered at runtime from inside the VM.
 
-klimax does this correctly: `routing.Lima0IP()` SSHs into the VM and reads `ip -o -4 addr show lima0`. No IP is hardcoded anywhere in klimax.
+marina does this correctly: `routing.Lima0IP()` SSHs into the VM and reads `ip -o -4 addr show lima0`. No IP is hardcoded anywhere in marina.
 
-**Multiple Lima VMs (limactl, colima, etc.) are safe:** each vzNAT VM gets a distinct IP from macOS on its own `bridge1xx` interface. klimax's macOS route always targets the specific IP of the klimax VM, so other VMs don't interfere.
+**Multiple Lima VMs (limactl, colima, etc.) are safe:** each vzNAT VM gets a distinct IP from macOS on its own `bridge1xx` interface. marina's macOS route always targets the specific IP of the marina VM, so other VMs don't interfere.
 
 Note: the `192.168.105.x` subnet is Lima's **socket_vmnet** range (shared/bridged mode) — entirely different from vzNAT.
 
@@ -53,7 +84,7 @@ All kind clusters share a single Docker bridge network named `kind` with a user-
 ### Pure L3 routing (Strategy 2 — no SNAT)
 Docker installs: `POSTROUTING -s <bridge-cidr> ! -o <bridge-if> -j MASQUERADE`
 
-To preserve source IPs in host→cluster replies, klimax inserts a nat exemption rule **before** Docker's MASQUERADE:
+To preserve source IPs in host→cluster replies, marina inserts a nat exemption rule **before** Docker's MASQUERADE:
 ```
 iptables -t nat -I POSTROUTING 1 -s <kindCIDR> -d <VM_NET> -o lima0 -j ACCEPT
 ```
@@ -68,8 +99,8 @@ These rules are persisted via:
 ## Package layout
 
 ```
-cmd/klimax/main.go                   entry point
-skill.go                             root package `klimax`; go:embed SKILL.md into var SkillMD (shipped by `klimax skill install`)
+cmd/marina/main.go                   entry point
+skill.go                             root package `marina`; go:embed SKILL.md into var SkillMD (shipped by `marina skill install`)
 SKILL.md                             canonical Agent Skill (single source of truth; embedded into the binary)
 
 internal/config/config.go            Config struct, LoadConfig, Validate, defaults
@@ -81,7 +112,7 @@ internal/registry/registry.go        EnsureRegistries, RegistryHosts (pull-throu
 internal/registry/daemon.go          HubMirrorEndpoint, MergeDaemonConfig — dockerd's Hub-only registry-mirrors (classic image store)
 internal/registry/dockerhosts.go     DockerdRegistryHosts, DockerHostsTOML — per-registry mirrors for dockerd via /etc/docker/certs.d
 internal/kind/kind.go                CreateCluster, DeleteCluster, ListClusters, DetectUsedNums, NextFreeNum, LabelNodes
-internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (klimax.dev/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
+internal/kind/query.go               ClustersMatchingSelector (kubectl -l), ClustersByFleet (marina.sh/fleet via jq), ClusterInfoFor (nodes/version/ready/labels)
 internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/localdns/localdns.go        Ensure/Remove (etcd + CoreDNS containers at x.y.255.52/.53), Corefile, PurgeCluster, ListRecords, ProbeFromHost
 internal/localdns/externaldns.go     ExternalDNSManifest / InstallExternalDNS (plain kubectl, not Helm), ClusterForward (CoreDNS stanza)
@@ -106,34 +137,34 @@ internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), De
 internal/hostres/hostmem_darwin.go   hostMemoryBytes via sysctl hw.memsize (build-tagged; the package still builds for linux)
 
 internal/cli/root.go                 cobra root command, persistent flags (--config, --debug)
-internal/cli/up.go                   `klimax up` (alias `start`) — infra only (VM + network + registries + routing)
-internal/cli/down.go                 `klimax down` (aliases `stop`, `d`) [--remove-route]
-internal/cli/destroy.go              `klimax destroy`
-internal/cli/status.go               `klimax status` — collectStatus() → statusReport, rendered as text/json/yaml (host mounts read from the instance config, so they show on a stopped VM)
-internal/cli/doctor.go               `klimax doctor` — diagnose() → []doctorCheck, `--fix` applies the Fixable ones
-internal/cli/fleet_export.go         `klimax fleet export` — live clusters → Fleet manifest (args, -l selector, or picker)
-internal/cli/version.go              `klimax version`
-internal/cli/shell.go                `klimax shell` — interactive SSH session, or non-interactive command runner (args → remote command, exit code propagated)
-internal/cli/copy.go                 `klimax copy` — scp between host and VM (`vm:`/`<vmName>:` marks the guest side)
-internal/cli/sudoers.go              `klimax sudoers` — emits/checks the NOPASSWD rules for the two /sbin/route commands
-internal/cli/disk.go                 `klimax disk resize` — grows vm.disk + the Lima instance config (applied on next start)
-                                     `klimax disk resize-image` — grows the vm.imageDisk data disk in place (VM must be stopped)
-internal/cli/prune.go                `klimax prune` — removes superseded guest agents, orphaned registry caches, (opt-in) Lima download cache
-internal/cli/autostart.go            `klimax autostart` — launchd agent (dev.klimax.autostart) running `klimax up` at login
-internal/cli/config_cmd.go           `klimax config edit` — opens config in $VISUAL / $EDITOR
-internal/cli/cluster.go              `klimax cluster` subcommands (create/delete/list/label/e2e-test-nginx; use+merge deprecated → kubeconfig)
-internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/use) — kubeconfig helpers; `use` merges + kubectl use-context
-internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
-internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
-internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/up.go                   `marina up` (alias `start`) — infra only (VM + network + registries + routing)
+internal/cli/down.go                 `marina down` (aliases `stop`, `d`) [--remove-route]
+internal/cli/destroy.go              `marina destroy`
+internal/cli/status.go               `marina status` — collectStatus() → statusReport, rendered as text/json/yaml (host mounts read from the instance config, so they show on a stopped VM)
+internal/cli/doctor.go               `marina doctor` — diagnose() → []doctorCheck, `--fix` applies the Fixable ones
+internal/cli/fleet_export.go         `marina fleet export` — live clusters → Fleet manifest (args, -l selector, or picker)
+internal/cli/version.go              `marina version`
+internal/cli/shell.go                `marina shell` — interactive SSH session, or non-interactive command runner (args → remote command, exit code propagated)
+internal/cli/copy.go                 `marina copy` — scp between host and VM (`vm:`/`<vmName>:` marks the guest side)
+internal/cli/sudoers.go              `marina sudoers` — emits/checks the NOPASSWD rules for the two /sbin/route commands
+internal/cli/disk.go                 `marina disk resize` — grows vm.disk + the Lima instance config (applied on next start)
+                                     `marina disk resize-image` — grows the vm.imageDisk data disk in place (VM must be stopped)
+internal/cli/prune.go                `marina prune` — removes superseded guest agents, orphaned registry caches, (opt-in) Lima download cache
+internal/cli/autostart.go            `marina autostart` — launchd agent (sh.marina.autostart) running `marina up` at login
+internal/cli/config_cmd.go           `marina config edit` — opens config in $VISUAL / $EDITOR
+internal/cli/cluster.go              `marina cluster` subcommands (create/delete/list/label/e2e-test-nginx; use+merge deprecated → kubeconfig)
+internal/cli/kubeconfig.go           `marina kubeconfig` (path/env/merge/remove/use) — kubeconfig helpers; `use` merges + kubectl use-context
+internal/cli/cluster_apply.go        `marina cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
+internal/cli/fleet.go                `marina fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the marina.sh/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
+internal/cli/registry.go             `marina registry clean-cache`
 internal/cli/fleetzone.go            fleet zones: checkZoneNames/checkClusterNameFree (fleet ≠ cluster name), installFleetCA, joinFleetZone (adopt), leaveFleetZone (delete: owner-scoped purge; last member removes zone + CA)
-internal/cli/ca.go                   `klimax ca status|cert|attach|secret|trust|untrust`; reconcileLocalCA (up), localCAForCluster/installLocalCA (create), removeLocalCA (delete/destroy)
-internal/cli/dns.go                  `klimax dns list|attach`; helpers wired into up/create/delete (withLocalDNSForward, installLocalDNS, deleteCluster)
-internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
-internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
-internal/cli/docker_env.go           `klimax docker-env` — prints DOCKER_HOST export (current shell only)
-internal/cli/docker_context.go       `klimax docker-context` — creates/switches Docker context (persistent)
-internal/cli/hostagent.go            `klimax hostagent` — hidden; Lima spawns this as a detached daemon
+internal/cli/ca.go                   `marina ca status|cert|attach|secret|trust|untrust`; reconcileLocalCA (up), localCAForCluster/installLocalCA (create), removeLocalCA (delete/destroy)
+internal/cli/dns.go                  `marina dns list|attach`; helpers wired into up/create/delete (withLocalDNSForward, installLocalDNS, deleteCluster)
+internal/cli/skill.go                `marina skill install|path` — install the embedded Agent Skill for AI coding tools
+internal/cli/completion.go           `marina completion bash|zsh|fish|powershell`
+internal/cli/docker_env.go           `marina docker-env` — prints DOCKER_HOST export (current shell only)
+internal/cli/docker_context.go       `marina docker-context` — creates/switches Docker context (persistent)
+internal/cli/hostagent.go            `marina hostagent` — hidden; Lima spawns this as a detached daemon
 ```
 
 ---
@@ -153,7 +184,7 @@ Cluster lifecycle is **not** in the config file. The config drives infrastructur
 
 ```yaml
 vm:
-  name: "klimax"         # Lima instance name; socket at ~/.<name>.docker.sock
+  name: "marina"         # Lima instance name; socket at ~/.<name>.docker.sock
   cpus: 8                # default: 3/4 of the host's cores, min 2 (10-core -> 8)
   memory: "20GiB"        # default: half the host's RAM, min 2GiB
                          # (16GiB -> 8GiB, 32GiB -> 16GiB, 64GiB -> 32GiB)
@@ -165,7 +196,7 @@ vm:
                          # Always on — applyDefaults re-fills an empty value, so
                          # there is no config route back to the root disk.
                          # ⚠ VM-level: new VMs only. Resize an existing one with
-                         # `klimax disk resize-image`.
+                         # `marina disk resize-image`.
   mounts: []             # host dirs shared into the guest over virtiofs; empty by default.
                          # Each appears at the SAME absolute path in the VM, which is
                          # what makes a host-path `docker -v` bind resolve.
@@ -173,7 +204,7 @@ vm:
                          #     writable: true           (default false, matching Lima)
                          #     mountPoint: "/srv/x"     (optional; differing guest path
                          #                               breaks `-v <host path>`)
-                         # NOT VM-level: `klimax up` offers a restart to apply.
+                         # NOT VM-level: `marina up` offers a restart to apply.
 
 network:
   kindBridgeCIDR: "172.30.0.0/16"   # Docker "kind" network subnet
@@ -182,14 +213,14 @@ network:
                                      # kind clusters — prevents API-server port conflicts on 127.0.0.1.
                                      # Set false to force loopback (127.0.0.1) — e.g. host security software
                                      # (CrowdStrike) blocking vzNAT IPs.
-                                     # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
+                                     # ⚠ VM-level: only takes effect on new VMs (marina destroy && up).
   dns:
     enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
-    domain: "klimax.internal"        # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
+    domain: "marina.internal"        # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
     nameTemplate: "{{.Name}}.{{.Namespace}}"  # ExternalDNS --fqdn-template relative to <cluster>.<domain>; validated by rendering a sample
     tls:
       enabled: true                  # default true: local CA (see "Local CA"); ignored when dns.enabled is false
-                                     # NOT VM-level: reconciled on every `klimax up`; false removes everything
+                                     # NOT VM-level: reconciled on every `marina up`; false removes everything
 
 kind:
   nodeVersion: "v1.36.1"             # kindest/node image tag (default)
@@ -200,7 +231,7 @@ kind:
   autoRemoveKubeconfig: true         # remove context from ~/.kube/config after cluster delete (default: true)
 
 registries:
-  cacheStorage: "host"               # "host" (default): ~/.klimax/registry-cache/ via virtiofs, survives destroy
+  cacheStorage: "host"               # "host" (default): ~/.marina/registry-cache/ via virtiofs, survives destroy
                                      # "guest": inside VM, wiped on destroy
   mirrors:
     - name: "registry-dockerio"
@@ -242,18 +273,18 @@ Installed by `limatemplate.Build()` as a Lima `provision.system` script:
 Lima `portForwards` forwards `/run/docker.sock` → `~/.<vmName>.docker.sock` on the host.
 
 Two ways to use it:
-- `eval $(klimax docker-env)` — sets `DOCKER_HOST` in the current shell
-- `klimax docker-context` — creates/updates a named Docker context (persistent across shells); conflicts with `DOCKER_HOST` if both are set
+- `eval $(marina docker-env)` — sets `DOCKER_HOST` in the current shell
+- `marina docker-context` — creates/updates a named Docker context (persistent across shells); conflicts with `DOCKER_HOST` if both are set
 
 ### Self-contained guest agent
 
-Lima requires a small Linux binary (`lima-guestagent`) uploaded into the VM at startup for port forwarding. `internal/vm/guestagent.go` (`EnsureGuestAgent`) downloads it from Lima's GitHub release on first `klimax up` and caches it at `~/.klimax/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz`. The cache filename is **version-stamped**, so bumping the `lima/v2` module re-downloads the matching guest agent (guest and host agents must be the same version). No separate Lima installation required.
+Lima requires a small Linux binary (`lima-guestagent`) uploaded into the VM at startup for port forwarding. `internal/vm/guestagent.go` (`EnsureGuestAgent`) downloads it from Lima's GitHub release on first `marina up` and caches it at `~/.marina/share/lima/lima-guestagent.Linux-<arch>-<limaVer>.gz`. The cache filename is **version-stamped**, so bumping the `lima/v2` module re-downloads the matching guest agent (guest and host agents must be the same version). No separate Lima installation required.
 
 The downloaded version is matched to the Lima Go module version at runtime via `runtime/debug.ReadBuildInfo()`. The release asset uses `uname -m` naming: `Darwin-arm64` / `Darwin-x86_64` (not `Darwin-amd64`).
 
 ### lima-version file
 
-Lima writes a `lima-version` file (mode `0o444`) into the instance dir during `instance.Create()` with version `"<unknown>"` when no ldflags are set. klimax fixes this in `vm.create()` by calling `os.Remove()` then `os.WriteFile()` with the actual Lima module version read via `runtime/debug.ReadBuildInfo()`. `os.WriteFile` alone silently fails on a read-only file — the Remove step is required.
+Lima writes a `lima-version` file (mode `0o444`) into the instance dir during `instance.Create()` with version `"<unknown>"` when no ldflags are set. marina fixes this in `vm.create()` by calling `os.Remove()` then `os.WriteFile()` with the actual Lima module version read via `runtime/debug.ReadBuildInfo()`. `os.WriteFile` alone silently fails on a read-only file — the Remove step is required.
 
 ### hostagent subprocess
 
@@ -269,7 +300,7 @@ Error Domain=VZErrorDomain Code=2 "Invalid virtual machine configuration.
 The process doesn't have the com.apple.security.virtualization entitlement."
 ```
 
-`make build` handles this; a bare `go build -o /tmp/klimax ./cmd/klimax` does not:
+`make build` handles this; a bare `go build -o /tmp/marina ./cmd/marina` does not:
 
 ```sh
 codesign --sign - --entitlements entitlements.plist --force <binary>
@@ -281,11 +312,11 @@ right up until it tries to boot the VM.
 
 ### Binary replacement safety
 
-Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `amfid` to kill subsequent klimax execs. `make dev-install` aborts if a hostagent process is detected. `klimax doctor` also warns with the kill+cleanup fix command.
+Replacing `/usr/local/bin/marina` while the hostagent is running causes macOS `amfid` to kill subsequent marina execs. `make dev-install` aborts if a hostagent process is detected. `marina doctor` also warns with the kill+cleanup fix command.
 
 ---
 
-## Cluster creation flow (`klimax cluster create <name>`)
+## Cluster creation flow (`marina cluster create <name>`)
 
 1. **Auto-assign num** — inspect live `<name>-control-plane` containers' port bindings (70N → num=N); find lowest free slot 1–99.
 2. **Resolve API server address** — by default (`network.disablePortMirroring: true`) resolves the VM's live `lima0` IP via SSH (`routing.Lima0IP`) to embed in the cert SANs; with `disablePortMirroring: false` it uses `127.0.0.1`.
@@ -298,7 +329,7 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 6. **Install MetalLB** (`kubectl apply -f …/metallb-native.yaml`); wait for readiness
 7. **Configure IPAddressPool**: `172.30.<num>.1–7` and `172.30.<num>.16–254`; L2Advertisement
 8. **Patch CoreDNS** ConfigMap with per-zone upstream resolvers from `customDnsResolvers`
-9. **Export kubeconfig** → `~/.kube/klimax/<name>.kubeconfig`; server set to `https://<lima0IP>:700N` by default (`disablePortMirroring: true`) or `https://127.0.0.1:700N` (when `disablePortMirroring: false`)
+9. **Export kubeconfig** → `~/.kube/marina/<name>.kubeconfig`; server set to `https://<lima0IP>:700N` by default (`disablePortMirroring: true`) or `https://127.0.0.1:700N` (when `disablePortMirroring: false`)
 
 ### kubeconfig naming
 
@@ -306,13 +337,13 @@ Replacing `/usr/local/bin/klimax` while the hostagent is running causes macOS `a
 
 ---
 
-## Fleet manifest (`klimax cluster apply -f`)
+## Fleet manifest (`marina cluster apply -f`)
 
-A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/fleet.yaml`.
+A declarative fleet applied via `marina cluster apply -f <file>`. See `examples/fleet.yaml`.
 
 - **Minimal manifest lists only names** — everything else defaults:
   ```yaml
-  apiVersion: klimax.dev/v1alpha1
+  apiVersion: marina.sh/v1alpha1
   kind: Fleet
   spec:
     clusters: [dev, staging]
@@ -322,122 +353,122 @@ A declarative fleet applied via `klimax cluster apply -f <file>`. See `examples/
 - **Scheduler** (`internal/cli/cluster_apply.go`): builds a dependsOn DAG, creates clusters up to `spec.maxParallel` at a time (default 1 = sequential), gating each on its dependencies via per-cluster `done` channels. `strategy: FailFast` (default) stops scheduling new clusters after the first failure; `ContinueOnError` presses on.
 - **Race-safety** (ties into [[project_concurrent_cluster_create]]): all nums are **pre-assigned** in `fleet.Resolve` before any create (honouring explicit nums, filling gaps around live clusters); kubeconfig merges are **serialized** behind a mutex even when creates run in parallel.
 - **Additive**: existing clusters are skipped (never recreated/mutated). Mirror-name selections are validated against the config catalog up front.
-- **Teardown**: `klimax cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
-- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every klimax cluster always gets `managed-by=klimax`; fleets add `klimax.dev/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `klimax cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
-- **`fleet` command & selectors**: fleet membership is derived from the live `klimax.dev/fleet` node label (not the manifest), so `klimax fleet list/describe/delete/label <name>` operate on whatever clusters currently carry the label.
-- **Adoption**: `apply`/`fleet create` only *skip* pre-existing clusters by name — it does not relabel them, so a listed cluster that isn't already a member is **not** silently pulled into the fleet. Instead it warns and lists them; re-run with `--adopt` to relabel them into the fleet (fleet label + the manifest entry's labels, via `adoptIntoFleet` → `kind.LabelNodes`). `klimax fleet adopt <fleet> <cluster>…` does the same for arbitrary existing clusters (just sets `klimax.dev/fleet`). `fleet delete <name>` and `fleet label <name>` resolve members via `kind.ClustersMatchingSelector(g, "klimax.dev/fleet=<name>")`; `fleet list` groups via `kind.ClustersByFleet`. `cluster list -l` / `cluster delete -l` take an arbitrary kubectl label selector (matched in-guest by kubectl, one call per cluster). `fleet create -f`/`delete -f` delegate to the same code as `cluster apply -f`/`delete -f`. Selectors are charset-validated (`selectorRE`) before shell interpolation.
+- **Teardown**: `marina cluster delete -f <file>` deletes the manifest's clusters that exist, in reverse-dependency order (`fleet.DeletionOrder`), prompting unless `--yes`.
+- **Node labels** (`kind.applyNodeLabels`, applied post-create via `kubectl label nodes --all --overwrite`, admin creds so no NodeRestriction): every marina cluster always gets `managed-by=marina`; fleets add `marina.sh/fleet=<metadata.name>`; `region`/`zone` are surfaced as `topology.kubernetes.io/*` (kubeadm node-labels patch); custom labels come from `-l key=value` (CLI) or `labels:`/`defaults.labels` (Fleet). Validated by `config.ValidateLabels` before any create. Existing clusters can be relabeled with `marina cluster label <name> -l key=value` / `-l key-` (reuses `kind.LabelNodes`).
+- **`fleet` command & selectors**: fleet membership is derived from the live `marina.sh/fleet` node label (not the manifest), so `marina fleet list/describe/delete/label <name>` operate on whatever clusters currently carry the label.
+- **Adoption**: `apply`/`fleet create` only *skip* pre-existing clusters by name — it does not relabel them, so a listed cluster that isn't already a member is **not** silently pulled into the fleet. Instead it warns and lists them; re-run with `--adopt` to relabel them into the fleet (fleet label + the manifest entry's labels, via `adoptIntoFleet` → `kind.LabelNodes`). `marina fleet adopt <fleet> <cluster>…` does the same for arbitrary existing clusters (just sets `marina.sh/fleet`). `fleet delete <name>` and `fleet label <name>` resolve members via `kind.ClustersMatchingSelector(g, "marina.sh/fleet=<name>")`; `fleet list` groups via `kind.ClustersByFleet`. `cluster list -l` / `cluster delete -l` take an arbitrary kubectl label selector (matched in-guest by kubectl, one call per cluster). `fleet create -f`/`delete -f` delegate to the same code as `cluster apply -f`/`delete -f`. Selectors are charset-validated (`selectorRE`) before shell interpolation.
 
 ---
 
 ## CLI reference
 
 ```
-klimax up                              Start VM + infra (idempotent; alias: start)
-klimax down                            Stop VM (no sudo required; aliases: stop, d)
-klimax down --remove-route             Stop VM and remove macOS host route (requires sudo)
-klimax destroy                         Delete all clusters, delete VM, remove route
-klimax status                          Show VM state, host mounts, local DNS, clusters, route, iptables
+marina up                              Start VM + infra (idempotent; alias: start)
+marina down                            Stop VM (no sudo required; aliases: stop, d)
+marina down --remove-route             Stop VM and remove macOS host route (requires sudo)
+marina destroy                         Delete all clusters, delete VM, remove route
+marina status                          Show VM state, host mounts, local DNS, clusters, route, iptables
   -o text|json|yaml                    Output format (json/yaml for tooling; `clusters.names` is always a list)
-klimax doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state, local DNS path)
+marina doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state, local DNS path)
   -o text|json|yaml                    Output format; each check has a stable `id`, `status`, `fixable`
-  --fix                                Apply the repairs klimax can perform: route, iptables, IP forwarding.
+  --fix                                Apply the repairs marina can perform: route, iptables, IP forwarding.
                                        VM creation/start, Rosetta install and hostagent cleanup stay advisory.
-klimax version                         Print version
-klimax shell                           Open interactive SSH session in the VM
-klimax shell <cmd> [args...]           Run a command in the VM (stdin/stdout passed through, exit code propagated)
+marina version                         Print version
+marina shell                           Open interactive SSH session in the VM
+marina shell <cmd> [args...]           Run a command in the VM (stdin/stdout passed through, exit code propagated)
   -t, --tty                            Force pseudo-terminal allocation
-klimax copy <src>... <dst>             Copy files host↔VM; prefix the VM side with `vm:` (or the VM's name)
+marina copy <src>... <dst>             Copy files host↔VM; prefix the VM side with `vm:` (or the VM's name)
   -r, --recursive                      Copy directories
-klimax config edit                     Open config in $VISUAL / $EDITOR / nano / vi
+marina config edit                     Open config in $VISUAL / $EDITOR / nano / vi
 
-klimax disk resize <size>              Grow the VM disk (e.g. 80GiB); rewrites vm.disk + instance lima.yaml, applied on next start
-klimax disk resize-image <size>        Grow the persistent image-cache disk (vm.imageDisk), preserving the cached images.
+marina disk resize <size>              Grow the VM disk (e.g. 80GiB); rewrites vm.disk + instance lima.yaml, applied on next start
+marina disk resize-image <size>        Grow the persistent image-cache disk (vm.imageDisk), preserving the cached images.
                                        VM must be stopped: the backing file cannot be resized while attached.
                                        Lima's own boot script grows the partition + ext4 on the next start.
                                        ⚠ vm.imageDisk in the config applies only at disk *creation* — EnsureImageDisk
                                        never resizes an existing disk, so `up` warns when the two drift.
-klimax prune                           Remove reclaimable caches (superseded guest agents, orphaned registry-cache dirs)
+marina prune                           Remove reclaimable caches (superseded guest agents, orphaned registry-cache dirs)
   --dry-run                            Report without removing
   --downloads                          Also clear Lima's shared image download cache (~/Library/Caches/lima/download)
   -y, --yes                            Skip the confirmation prompt (required when non-interactive)
-klimax sudoers                         Print sudoers rules so `up` never prompts for the host route
+marina sudoers                         Print sudoers rules so `up` never prompts for the host route
   --check                              Inspect `sudo -l` output for both NOPASSWD route rules
-klimax autostart install               Install + load the launchd agent (--print writes the plist to stdout)
-klimax autostart uninstall             Unload + remove it
-klimax autostart status                Report plist presence and launchd state
+marina autostart install               Install + load the launchd agent (--print writes the plist to stdout)
+marina autostart uninstall             Unload + remove it
+marina autostart status                Report plist presence and launchd state
 
-klimax docker-env                      Print: export DOCKER_HOST=unix://~/.<name>.docker.sock
-klimax docker-env --unset              Print: unset DOCKER_HOST
+marina docker-env                      Print: export DOCKER_HOST=unix://~/.<name>.docker.sock
+marina docker-env --unset              Print: unset DOCKER_HOST
 
-klimax docker-context                  Create/update "klimax" Docker context + docker context use <name>
-klimax docker-context --unset          docker context use default
+marina docker-context                  Create/update "marina" Docker context + docker context use <name>
+marina docker-context --unset          docker context use default
 
-klimax cluster create <name>           Create a kind cluster (num auto-assigned)
+marina cluster create <name>           Create a kind cluster (num auto-assigned)
   --region europe-west1                Override topology region label
   --zone   europe-west1-b              Override topology zone label
   -l, --label key=value               Extra node label (repeatable)
-klimax cluster apply -f <file>         Create a fleet from a Fleet manifest (- for stdin)
+marina cluster apply -f <file>         Create a fleet from a Fleet manifest (- for stdin)
   --dry-run                            Print the resolved plan (nums, DAG, options) and exit
   --max-parallel N                     Override spec.maxParallel (concurrent creations)
-klimax cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
+marina cluster delete [name]           Delete a cluster; interactive multi-select picker if no name given
   -f <file>                            Delete the clusters listed in a Fleet manifest (reverse-dependency order)
   -l, --selector <sel>                 Delete clusters whose nodes match a label selector
   -y, --yes                            Skip the confirmation prompt
-klimax cluster list                    List clusters with num, API port, kubeconfig path
+marina cluster list                    List clusters with num, API port, kubeconfig path
   -o text|json|yaml                    Output format
-  -l, --selector <sel>                 Filter by node label selector (e.g. klimax.dev/fleet=f1)
-klimax cluster use <name>              DEPRECATED → 'klimax kubeconfig env <name>'
-klimax cluster merge <name>            DEPRECATED → 'klimax kubeconfig merge <name>'
+  -l, --selector <sel>                 Filter by node label selector (e.g. marina.sh/fleet=f1)
+marina cluster use <name>              DEPRECATED → 'marina kubeconfig env <name>'
+marina cluster merge <name>            DEPRECATED → 'marina kubeconfig merge <name>'
 
-klimax kubeconfig path <name>          Print the cluster's kubeconfig file path
-klimax kubeconfig env <name>           Print: export KUBECONFIG=~/.kube/klimax/<name>.kubeconfig
-klimax kubeconfig merge <name>         Merge the cluster's context into ~/.kube/config
-klimax kubeconfig remove <name>        Remove the cluster's context from ~/.kube/config
-klimax kubeconfig use <name>           Merge + `kubectl config use-context <name>` (switch active context)
-klimax cluster label <name>            Label an existing cluster's nodes
+marina kubeconfig path <name>          Print the cluster's kubeconfig file path
+marina kubeconfig env <name>           Print: export KUBECONFIG=~/.kube/marina/<name>.kubeconfig
+marina kubeconfig merge <name>         Merge the cluster's context into ~/.kube/config
+marina kubeconfig remove <name>        Remove the cluster's context from ~/.kube/config
+marina kubeconfig use <name>           Merge + `kubectl config use-context <name>` (switch active context)
+marina cluster label <name>            Label an existing cluster's nodes
   -l, --label key=value               Set/overwrite a node label (repeatable)
   -l, --label key-                    Remove a node label
-klimax cluster e2e-test-nginx          Deploy nginx, expose, curl — uses current kubectl context on host
+marina cluster e2e-test-nginx          Deploy nginx, expose, curl — uses current kubectl context on host
   --cleanup                            Only remove nginx pod/svc (does NOT run the test)
 
-klimax fleet create -f <file>          Create clusters from a Fleet manifest (alias of 'cluster apply -f'; --dry-run, --max-parallel)
+marina fleet create -f <file>          Create clusters from a Fleet manifest (alias of 'cluster apply -f'; --dry-run, --max-parallel)
   --adopt                              Adopt pre-existing clusters listed in the manifest into this fleet (relabel them)
-klimax fleet adopt <fleet> <cluster>…  Adopt existing clusters into a fleet (sets their klimax.dev/fleet label)
-klimax fleet list [-o text|json|yaml]  List fleets (grouped by klimax.dev/fleet) and their member clusters
-klimax fleet describe <name>           Show a fleet's members with num, API port, kubeconfig, node count/version/readiness, labels ([-o text|json|yaml])
-klimax fleet export [cluster...]       Write a Fleet manifest for live clusters (reverse of `fleet create -f`)
+marina fleet adopt <fleet> <cluster>…  Adopt existing clusters into a fleet (sets their marina.sh/fleet label)
+marina fleet list [-o text|json|yaml]  List fleets (grouped by marina.sh/fleet) and their member clusters
+marina fleet describe <name>           Show a fleet's members with num, API port, kubeconfig, node count/version/readiness, labels ([-o text|json|yaml])
+marina fleet export [cluster...]       Write a Fleet manifest for live clusters (reverse of `fleet create -f`)
   -l, --selector <sel>                 Select by node label selector instead of names
-  --name <fleet>                       metadata.name (default: shared klimax.dev/fleet label, else "exported")
+  --name <fleet>                       metadata.name (default: shared marina.sh/fleet label, else "exported")
   --nums                               Record each cluster's num, pinning API ports on re-apply (default true)
                                        No names and no selector → interactive picker.
                                        Not captured (not recoverable from live state): dependsOn, registries, addons.
-klimax fleet delete <name>             Delete all clusters in the named fleet (-y to skip prompt)
-klimax fleet delete -f <file>          Delete the clusters listed in a Fleet manifest
-klimax fleet label <name> -l key=value Apply node labels to every cluster in the fleet (key- to remove)
+marina fleet delete <name>             Delete all clusters in the named fleet (-y to skip prompt)
+marina fleet delete -f <file>          Delete the clusters listed in a Fleet manifest
+marina fleet label <name> -l key=value Apply node labels to every cluster in the fleet (key- to remove)
 
-klimax registry clean-cache            Stop mirror containers + delete cache dirs; run 'klimax up' to restart
+marina registry clean-cache            Stop mirror containers + delete cache dirs; run 'marina up' to restart
 
-klimax dns list [-o text|json|yaml]    List names published in the local DNS zone (A records only; TXT ownership records hidden)
-klimax dns attach <cluster>...         Install ExternalDNS + the CoreDNS forward on existing clusters (restarts their CoreDNS)
+marina dns list [-o text|json|yaml]    List names published in the local DNS zone (A records only; TXT ownership records hidden)
+marina dns attach <cluster>...         Install ExternalDNS + the CoreDNS forward on existing clusters (restarts their CoreDNS)
 
-klimax ca status [-o text|json|yaml]   Root CA path/expiry/keychain trust, per-cluster wildcards
-klimax ca cert                         Print the root CA (PEM)
-klimax ca attach <cluster>...          Issue/renew the cluster's wildcard + install it; ClusterIssuer if cert-manager exists
-klimax ca secret <cluster> -n <ns>     Copy default/klimax-wildcard-tls into another namespace (--fleet: klimax-fleet-wildcard-tls)
-klimax ca trust | untrust              Add/remove the root's System-keychain trust (sudo)
+marina ca status [-o text|json|yaml]   Root CA path/expiry/keychain trust, per-cluster wildcards
+marina ca cert                         Print the root CA (PEM)
+marina ca attach <cluster>...          Issue/renew the cluster's wildcard + install it; ClusterIssuer if cert-manager exists
+marina ca secret <cluster> -n <ns>     Copy default/marina-wildcard-tls into another namespace (--fleet: marina-fleet-wildcard-tls)
+marina ca trust | untrust              Add/remove the root's System-keychain trust (sudo)
 
-klimax skill install                   Install the embedded Agent Skill into ~/.claude/skills/klimax/SKILL.md
+marina skill install                   Install the embedded Agent Skill into ~/.claude/skills/marina/SKILL.md
   --claude                             Target Claude Code's user skills dir (default true)
   --print                              Write the skill to stdout instead of installing
   --force, -f                          Overwrite an existing installed skill
-klimax skill path                      Print the Claude Code install path for the skill
+marina skill path                      Print the Claude Code install path for the skill
 
-klimax completion bash|zsh|fish|powershell   Print shell completion script
+marina completion bash|zsh|fish|powershell   Print shell completion script
 ```
 
 Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <level>`
 
-**Logging:** klimax's own logs use `log/slog`; Lima's library logs use `logrus`. By default klimax raises logrus to `error` so only klimax logs (and genuine Lima errors) show — the noisy `INFO[…]`/`WARN[…]` Lima lines are hidden. `--debug` surfaces Lima at `info` (and klimax at debug); `--lima-log-level trace|debug|info|warn|error|off` overrides explicitly (`off`→panic-only). Set in `root.go` `PersistentPreRunE` (`resolveLimaLogLevel`). The `hostagent` subcommand re-sets logrus to debug/JSON in `initHostagentLogrus`, so quieting the parent never affects VM readiness detection.
+**Logging:** marina's own logs use `log/slog`; Lima's library logs use `logrus`. By default marina raises logrus to `error` so only marina logs (and genuine Lima errors) show — the noisy `INFO[…]`/`WARN[…]` Lima lines are hidden. `--debug` surfaces Lima at `info` (and marina at debug); `--lima-log-level trace|debug|info|warn|error|off` overrides explicitly (`off`→panic-only). Set in `root.go` `PersistentPreRunE` (`resolveLimaLogLevel`). The `hostagent` subcommand re-sets logrus to debug/JSON in `initHostagentLogrus`, so quieting the parent never affects VM readiness detection.
 
 ---
 
@@ -451,8 +482,8 @@ publicly trusted certificates.
 
 | Piece | Where | Written by |
 |---|---|---|
-| etcd `klimax-dns-etcd` | kind network, `x.y.255.52` | `localdns.Ensure` in `up` |
-| CoreDNS `klimax-dns` (etcd plugin) | kind network, `x.y.255.53` | `localdns.Ensure` in `up` |
+| etcd `marina-dns-etcd` | kind network, `x.y.255.52` | `localdns.Ensure` in `up` |
+| CoreDNS `marina-dns` (etcd plugin) | kind network, `x.y.255.53` | `localdns.Ensure` in `up` |
 | ExternalDNS, provider `coredns` | each cluster, ns `external-dns` | `installLocalDNS` after `CreateCluster` |
 | CoreDNS forward of the zone | each cluster | `withLocalDNSForward` → `ApplyCoreDNSPatch` |
 | raw-table exemption + VM link DNS | no-NAT script (Rule 4) | `routing.InstallNoNat` |
@@ -462,9 +493,9 @@ Facts that shaped it, all verified on the live VM:
 
 - **Docker drops host traffic to container IPs.** Docker 29 installs a
   per-container `raw PREROUTING -d <ip> ! -i br-… -j DROP`. The `raw` table runs
-  before `filter`, so klimax's `DOCKER-USER` ACCEPTs never see the packet.
+  before `filter`, so marina's `DOCKER-USER` ACCEPTs never see the packet.
   MetalLB VIPs are unaffected because they are not container IPs. Rule 4 inserts
-  `-i lima0 -s <host gw> -d <dns ip>/32 -m comment --comment klimax-dns -j ACCEPT`
+  `-i lima0 -s <host gw> -d <dns ip>/32 -m comment --comment marina-dns -j ACCEPT`
   at the top; Docker **appends** its own rules, so the insert stays ahead of
   them. Only the DNS server is exempted — etcd takes unauthenticated writes and
   stays unreachable from the Mac.
@@ -486,7 +517,7 @@ Facts that shaped it, all verified on the live VM:
   publishes every Service type by default, and `--fqdn-template` names them all:
   headless Services resolve to pod IPs (10.x, unroutable from the Mac) and
   host-network pods to node IPs. Shipped without it in v0.2.0; fixed in v0.2.1
-  (existing clusters: `klimax dns attach`, and `policy: sync` removes the extras).
+  (existing clusters: `marina dns attach`, and `policy: sync` removes the extras).
 - **Each cluster owns a disjoint subzone** (`--domain-filter=<cluster>.<domain>`,
   `--txt-owner-id=<cluster>`), which makes `--policy=sync` safe.
 - **The etcd plugin serves TTL 300 for ExternalDNS's TTL-0 records, and a fixed
@@ -514,7 +545,7 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
 
 | Tier | Where | Constraint | Lifetime |
 |---|---|---|---|
-| Root | `~/.klimax/pki/<domain>/root.crt`, key in `private/` (0600/0700) — never leaves the Mac | `.<domain>` (critical) | ~6 years (`pki.CAValidityDays`) |
+| Root | `~/.marina/pki/<domain>/root.crt`, key in `private/` (0600/0700) — never leaves the Mac | `.<domain>` (critical) | ~6 years (`pki.CAValidityDays`) |
 | Intermediate, per cluster | `clusters/<cluster>/ca.crt` + `chain.crt` | `.<cluster>.<domain>` and `<cluster>.<domain>` | ~6 years |
 | Wildcard leaf, per cluster | `clusters/<cluster>/wildcard.crt` (leaf + intermediate) | — | 365 days; `EnsureCluster` re-issues within 30 days |
 
@@ -532,17 +563,17 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
   signed with a cluster intermediate is rejected by Go (`CANotAuthorizedForThisName`),
   curl (`permitted subtree violation`) and macOS. cert-manager does **not** check
   constraints when signing — enforcement is client-side, which is where it counts.
-- **klimax never installs cert-manager.** A kubectl-applied cert-manager would
+- **marina never installs cert-manager.** A kubectl-applied cert-manager would
   collide with the Helm install most recipes do. When one is present,
-  `InstallInCluster` adds Secret `<cm-ns>/klimax-ca` (intermediate chain + key) and
-  ClusterIssuer `klimax-ca`, retrying while the webhook comes up.
-- **In the cluster:** Secret `default/klimax-wildcard-tls` (`tls.crt` = leaf +
-  intermediate, `ca.crt` = root), ConfigMap `default/klimax-root-ca`, and the root in
-  each node's trust store (`kind.ConfigureCACerts`, file `klimax-local-ca.crt`) so
+  `InstallInCluster` adds Secret `<cm-ns>/marina-ca` (intermediate chain + key) and
+  ClusterIssuer `marina-ca`, retrying while the webhook comes up.
+- **In the cluster:** Secret `default/marina-wildcard-tls` (`tls.crt` = leaf +
+  intermediate, `ca.crt` = root), ConfigMap `default/marina-root-ca`, and the root in
+  each node's trust store (`kind.ConfigureCACerts`, file `marina-local-ca.crt`) so
   containerd trusts registries on zone names.
 - **Key material never reaches a log.** `guest.Run` logs commands and `RunScript`
   logs script bodies at debug level, so keys go through `guest.WriteSecretFile`
-  (content on stdin, path allowlisted) into `/tmp/klimax-ca-<cluster>/`, removed by
+  (content on stdin, path allowlisted) into `/tmp/marina-ca-<cluster>/`, removed by
   the install script's `trap`.
 - **A wildcard covers one label.** `*.<cluster>.<domain>` covers annotated names and
   Ingress hosts, not the default two-label automatic names; `nameTemplate:
@@ -550,13 +581,13 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
   ambiguous joins, shared 63-char label, and a rename for v0.2.x users).
 - **Fleet zones (`<fleet>.<domain>`).** Members' ExternalDNS get a second
   `--domain-filter` for the fleet zone (set at create, `fleet adopt`/`--adopt`,
-  and `dns attach`, from the live `klimax.dev/fleet` label). Automatic names stay in
+  and `dns attach`, from the live `marina.sh/fleet` label). Automatic names stay in
   the cluster zone; fleet names come only from the hostname annotation. **First
   member to publish a name owns it** (TXT registry; `--txt-owner-id` stays per
   cluster, so `sync` is safe). Verified: deleting the owner hands the name to the
   next claimant within one sync (~30s). Fleet CA: `fleets/<fleet>/` intermediate
   constrained to `.<fleet>.<domain>`, wildcard in every member as
-  `default/klimax-fleet-wildcard-tls` (+ `klimax-fleet-ca` ClusterIssuer). A fleet
+  `default/marina-fleet-wildcard-tls` (+ `marina-fleet-ca` ClusterIssuer). A fleet
   and a cluster may not share a name — both would own `<name>.<domain>`
   (`checkZoneNames`, `checkClusterNameFree`).
 - **Cluster delete purges fleet-zone records by owner, not by prefix**
@@ -567,7 +598,7 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
   `maxParallel > 1` has every member ask for the same fleet intermediate at once.
 - `up` creates + trusts the root (`sudo -n` when non-interactive → warning).
   `destroy` keeps the root and removes cluster intermediates. Turning `tls` off
-  neither deletes nor untrusts — `klimax ca untrust` is explicit.
+  neither deletes nor untrusts — `marina ca untrust` is explicit.
 - **macOS negative cache is ~75s** regardless of the zone's SOA (measured with TTL 5,
   minimum 30). The `denial 5` cap helps the VM and pods only.
 
@@ -615,7 +646,7 @@ Which mechanism applies depends on the **image store**:
   (`daemon/daemon.go`). Per-registry mirrors work.
 - **classic graphdriver store** — `lookupV2Endpoints`. Hub only.
 
-Since a user can switch stores without klimax running again, `klimax up` writes
+Since a user can switch stores without marina running again, `marina up` writes
 both. When `hosts.toml` supplies more than one host, moby skips the legacy
 merge itself, so they never conflict.
 
@@ -626,7 +657,7 @@ The `server = "<upstream>"` line matters: containerd tries the `[host.…]`
 entries first and falls back to `server`, so a mirror that is down degrades to
 a direct pull instead of failing it.
 
-Files carry a `# Managed by klimax` first line. Pruning a removed mirror checks
+Files carry a `# Managed by marina` first line. Pruning a removed mirror checks
 for that marker and deletes only `hosts.toml`, never the directory's other
 contents — the same path is where a user drops a registry CA.
 
@@ -647,7 +678,7 @@ mirror, and every pull ignores it.
 
 `registry.MergeDaemonConfig` sets only the `registry-mirrors` key.
 `daemon.json` is a file users edit (`insecure-registries`, `log-driver`,
-`default-address-pools`), and klimax has no business discarding that to set one
+`default-address-pools`), and marina has no business discarding that to set one
 field. A file that does not parse is reported and left alone rather than
 replaced.
 
@@ -656,21 +687,21 @@ replaced.
 ## HTTP proxy support
 
 `network.proxy` configures dockerd, the registry mirrors, and (indirectly) the
-kind nodes. Most of the chain already exists upstream; klimax fills two gaps.
+kind nodes. Most of the chain already exists upstream; marina fills two gaps.
 
 **What Lima and kind already do:**
 
 - Lima reads the Mac's system proxy (`propagateProxyEnv`, on by default) and
   writes it into the guest's `/etc/environment` `#LIMA-START` block.
-- klimax's SSH commands inherit it: `/etc/pam.d/sshd` has `session required
+- marina's SSH commands inherit it: `/etc/pam.d/sshd` has `session required
   pam_env.so` and sshd runs with `UsePAM yes`.
 - So `kind create cluster`, run over SSH, sees the proxy — and kind injects
   `ENV HTTP_PROXY/HTTPS_PROXY/NO_PROXY` into every node it creates. The node
   side is free.
 
-**What klimax must add:**
+**What marina must add:**
 
-1. **A dockerd systemd drop-in** (`30-klimax-proxy.conf`). `/etc/environment` is
+1. **A dockerd systemd drop-in** (`30-marina-proxy.conf`). `/etc/environment` is
    applied by `pam_env`, which covers login sessions only — systemd services
    never read it. dockerd is what pulls `kindest/node` and `registry:2`, so
    without the drop-in a proxied host fails at the first pull while `curl` from
@@ -689,7 +720,7 @@ proxy turns every in-cluster call into a timeout. It always contains
 (service + pod subnets), `network.kindBridgeCIDR`, a `/24` derived from the live
 lima0 IP, and every mirror name — then the user's own `noProxy` entries.
 
-> `10.0.0.0/8` is deliberate. klimax allocates `10.<num>.0.0/16` and
+> `10.0.0.0/8` is deliberate. marina allocates `10.<num>.0.0/16` and
 > `10.1<num>.0.0/16` per cluster, so enumerating them is impractical. On a
 > corporate network that also uses 10/8 those hosts bypass the proxy too, which
 > is normally correct — and the alternative breaks every cluster.
@@ -699,7 +730,7 @@ the guest's `/etc/environment` rather than re-running `scutil --proxy` on the
 host: Lima also rewrites loopback proxy addresses to a gateway the guest can
 reach, and re-deriving them would lose that.
 
-Reconciled on every `klimax up` (`cli.reconcileDockerProxy`), like `vm.mounts`
+Reconciled on every `marina up` (`cli.reconcileDockerProxy`), like `vm.mounts`
 and unlike `vm.imageDisk` — a drop-in has no state beyond the file, so changing
 the proxy never needs the VM recreated. Removing `network.proxy` removes the
 drop-in.
@@ -724,7 +755,7 @@ complication:
 
 Lima's `caCerts` is required rather than merely convenient: cloud-init installs
 Docker from `get.docker.com` during first boot, which fails TLS verification
-behind an intercepting proxy before any klimax provisioning runs.
+behind an intercepting proxy before any marina provisioning runs.
 
 `config.CACerts.Load` validates the PEM up front and refuses a file containing a
 private key — pointing at the wrong file otherwise surfaces much later as a pull
@@ -742,9 +773,9 @@ This matters more than it sounds: `registry:2` **panics at startup** when its
 upstream is unreachable, and with `--restart=always` that becomes a crash loop
 across every mirror.
 
-### Why klimax's own env block is stripped before inheriting
+### Why marina's own env block is stripped before inheriting
 
-`network.proxy` is written into a `#KLIMAX-START`/`#KLIMAX-END` block in the
+`network.proxy` is written into a `#MARINA-START`/`#MARINA-END` block in the
 guest's `/etc/environment`, so `kind create cluster` (and therefore every node)
 and in-guest `kubectl apply -f https://…` see it — Lima's block only ever
 carries what macOS system settings say.
@@ -761,7 +792,7 @@ never takes effect.
 `mountType: virtiofs` in `limatemplate.Build()` governs **`y.Mounts` only** — the
 host-directory shares. It has nothing to do with storage:
 
-| klimax config | Lima field | Guest | Mechanism |
+| marina config | Lima field | Guest | Mechanism |
 |---|---|---|---|
 | `vm.disk` | `disk` | `/dev/vda1` → `/` | virtio-blk block device, ext4 |
 | `vm.imageDisk` | `additionalDisks` | `/dev/vdb1` → `/var/lib/containerd` | virtio-blk block device, ext4 |
@@ -770,7 +801,7 @@ host-directory shares. It has nothing to do with storage:
 
 So `vm.mounts` is purely additive to `y.Mounts` and cannot interact with the
 image-disk machinery. `limatemplate.BuildMounts()` builds the whole list —
-registry cache first, then user mounts — and is exported so `klimax up` can
+registry cache first, then user mounts — and is exported so `marina up` can
 compute the desired set without regenerating the rest of the instance YAML.
 
 ### Why `vm.mounts` reconciles in place instead of needing `destroy && up`
@@ -778,7 +809,7 @@ compute the desired set without regenerating the rest of the instance YAML.
 `vm.imageDisk` and `network.disablePortMirroring` are baked in at instance
 creation because they have on-disk or guest-side consequences. Mounts have
 neither: Lima reads the list when the VM starts, so a stopped VM plus an edited
-`lima.yaml` *is* the whole change. Making people pay a `klimax destroy` — which
+`lima.yaml` *is* the whole change. Making people pay a `marina destroy` — which
 throws away every kind cluster — to share a folder would be absurd.
 
 `cli.reconcileMounts` therefore:
@@ -794,14 +825,14 @@ throws away every kind cluster — to share a folder would be absurd.
 
 `vm.WriteInstanceMounts` edits the parsed **yaml.Node tree**, not the struct: the
 instance config carries provisioning scripts the guest has already run, and
-regenerating the file from `Build()` would mean a klimax upgrade silently changed
+regenerating the file from `Build()` would mean a marina upgrade silently changed
 how a live guest is provisioned. `mounts_test.go` pins that the embedded literal
 block scalars survive the re-encode byte for byte.
 
 Locations are `~`-expanded in `BuildMounts` rather than left to Lima, so the
 value written to the instance config is exactly what drift detection reads back.
 
-> `klimax up` refuses a `vm.mounts` location that does not exist
+> `marina up` refuses a `vm.mounts` location that does not exist
 > (`cli.checkMountLocations`). Lima only warns, then hands Virtualization.framework
 > a share for a missing path, which surfaces much later as an opaque VM start
 > failure.
@@ -812,34 +843,34 @@ value written to the instance config is exactly what drift detection reads back.
 
 Mirror registry containers (`registry-dockerio`, `registry-quayio`, `registry-gcrio`, `registry-us-docker-pkgdev`, `registry-us-central1-docker-pkgdev`) are started with `-v <cacheDir>:/var/lib/registry`. The cache dir location depends on `registries.cacheStorage`:
 
-- **`host`** (default): `~/.klimax/registry-cache/<name>/` on the macOS host, virtiofs-mounted into the VM at the same absolute path. Survives `klimax destroy`. Lima mount is added to the instance at creation time in `limatemplate.Build()`.
-- **`guest`**: `/var/lib/klimax/registry-cache/<name>/` inside the VM. Persists across `klimax down`/`up`, wiped on `klimax destroy`.
+- **`host`** (default): `~/.marina/registry-cache/<name>/` on the macOS host, virtiofs-mounted into the VM at the same absolute path. Survives `marina destroy`. Lima mount is added to the instance at creation time in `limatemplate.Build()`.
+- **`guest`**: `/var/lib/marina/registry-cache/<name>/` inside the VM. Persists across `marina down`/`up`, wiped on `marina destroy`.
 
-> Changing `cacheStorage` after instance creation requires `klimax destroy && klimax up`.
+> Changing `cacheStorage` after instance creation requires `marina destroy && marina up`.
 
 ### Growing the image disk — Lima does the guest half
 
-`klimax disk resize-image` only grows the **host-side** backing file. Do not add
-`growpart`/`resize2fs` to klimax's mount unit: Lima's own
+`marina disk resize-image` only grows the **host-side** backing file. Do not add
+`growpart`/`resize2fs` to marina's mount unit: Lima's own
 `05-lima-disks.sh` already runs both for additional disks, and it runs *before*
-klimax's `klimax-image-disk.service`. Verified end to end — a 10GiB → 30GiB
-resize surfaced as a 30GiB ext4 in the guest with no klimax-side partition work.
+marina's `marina-image-disk.service`. Verified end to end — a 10GiB → 30GiB
+resize surfaced as a 30GiB ext4 in the guest with no marina-side partition work.
 The `resize2fs` in the mount script is belt-and-braces only.
 
 ---
 
 ## Safety and idempotency
 
-- `klimax up` is safe to run repeatedly — every step checks before acting.
+- `marina up` is safe to run repeatedly — every step checks before acting.
 - **Host over-commit check** (`warnOverCommittedResources` in `up.go` → `vm.CheckResources`): warns when `vm.cpus` exceeds the Mac's cores, when `vm.memory` exceeds its RAM (or passes 75% of it — a softer, differently-worded warning), or when `vm.disk + vm.imageDisk` exceeds free space. Advisory only: it never blocks, because the disks are sparse and macOS swaps rather than refusing. Host facts that cannot be read are skipped rather than guessed.
 - iptables rules are inserted only if not already present (`-C` check before `-I`).
 - Registry containers are started only if not already running.
 - `kind create cluster` only runs for clusters that don't exist.
-- The macOS route is added/refreshed only when missing or pointing at a stale gateway; when it already targets the current lima0 IP, `klimax up` skips it entirely and does **not** invoke sudo (so re-running `up` on a live VM never prompts). See `routing.RouteGateway`.
+- The macOS route is added/refreshed only when missing or pointing at a stale gateway; when it already targets the current lima0 IP, `marina up` skips it entirely and does **not** invoke sudo (so re-running `up` on a live VM never prompts). See `routing.RouteGateway`.
 - Route presence is judged by `routing.RouteGateway`, which requires `route -n get` to return the CIDR's own base as the destination. `RouteExists` (used by `status` and `doctor`) delegates to it — a plain `route -n get` succeeds for *any* address via the default route, which previously made both report a missing route as present.
-- `klimax up` needs root **only** for that route. `klimax sudoers` emits NOPASSWD rules for exactly the two `/sbin/route` invocations, which is what makes `klimax autostart` viable (launchd cannot answer a password prompt).
+- `marina up` needs root **only** for that route. `marina sudoers` emits NOPASSWD rules for exactly the two `/sbin/route` invocations, which is what makes `marina autostart` viable (launchd cannot answer a password prompt).
 - `cluster create` warns (does not block) when `kind.nodeVersion` differs from `config.DefaultKindNodeVersion` — the image the bundled kind CLI is validated against.
-- **On first VM creation only**, `klimax up` reviews an existing config (`reviewConfigBeforeCreate` in `up.go`): it lists options this klimax version adds that the config doesn't set (`config.MissingKeys` — schema diff of the user's file vs the defaulted struct), and if `kind.nodeVersion` drifts from `config.DefaultKindNodeVersion` it **interactively offers to rewrite it** in the config file (`rewriteNodeVersion`, preserves comments/indent). Non-interactive (no TTY): it keeps the pinned value and only warns — never blocks. Skipped entirely when the VM already exists.
+- **On first VM creation only**, `marina up` reviews an existing config (`reviewConfigBeforeCreate` in `up.go`): it lists options this marina version adds that the config doesn't set (`config.MissingKeys` — schema diff of the user's file vs the defaulted struct), and if `kind.nodeVersion` drifts from `config.DefaultKindNodeVersion` it **interactively offers to rewrite it** in the config file (`rewriteNodeVersion`, preserves comments/indent). Non-interactive (no TTY): it keeps the pinned value and only warns — never blocks. Skipped entirely when the VM already exists.
 - All kubeconfigs are written atomically with `0600` permissions.
 
 ---
@@ -848,15 +879,15 @@ The `resize2fs` in the mount script is belt-and-braces only.
 
 - Docker rewrites iptables on restart → handled by `ExecStartPost` drop-in.
 - MetalLB (and metrics-server) readiness waits are `180s` — their images pull from quay.io through the mirror on first use (controller must pull+run before speaker's `memberlist` secret exists, then speaker pulls); the mirror caches them so subsequent clusters are fast. (The multi-minute timeouts seen historically were actually the hostname-shadowing mirror-bypass bug — direct, uncached pulls — not a genuinely slow mirror.) `kind create cluster --wait 5m` covers the core node images (preloaded).
-- macOS VPN software can conflict with the host route → `klimax doctor` warns.
+- macOS VPN software can conflict with the host route → `marina doctor` warns.
 - `podSubnet: 10.1<num>.0.0/16` overlaps with `serviceSubnet: 10.<num+10>.0.0/16` for num≥10. In practice keep num 1–9 per VM.
 - The vzNAT subnet is macOS-assigned and not configurable; do not overlap `kindBridgeCIDR` with it (the macOS-assigned range is typically `192.168.64.x` but may vary).
 - `DOCKER_HOST` env var overrides the active Docker context — use one mechanism or the other, not both.
 - Registry containers run inside the VM; `guest.WriteFile` uses `sudo tee` and `sudo rm -rf` to handle root-owned stale paths from previous failed runs.
-- **Mirror names must not be hostnames.** A mirror container joins the shared `kind` Docker network; a name like `quay.io` makes Docker's embedded DNS resolve `quay.io` to the container itself, so the pull-through proxy (whose `remoteurl` is `https://quay.io`) resolves upstream to itself → connection refused → `404 manifest unknown` → containerd silently falls back to slow, unauthenticated **direct** pulls (no cache, docker.io throttling). `config.Validate` now rejects mirror names containing `.` or `:`. Renaming a mirror also requires recreating its container (`docker rm -f` the old one, then `klimax up`) since the old-named container keeps its port.
-- **The host filesystem is not shared by default.** Only `~/.klimax/registry-cache` is, plus whatever `vm.mounts` lists. Because dockerd runs in the guest and resolves bind sources there, `docker run -v <unshared host path>:/x` does not fail — it creates the path in the guest and the container gets an empty directory. `klimax up` refuses a `vm.mounts` location that doesn't exist, but it cannot catch a bind for a path nobody listed.
-- `klimax down` does **not** remove the macOS host route by default (stale route is harmless; `klimax up` refreshes it). Use `--remove-route` to remove it explicitly.
-- `network.disablePortMirroring` defaults to **true** — kubeconfigs use the VM's `lima0` IP, which is assigned dynamically by macOS and may change on VM restart; re-run `klimax kubeconfig merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may block TCP connections to vzNAT IPs — set `disablePortMirroring: false` (loopback/127.0.0.1 mode) in that case.
+- **Mirror names must not be hostnames.** A mirror container joins the shared `kind` Docker network; a name like `quay.io` makes Docker's embedded DNS resolve `quay.io` to the container itself, so the pull-through proxy (whose `remoteurl` is `https://quay.io`) resolves upstream to itself → connection refused → `404 manifest unknown` → containerd silently falls back to slow, unauthenticated **direct** pulls (no cache, docker.io throttling). `config.Validate` now rejects mirror names containing `.` or `:`. Renaming a mirror also requires recreating its container (`docker rm -f` the old one, then `marina up`) since the old-named container keeps its port.
+- **The host filesystem is not shared by default.** Only `~/.marina/registry-cache` is, plus whatever `vm.mounts` lists. Because dockerd runs in the guest and resolves bind sources there, `docker run -v <unshared host path>:/x` does not fail — it creates the path in the guest and the container gets an empty directory. `marina up` refuses a `vm.mounts` location that doesn't exist, but it cannot catch a bind for a path nobody listed.
+- `marina down` does **not** remove the macOS host route by default (stale route is harmless; `marina up` refreshes it). Use `--remove-route` to remove it explicitly.
+- `network.disablePortMirroring` defaults to **true** — kubeconfigs use the VM's `lima0` IP, which is assigned dynamically by macOS and may change on VM restart; re-run `marina kubeconfig merge <name>` after a restart to refresh kubeconfigs. Host-based security software (e.g. CrowdStrike) may block TCP connections to vzNAT IPs — set `disablePortMirroring: false` (loopback/127.0.0.1 mode) in that case.
 
 ---
 
@@ -866,7 +897,7 @@ When adding or changing a user-facing command, flag, or manifest field, update *
 
 - `README.md` (user reference) and this `CLAUDE.md`
 - `config.example.yaml` and/or `examples/fleet.yaml` where a config/manifest field changed
-- `SKILL.md` — the Agent Skill is **`go:embed`-ded into the binary** (shipped by `klimax skill install`). It does not update itself; after a build, verify with `klimax skill install --print`. It shipped stale once because it was easy to forget.
+- `SKILL.md` — the Agent Skill is **`go:embed`-ded into the binary** (shipped by `marina skill install`). It does not update itself; after a build, verify with `marina skill install --print`. It shipped stale once because it was easy to forget.
 
 Verify behavior end-to-end against the live VM before cutting a release (see the live-VM testing caution: throwaway clusters, clean up).
 
@@ -875,12 +906,12 @@ Verify behavior end-to-end against the live VM before cutting a release (see the
 - `goreleaser` for cross-compilation and GitHub releases
 - Triggered by pushing a `vX.Y.Z` tag (`.github/workflows/release.yml`); default bump is a patch on the latest tag.
 - **Tags must be annotated** — `git tag -a vX.Y.Z -m "..."`. A lightweight `git tag vX.Y.Z` fails with `fatal: no tag message?` (repo is configured to require annotated tags).
-- Homebrew distribution is a **Cask**, not a Formula: `bcollard/homebrew-klimax` → `Casks/klimax.rb`. goreleaser bumps it automatically on release. Users install/upgrade with `brew upgrade --cask klimax` (or `brew reinstall --cask klimax`).
-- **Ship the website changelog *before* pushing the tag.** `../klimax-website` needs a `docs/changelog.html` entry (plus any page whose documented defaults or commands changed) per its own `CLAUDE.md`. Merging that first means the docs are live when the binaries appear, instead of briefly describing a version nobody can install.
+- Homebrew distribution is a **Cask**, not a Formula: `bcollard/homebrew-marina` → `Casks/marina.rb`. goreleaser bumps it automatically on release. Users install/upgrade with `brew upgrade --cask marina` (or `brew reinstall --cask marina`).
+- **Ship the website changelog *before* pushing the tag.** `../marina-website` needs a `docs/changelog.html` entry (plus any page whose documented defaults or commands changed) per its own `CLAUDE.md`. Merging that first means the docs are live when the binaries appear, instead of briefly describing a version nobody can install.
 - A tag pushed by mistake can be recalled if you are quick: `gh run cancel <id>`, then `git push --delete origin vX.Y.Z && git tag -d vX.Y.Z`. Check `gh release view` and the Cask version first — once goreleaser has published, retagging is no longer clean and the fix is a new patch release.
 
 ### Supply chain / SBOM
 
 - **SBOM per release**: `.goreleaser.yaml` `sboms:` runs **syft** (installed by `release.yml` via `anchore/sbom-action`) to attach an SPDX SBOM for each release archive to the GitHub release. An SBOM is pinned to its build, so it's generated once per tag — not regenerated on a schedule.
 - **Vuln scanning**: `govulncheck` runs in `ci.yml` on every PR/push, and weekly via `security.yml` (cron) to catch newly-disclosed CVEs against unchanged deps. `dependabot.yml` opens weekly update PRs for gomod + github-actions.
-- Scope note: the SBOM covers the klimax **binary's** Go deps — not the tools klimax provisions inside the VM (Docker, kind, kubectl, MetalLB, node images), which are version-pinned in code instead.
+- Scope note: the SBOM covers the marina **binary's** Go deps — not the tools marina provisions inside the VM (Docker, kind, kubectl, MetalLB, node images), which are version-pinned in code instead.

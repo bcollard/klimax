@@ -1,4 +1,4 @@
-// Package localdns runs klimax's local DNS zone (klimax.internal by default):
+// Package localdns runs marina's local DNS zone (marina.internal by default):
 // an etcd + CoreDNS pair on the kind network that every cluster's ExternalDNS
 // writes LoadBalancer Services into, and the Mac resolves through
 // /etc/resolver.
@@ -22,18 +22,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 const (
 	// ServerContainer serves the zone. It is the only one of the two the Mac
 	// can reach: routing.InstallNoNat exempts its address, and only its address,
 	// from Docker's direct-routing drop.
-	ServerContainer = "klimax-dns"
+	ServerContainer = "marina-dns"
 	// EtcdContainer holds the records. Reachable from the kind network only —
 	// it accepts unauthenticated writes, so it is not exposed to the host.
-	EtcdContainer = "klimax-dns-etcd"
+	EtcdContainer = "marina-dns-etcd"
 
 	// Pinned rather than "latest": the Corefile and the etcd flags below were
 	// validated against exactly these, and a surprise upgrade of either would
@@ -43,11 +43,11 @@ const (
 
 	// EtcdPrefix is where the CoreDNS etcd plugin (SkyDNS layout) and
 	// ExternalDNS's coredns provider both look. Names are stored label-reversed
-	// under it: web.default.dev.klimax.internal →
-	// /skydns/internal/klimax/dev/default/web/<id>.
+	// under it: web.default.dev.marina.internal →
+	// /skydns/internal/marina/dev/default/web/<id>.
 	EtcdPrefix = "/skydns"
 
-	corefileDir  = "/etc/klimax/dns"
+	corefileDir  = "/etc/marina/dns"
 	corefilePath = corefileDir + "/Corefile"
 
 	kindNetwork = "kind"
@@ -68,7 +68,7 @@ const (
 // `reload` makes a Corefile edit (a domain change) apply without recreating
 // the container.
 func Corefile(cfg *config.Config) string {
-	return fmt.Sprintf(`# Managed by klimax
+	return fmt.Sprintf(`# Managed by marina
 %s:53 {
     errors
     etcd {
@@ -92,7 +92,7 @@ func Ensure(ctx context.Context, g *guest.Client, cfg *config.Config) error {
 	}
 	slog.Info("Ensuring local DNS", "domain", cfg.DNSDomain(), "server", cfg.DNSServerIP())
 
-	etcdArgs := fmt.Sprintf("etcd --name klimax-dns --data-dir /etcd-data"+
+	etcdArgs := fmt.Sprintf("etcd --name marina-dns --data-dir /etcd-data"+
 		" --listen-client-urls http://0.0.0.0:2379 --advertise-client-urls http://%s:2379", cfg.DNSEtcdIP())
 	if err := ensureContainer(ctx, g, EtcdContainer, EtcdImage, cfg.DNSEtcdIP(), "", etcdArgs); err != nil {
 		return err
@@ -214,8 +214,8 @@ func parseRecords(out string) []Record {
 	return recs
 }
 
-// keyToName turns /skydns/internal/klimax/dev/default/web/<id> back into
-// web.default.dev.klimax.internal. The last path segment is ExternalDNS's
+// keyToName turns /skydns/internal/marina/dev/default/web/<id> back into
+// web.default.dev.marina.internal. The last path segment is ExternalDNS's
 // per-target id, not a label.
 func keyToName(key string) string {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(key, EtcdPrefix), "/"), "/")
@@ -253,7 +253,7 @@ func ProbeFromHost(ctx context.Context, cfg *config.Config) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	_, err := r.LookupHost(ctx, "klimax-probe."+cfg.DNSDomain())
+	_, err := r.LookupHost(ctx, "marina-probe."+cfg.DNSDomain())
 	var dnsErr *net.DNSError
 	if err == nil || (errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
 		return nil

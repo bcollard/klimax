@@ -12,10 +12,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/localca"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/localca"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
@@ -23,7 +23,7 @@ import (
 
 // caStore is the local CA for the configured DNS domain.
 func caStore(cfg *config.Config) *localca.Store {
-	return localca.New(KlimaxHome(), cfg.DNSDomain())
+	return localca.New(MarinaHome(), cfg.DNSDomain())
 }
 
 func isInteractive() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
@@ -34,7 +34,7 @@ func isInteractive() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 //
 // Turning network.dns.tls off does not delete the CA or untrust it: a root
 // that disappeared would break every certificate already issued, and removing
-// trust is one explicit command (`klimax ca untrust`).
+// trust is one explicit command (`marina ca untrust`).
 func reconcileLocalCA(cfg *config.Config) {
 	if !cfg.TLSEnabled() {
 		return
@@ -57,7 +57,7 @@ func reconcileLocalCA(cfg *config.Config) {
 	slog.Info("Trusting the local CA in the System keychain (needs sudo, once)", "root", store.RootCertPath())
 	if err := store.Trust(isInteractive()); err != nil {
 		slog.Warn("Could not trust the local CA — HTTPS to the zone works with --cacert but not in browsers yet",
-			"err", err, "fix", "klimax ca trust")
+			"err", err, "fix", "marina ca trust")
 	}
 }
 
@@ -70,11 +70,11 @@ func localCAForCluster(cfg *config.Config, cluster string, caCerts map[string]st
 	c, err := caStore(cfg).EnsureCluster(cluster)
 	if err != nil {
 		slog.Warn("Local CA: could not issue the cluster's certificates — the cluster works, without them",
-			"cluster", cluster, "err", err, "fix", "klimax ca attach "+cluster)
+			"cluster", cluster, "err", err, "fix", "marina ca attach "+cluster)
 		return nil, caCerts
 	}
 	// Nodes trust the root too, so containerd can pull from a registry served
-	// on a klimax.internal name.
+	// on a marina.internal name.
 	merged := maps.Clone(caCerts)
 	if merged == nil {
 		merged = map[string]string{}
@@ -91,7 +91,7 @@ func installLocalCA(ctx context.Context, g *guest.Client, c *localca.Cluster) {
 	}
 	res, err := localca.InstallInCluster(ctx, g, c.Name, c)
 	if err != nil {
-		slog.Warn("Local CA: could not install the cluster's certificates", "cluster", c.Name, "err", err, "fix", "klimax ca attach "+c.Name)
+		slog.Warn("Local CA: could not install the cluster's certificates", "cluster", c.Name, "err", err, "fix", "marina ca attach "+c.Name)
 		return
 	}
 	fmt.Printf("tls: wildcard %s in Secret %s/%s\n", c.WildcardNames[0], "default", localca.WildcardSecret)
@@ -108,16 +108,16 @@ func removeLocalCA(cfg *config.Config, cluster string) {
 	}
 }
 
-// ─── klimax ca ───────────────────────────────────────────────────────────────
+// ─── marina ca ───────────────────────────────────────────────────────────────
 
 func newCACmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ca",
-		Short: "Manage the local CA for the klimax.internal zone (network.dns.tls)",
-		Long: `klimax runs a certificate authority for the local DNS zone: a root on the Mac,
+		Short: "Manage the local CA for the marina.internal zone (network.dns.tls)",
+		Long: `marina runs a certificate authority for the local DNS zone: a root on the Mac,
 name-constrained to .<domain> and trusted in the System keychain, an intermediate per
 cluster constrained to .<cluster>.<domain>, and a *.<cluster>.<domain> wildcard in each
-cluster as the Secret default/klimax-wildcard-tls.`,
+cluster as the Secret default/marina-wildcard-tls.`,
 	}
 	cmd.AddCommand(newCAStatusCmd(), newCACertCmd(), newCAAttachCmd(), newCASecretCmd(), newCATrustCmd(), newCAUntrustCmd())
 	return cmd
@@ -183,12 +183,12 @@ func newCAStatusCmd() *cobra.Command {
 				fmt.Println("Local CA is disabled (network.dns.tls.enabled: false)")
 			}
 			if !rep.Exists {
-				fmt.Println("No root CA yet — run: klimax up")
+				fmt.Println("No root CA yet — run: marina up")
 				return nil
 			}
 			trust := "trusted in the System keychain"
 			if !rep.Trusted {
-				trust = "NOT trusted — run: klimax ca trust"
+				trust = "NOT trusted — run: marina ca trust"
 			}
 			fmt.Printf("root:     %s\n          constrained to .%s, expires %s, %s\n", rep.Root, rep.Domain, rep.NotAfter, trust)
 			for _, c := range rep.Clusters {
@@ -208,8 +208,8 @@ func newCACertCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "cert",
 		Short: "Print the root CA certificate (PEM), e.g. for a client's trust store",
-		Example: `  klimax ca cert > klimax-root-ca.crt
-  klimax ca cert | kubectl create configmap klimax-root-ca -n my-app --from-file=ca.crt=/dev/stdin`,
+		Example: `  marina ca cert > marina-root-ca.crt
+  marina ca cert | kubectl create configmap marina-root-ca -n my-app --from-file=ca.crt=/dev/stdin`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadAndValidate()
@@ -218,7 +218,7 @@ func newCACertCmd() *cobra.Command {
 			}
 			b, err := os.ReadFile(caStore(cfg).RootCertPath())
 			if err != nil {
-				return fmt.Errorf("no root CA yet (run klimax up with network.dns.tls enabled): %w", err)
+				return fmt.Errorf("no root CA yet (run marina up with network.dns.tls enabled): %w", err)
 			}
 			_, err = os.Stdout.Write(b)
 			return err
@@ -233,7 +233,7 @@ func newCAAttachCmd() *cobra.Command {
 		Long: `Clusters created with network.dns.tls enabled are attached automatically. Re-run this to:
   - add a cluster created before the local CA existed,
   - renew its wildcard (re-issued when within 30 days of expiry),
-  - create the klimax-ca ClusterIssuer after installing cert-manager.
+  - create the marina-ca ClusterIssuer after installing cert-manager.
 
 Installing the root in the cluster's nodes restarts their containerd.`,
 		Args: cobra.MinimumNArgs(1),
@@ -271,7 +271,7 @@ Installing the root in the cluster's nodes restarts their containerd.`,
 					failed = append(failed, name)
 					continue
 				}
-				issuer := "no cert-manager in the cluster — install it, then re-run to add the klimax-ca ClusterIssuer"
+				issuer := "no cert-manager in the cluster — install it, then re-run to add the marina-ca ClusterIssuer"
 				if res.IssuerNamespace != "" {
 					issuer = "ClusterIssuer " + localca.IssuerName + " ready"
 				}
@@ -296,9 +296,9 @@ func newCASecretCmd() *cobra.Command {
 		Use:   "secret <cluster>",
 		Short: "Copy the cluster's wildcard Secret into another namespace",
 		Long: `A Secret can only be mounted from its own namespace, and an Ingress reads its TLS
-Secret from the Ingress's namespace. This copies default/klimax-wildcard-tls there
-(--fleet: default/klimax-fleet-wildcard-tls, the cluster's fleet's wildcard).
-Re-run after 'klimax ca attach' renews the wildcard.`,
+Secret from the Ingress's namespace. This copies default/marina-wildcard-tls there
+(--fleet: default/marina-fleet-wildcard-tls, the cluster's fleet's wildcard).
+Re-run after 'marina ca attach' renews the wildcard.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !namespaceRE.MatchString(namespace) {
@@ -320,7 +320,7 @@ Re-run after 'klimax ca attach' renews the wildcard.`,
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Target namespace (required)")
-	cmd.Flags().BoolVar(&fleetSecret, "fleet", false, "Copy the fleet wildcard (klimax-fleet-wildcard-tls) instead of the cluster's")
+	cmd.Flags().BoolVar(&fleetSecret, "fleet", false, "Copy the fleet wildcard (marina-fleet-wildcard-tls) instead of the cluster's")
 	_ = cmd.MarkFlagRequired("namespace")
 	return cmd
 }

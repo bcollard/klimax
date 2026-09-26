@@ -11,12 +11,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/hostres"
+	"github.com/bcollard/marina/internal/hostres"
 	"github.com/lima-vm/lima/v2/pkg/localpathutil"
 	"gopkg.in/yaml.v3"
 )
 
-// Config is the klimax user-facing configuration schema.
+// Config is the marina user-facing configuration schema.
 type Config struct {
 	VM         VMConfig       `yaml:"vm"`
 	Network    NetworkConfig  `yaml:"network"`
@@ -25,14 +25,14 @@ type Config struct {
 }
 
 type VMConfig struct {
-	Name    string `yaml:"name"`    // default: "klimax"
+	Name    string `yaml:"name"`    // default: "marina"
 	CPUs    int    `yaml:"cpus"`    // default: 4
 	Memory  string `yaml:"memory"`  // e.g. "10GiB"
 	Disk    string `yaml:"disk"`    // e.g. "40GiB"
 	Rosetta bool   `yaml:"rosetta"` // enable Rosetta 2 for amd64 containers (ARM64 only)
 	// ImageDisk sizes the separate Lima data disk mounted over the guest's
 	// container image store (/var/lib/containerd), e.g. "30GiB". Named Lima
-	// disks live in $LIMA_HOME/_disks/<vm>-img and survive `klimax destroy`, so
+	// disks live in $LIMA_HOME/_disks/<vm>-img and survive `marina destroy`, so
 	// kindest/node, registry:2 and locally built images are not lost when the VM
 	// is re-created (a locally built image is the only kind no registry mirror
 	// can restore).
@@ -43,11 +43,11 @@ type VMConfig struct {
 	// Config without going through LoadConfig, not a user-facing mode.
 	//
 	// ⚠ Lima instance config: the size takes effect only when the disk is first
-	// created. Grow an existing one with `klimax disk resize-image`.
+	// created. Grow an existing one with `marina disk resize-image`.
 	ImageDisk string `yaml:"imageDisk"`
 	// Mounts are host directories shared into the guest over virtiofs.
-	// Empty by default: klimax shares nothing but its own registry cache.
-	// Changing this list is applied by `klimax up` (see vm.ReconcileMounts) —
+	// Empty by default: marina shares nothing but its own registry cache.
+	// Changing this list is applied by `marina up` (see vm.ReconcileMounts) —
 	// unlike imageDisk, it does not need the VM recreated.
 	Mounts []Mount `yaml:"mounts"`
 	// CACerts are extra certificate authorities the VM and its clusters should
@@ -113,12 +113,12 @@ func (m Mount) GuestPath() string {
 // Lima looks for then never exists and it REFORMATS the disk on every boot,
 // destroying the image store it was meant to preserve.
 //
-// Found the hard way: "klimax-images" produced label "lima-klimax-imag".
+// Found the hard way: "marina-images" produced label "lima-marina-imag".
 const maxLimaDiskNameLen = 16 - len("lima-")
 
 // ImageDiskName is the Lima data disk holding the container image store for the
 // named VM. Lima disks are namespaced globally rather than per-instance, so the
-// VM name is embedded to keep multiple klimax VMs from colliding.
+// VM name is embedded to keep multiple marina VMs from colliding.
 //
 // The result is always <= maxLimaDiskNameLen chars; long VM names fall back to a
 // hashed suffix so distinct VMs still get distinct disks.
@@ -137,7 +137,7 @@ type NetworkConfig struct {
 	// KindBridgeCIDR is the subnet for the Docker bridge network named "kind".
 	KindBridgeCIDR string `yaml:"kindBridgeCIDR"` // e.g. "172.30.0.0/16"
 	// DisablePortMirroring prevents Lima from auto-mirroring guest TCP ports to
-	// 127.0.0.1 on the host. Defaults to true. Enabled by default so klimax
+	// 127.0.0.1 on the host. Defaults to true. Enabled by default so marina
 	// coexists cleanly with other Lima-based VMs (kind-on-lima, Rancher Desktop)
 	// that manage kind clusters with overlapping port numbers — otherwise both VMs
 	// race to mirror the same port (e.g. 7001) to 127.0.0.1 and confuse each
@@ -147,13 +147,13 @@ type NetworkConfig struct {
 	// force loopback (127.0.0.1) addressing — e.g. if host security software
 	// (CrowdStrike) blocks TCP connections to vzNAT IPs.
 	// nil = default (true).
-	// ⚠ Lima instance config: only takes effect on new VMs (klimax destroy && up).
+	// ⚠ Lima instance config: only takes effect on new VMs (marina destroy && up).
 	DisablePortMirroring *bool `yaml:"disablePortMirroring"`
 	// Proxy configures an HTTP(S) proxy for dockerd, the registry mirrors and
 	// the kind nodes. Leave it unset to use the Mac's system proxy settings,
 	// which Lima propagates into the guest on its own.
 	Proxy ProxyConfig `yaml:"proxy,omitempty"`
-	// DNS serves LoadBalancer Services under a local zone (klimax.internal by
+	// DNS serves LoadBalancer Services under a local zone (marina.internal by
 	// default). See DNSConfig.
 	DNS DNSConfig `yaml:"dns"`
 }
@@ -167,8 +167,8 @@ type CustomDNSResolver struct {
 	Resolvers []string `yaml:"resolvers,omitempty"`
 }
 
-// KindConfig holds global defaults used by every `klimax cluster create` invocation.
-// Cluster lifecycle is managed exclusively via `klimax cluster` subcommands — there
+// KindConfig holds global defaults used by every `marina cluster create` invocation.
+// Cluster lifecycle is managed exclusively via `marina cluster` subcommands — there
 // is no cluster list here.
 type KindConfig struct {
 	// NodeVersion is the kindest/node image tag used when creating clusters.
@@ -196,8 +196,8 @@ type ClusterConfig struct {
 	Num    int
 	Region string // topology.kubernetes.io/region label; default: europe-west<N>
 	Zone   string // topology.kubernetes.io/zone label;   default: europe-west<N>-b
-	// Labels are extra node labels applied to every node at creation. klimax
-	// always adds managed-by=klimax on top of these.
+	// Labels are extra node labels applied to every node at creation. marina
+	// always adds managed-by=marina on top of these.
 	Labels map[string]string
 }
 
@@ -205,8 +205,8 @@ type ClusterConfig struct {
 type RegistryConfig struct {
 	Mirrors []RegistryMirror `yaml:"mirrors"`
 	// CacheStorage controls where mirror registry data is persisted.
-	// "host" (default): bind-mounted from ~/.klimax/registry-cache on the macOS host via virtiofs.
-	// "guest": stored inside the VM at /var/lib/klimax/registry-cache (wiped on destroy).
+	// "host" (default): bind-mounted from ~/.marina/registry-cache on the macOS host via virtiofs.
+	// "guest": stored inside the VM at /var/lib/marina/registry-cache (wiped on destroy).
 	CacheStorage string `yaml:"cacheStorage"`
 }
 
@@ -222,7 +222,7 @@ type RegistryMirror struct {
 
 // defaults applied when fields are zero-valued.
 const (
-	DefaultVMName = "klimax"
+	DefaultVMName = "marina"
 	// FallbackCPUs and FallbackMemory apply only when the host's CPU count or
 	// RAM cannot be read. Normally both are scaled to the machine — see
 	// hostres.DefaultCPUs / DefaultMemoryBytes.
@@ -235,7 +235,7 @@ const (
 	// what they consume on the Mac.
 	DefaultDisk = "20GiB"
 	// DefaultImageDisk enables the persistent container image store by default.
-	// It survives `klimax destroy`, so recreating the VM no longer re-pulls
+	// It survives `marina destroy`, so recreating the VM no longer re-pulls
 	// every image — and a locally built image, which no registry mirror can
 	// restore, is no longer lost.
 	DefaultImageDisk = "30GiB"
@@ -258,7 +258,7 @@ var DefaultMirrors = []RegistryMirror{
 	{Name: "registry-us-central1-docker-pkgdev", Port: 5050, RemoteURL: "https://us-central1-docker.pkg.dev"},
 }
 
-// LoadConfig reads and parses a klimax YAML config file, applying defaults.
+// LoadConfig reads and parses a marina YAML config file, applying defaults.
 func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -351,9 +351,9 @@ func applyDefaults(cfg *Config) {
 // than a filename the user cannot open.
 const (
 	// ExampleConfigURL is the annotated reference config.
-	ExampleConfigURL = "https://github.com/bcollard/klimax/blob/main/config.example.yaml"
+	ExampleConfigURL = "https://github.com/bcollard/marina/blob/main/config.example.yaml"
 	// ConfigDocsURL is the configuration reference on the docs site.
-	ConfigDocsURL = "https://klimax.dev/docs/configuration.html"
+	ConfigDocsURL = "https://marina.sh/docs/configuration.html"
 )
 
 func WriteDefaultConfig(path string) error {
@@ -373,10 +373,10 @@ func WriteDefaultConfig(path string) error {
 	note := "  # ⚠ nodeVersion is matched to the kind CLI bundled in the VM.\n" +
 		"  # Changing it to another kindest/node tag is UNSUPPORTED and may cause cluster\n" +
 		"  # creation to fail or hang (kubeadm/containerd errors), or other unexpected\n" +
-		"  # behaviour. 'klimax cluster create' logs a warning when this is overridden.\n"
+		"  # behaviour. 'marina cluster create' logs a warning when this is overridden.\n"
 	body := strings.Replace(buf.String(), "  nodeVersion:", note+"  nodeVersion:", 1)
 
-	header := "# klimax configuration — edit to customise, then re-run 'klimax up'\n# Reference: " + ConfigDocsURL + "\n\n"
+	header := "# marina configuration — edit to customise, then re-run 'marina up'\n# Reference: " + ConfigDocsURL + "\n\n"
 	return os.WriteFile(path, []byte(header+body), 0o600)
 }
 
@@ -403,7 +403,7 @@ func sanitizeMirrorName(s string) string {
 }
 
 // reservedGuestPaths are guest paths a mount must not land on. The first group
-// is Lima's own list (limayaml.Validate rejects them outright); klimax adds the
+// is Lima's own list (limayaml.Validate rejects them outright); marina adds the
 // image-store mountpoint, where a host share would hide the container images the
 // vm.imageDisk data disk exists to preserve.
 var reservedGuestPaths = []string{
@@ -426,7 +426,7 @@ func validateMounts(mounts []Mount) []error {
 		}
 		// Reject relative paths *before* expansion. localpathutil.Expand would
 		// happily resolve "projects" against the current working directory, so
-		// the same config would mean different things depending on where klimax
+		// the same config would mean different things depending on where marina
 		// was run from.
 		if !filepath.IsAbs(m.Location) && !localpathutil.IsTildePath(m.Location) {
 			errs = append(errs, fmt.Errorf("vm.mounts[%d].location %q must be an absolute path or start with \"~/\"", i, m.Location))

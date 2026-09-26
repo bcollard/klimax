@@ -11,9 +11,9 @@ func TestRewriteVMDisk(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.yaml")
 	content := "vm:\n" +
-		"  name: \"klimax\"\n" +
+		"  name: \"marina\"\n" +
 		"  memory: \"20GiB\"\n" +
-		"  disk: \"40GiB\"  # grow with 'klimax disk resize'\n" +
+		"  disk: \"40GiB\"  # grow with 'marina disk resize'\n" +
 		"registries:\n" +
 		"  cacheStorage: \"host\"\n"
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
@@ -32,7 +32,7 @@ func TestRewriteVMDisk(t *testing.T) {
 	if !strings.Contains(s, `  disk: "80GiB"`) {
 		t.Errorf("disk not updated / indentation lost:\n%s", s)
 	}
-	if !strings.Contains(s, "# grow with 'klimax disk resize'") {
+	if !strings.Contains(s, "# grow with 'marina disk resize'") {
 		t.Errorf("inline comment was dropped:\n%s", s)
 	}
 	if !strings.Contains(s, `memory: "20GiB"`) {
@@ -128,7 +128,7 @@ func TestRewriteLimaDiskIgnoresNestedDiskKeys(t *testing.T) {
 
 func TestRewriteImageDisk(t *testing.T) {
 	const in = `vm:
-  name: "klimax"
+  name: "marina"
   disk: "60GiB"
   imageDisk: "10GiB"   # persistent container image store
 `
@@ -142,7 +142,7 @@ func TestRewriteImageDisk(t *testing.T) {
 	}
 	got, _ := os.ReadFile(p)
 	want := `vm:
-  name: "klimax"
+  name: "marina"
   disk: "60GiB"
   imageDisk: "30GiB"   # persistent container image store
 `

@@ -2,7 +2,7 @@ package localca
 
 import (
 	"github.com/bcollard/homepki/pkg/pki"
-	"github.com/bcollard/klimax/internal/hostsudo"
+	"github.com/bcollard/marina/internal/hostsudo"
 )
 
 // Trusted reports whether the system trusts the root. Unprivileged: on macOS

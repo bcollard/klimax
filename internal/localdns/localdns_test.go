@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
@@ -15,11 +15,11 @@ func testConfig(t *testing.T) *config.Config {
 }
 
 func TestZoneKey(t *testing.T) {
-	if got := zoneKey("dev.klimax.internal"); got != "/skydns/internal/klimax/dev/" {
+	if got := zoneKey("dev.marina.internal"); got != "/skydns/internal/marina/dev/" {
 		t.Errorf("zoneKey = %q", got)
 	}
 	// The trailing slash is what keeps a purge of "dev" off "dev2".
-	if strings.HasPrefix(zoneKey("dev2.klimax.internal"), zoneKey("dev.klimax.internal")) {
+	if strings.HasPrefix(zoneKey("dev2.marina.internal"), zoneKey("dev.marina.internal")) {
 		t.Error("purging one cluster would match another cluster's records")
 	}
 }
@@ -27,16 +27,16 @@ func TestZoneKey(t *testing.T) {
 func TestParseRecords(t *testing.T) {
 	// Real `etcdctl get --prefix` output shape from ExternalDNS v0.22 (keys and
 	// values on alternating lines; TXT ownership records carry "text", not "host").
-	out := `/skydns/internal/klimax/dev/default/a-web/299d5f18
+	out := `/skydns/internal/marina/dev/default/a-web/299d5f18
 {"text":"\"heritage=external-dns,external-dns/owner=dev\"","targetstrip":1}
-/skydns/internal/klimax/dev/default/web/0f01a28f
+/skydns/internal/marina/dev/default/web/0f01a28f
 {"host":"172.30.1.1","ttl":0}
-/skydns/internal/klimax/dev/custom/10036216
+/skydns/internal/marina/dev/custom/10036216
 {"host":"172.30.1.2","ttl":0}`
 	got := parseRecords(out)
 	want := []Record{
-		{Name: "custom.dev.klimax.internal", IP: "172.30.1.2"},
-		{Name: "web.default.dev.klimax.internal", IP: "172.30.1.1"},
+		{Name: "custom.dev.marina.internal", IP: "172.30.1.2"},
+		{Name: "web.default.dev.marina.internal", IP: "172.30.1.1"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %+v, want %+v", got, want)
@@ -54,7 +54,7 @@ func TestParseRecords(t *testing.T) {
 func TestCorefile(t *testing.T) {
 	cf := Corefile(testConfig(t))
 	for _, want := range []string{
-		"klimax.internal:53 {",
+		"marina.internal:53 {",
 		"endpoint http://172.30.255.52:2379",
 		"path /skydns",
 		"success 9984 30",
@@ -72,13 +72,13 @@ func TestExternalDNSManifest(t *testing.T) {
 	for _, want := range []string{
 		"--provider=coredns",
 		"--txt-owner-id=dev",
-		"--domain-filter=dev.klimax.internal",
+		"--domain-filter=dev.marina.internal",
 		"--policy=sync",
 		// Without it, headless Services publish pod IPs and host-network pods node IPs.
 		"--service-type-filter=LoadBalancer",
 		// Must reach the pod unrendered: the Helm chart's tpl turned this into
-		// "..dev.klimax.internal" and every record landed under an empty name.
-		"--fqdn-template={{.Name}}.{{.Namespace}}.dev.klimax.internal",
+		// "..dev.marina.internal" and every record landed under an empty name.
+		"--fqdn-template={{.Name}}.{{.Namespace}}.dev.marina.internal",
 		"--combine-fqdn-annotation",
 		"value: http://172.30.255.52:2379",
 		ExternalDNSImage,
@@ -110,7 +110,7 @@ func TestExternalDNSManifest(t *testing.T) {
 
 func TestResolverContent(t *testing.T) {
 	cfg := testConfig(t)
-	if got := ResolverPath(cfg); got != "/etc/resolver/klimax.internal" {
+	if got := ResolverPath(cfg); got != "/etc/resolver/marina.internal" {
 		t.Errorf("ResolverPath = %q", got)
 	}
 	c := ResolverContent(cfg)
@@ -125,20 +125,20 @@ func TestResolverContent(t *testing.T) {
 func TestOwnedKeys(t *testing.T) {
 	// Two members publish into fleet zone lab; east owns gateway, west owns
 	// portal and a deeper name under gateway that must survive east's purge.
-	out := `/skydns/internal/klimax/lab/a-gateway/1111
+	out := `/skydns/internal/marina/lab/a-gateway/1111
 {"text":"\"heritage=external-dns,external-dns/owner=lab-east,external-dns/resource=service/gateway/gw\""}
-/skydns/internal/klimax/lab/gateway/2222
+/skydns/internal/marina/lab/gateway/2222
 {"host":"172.30.4.3","ttl":0}
-/skydns/internal/klimax/lab/gateway/a-admin/3333
+/skydns/internal/marina/lab/gateway/a-admin/3333
 {"text":"\"heritage=external-dns,external-dns/owner=lab-west,external-dns/resource=service/gateway/admin\""}
-/skydns/internal/klimax/lab/gateway/admin/4444
+/skydns/internal/marina/lab/gateway/admin/4444
 {"host":"172.30.5.9","ttl":0}
-/skydns/internal/klimax/lab/a-portal/5555
+/skydns/internal/marina/lab/a-portal/5555
 {"text":"\"heritage=external-dns,external-dns/owner=lab-west\""}
-/skydns/internal/klimax/lab/portal/6666
+/skydns/internal/marina/lab/portal/6666
 {"host":"172.30.5.4","ttl":0}`
 	got := ownedKeys(out, "lab-east")
-	want := []string{"/skydns/internal/klimax/lab/a-gateway/1111", "/skydns/internal/klimax/lab/gateway/2222"}
+	want := []string{"/skydns/internal/marina/lab/a-gateway/1111", "/skydns/internal/marina/lab/gateway/2222"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ownedKeys(east) = %v, want %v", got, want)
 	}
@@ -153,12 +153,12 @@ func TestOwnedKeys(t *testing.T) {
 func TestExternalDNSManifestFleet(t *testing.T) {
 	cfg := testConfig(t)
 	m := ExternalDNSManifest(cfg, "lab-east", "lab")
-	for _, want := range []string{"--domain-filter=lab-east.klimax.internal", "--domain-filter=lab.klimax.internal", "--txt-owner-id=lab-east"} {
+	for _, want := range []string{"--domain-filter=lab-east.marina.internal", "--domain-filter=lab.marina.internal", "--txt-owner-id=lab-east"} {
 		if !strings.Contains(m, want) {
 			t.Errorf("manifest missing %q", want)
 		}
 	}
-	if strings.Contains(ExternalDNSManifest(cfg, "dev", ""), "--domain-filter=.klimax.internal") {
+	if strings.Contains(ExternalDNSManifest(cfg, "dev", ""), "--domain-filter=.marina.internal") {
 		t.Error("no fleet must not add an empty-fleet filter")
 	}
 }

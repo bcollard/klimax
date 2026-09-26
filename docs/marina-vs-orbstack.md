@@ -1,4 +1,4 @@
-# klimax vs. OrbStack
+# marina vs. OrbStack
 
 [OrbStack](https://orbstack.dev) is a fast, polished macOS application that bundles a Docker
 engine, a built-in Kubernetes cluster, and Linux VMs into a single GUI tool. It is one of the
@@ -9,7 +9,7 @@ local Kubernetes setup.
 
 ## Quick reference
 
-| | klimax | OrbStack |
+| | marina | OrbStack |
 |---|---|---|
 | **Purpose** | Multi-cluster kind lab | Developer Docker / K8s / Linux VM desktop |
 | **Kubernetes** | kind (multi-cluster, N nodes) | k3s (single-node, single cluster) |
@@ -19,7 +19,7 @@ local Kubernetes setup.
 | **Container runtime** | Docker | Docker (or containerd) |
 | **Host→pod routing** | Pure L3 — static macOS route, no SNAT | Custom VZ network stack + event-based port forwarding |
 | **LoadBalancer** | MetalLB — routable IPs via L3 | ServiceLB (klipper-lb) |
-| **Service hostnames** | `<svc>.<ns>.<cluster>.klimax.internal`, every cluster, no setup | `*.k8s.orb.local`, one cluster, no setup |
+| **Service hostnames** | `<svc>.<ns>.<cluster>.marina.internal`, every cluster, no setup | `*.k8s.orb.local`, one cluster, no setup |
 | **Container hostnames** | None | `*.orb.local` |
 | **Registry mirrors** | Pre-provisioned (docker.io, quay.io, gcr.io) | Manual `daemon.json` config only |
 | **Port mirroring** | Optional — disable with `disablePortMirroring` | Always on (event-based, not Lima) |
@@ -32,11 +32,11 @@ local Kubernetes setup.
 
 ## VM technology
 
-Both klimax and OrbStack use **Apple Virtualization.framework** (`vmType: vz`). Each runs a
+Both marina and OrbStack use **Apple Virtualization.framework** (`vmType: vz`). Each runs a
 separate Linux VM. macOS assigns each VZ VM its own distinct `bridge1xx` interface with a
-dynamically allocated IP — there is no IP conflict between klimax and OrbStack VMs.
+dynamically allocated IP — there is no IP conflict between marina and OrbStack VMs.
 
-The key architectural difference: klimax embeds Lima's Go packages directly and drives the VM
+The key architectural difference: marina embeds Lima's Go packages directly and drives the VM
 lifecycle programmatically. OrbStack implements its own custom VMM on top of VZ, with
 Swift/Go/Rust services, a custom VirtioFS caching layer, and deeper integration with the macOS
 system (Rosetta, system keychain, etc.).
@@ -61,9 +61,9 @@ it is **k3s** (though OrbStack does not officially document this). Key character
 > unmanaged by OrbStack and do not get `.orb.local` DNS or OrbStack's ServiceLB integration.
 > You would still need MetalLB for LoadBalancer services in those clusters.
 
-### klimax
+### marina
 
-klimax creates and manages **multiple kind clusters** inside a single Lima VM. Each cluster:
+marina creates and manages **multiple kind clusters** inside a single Lima VM. Each cluster:
 
 - Uses any `kindest/node` image (pinned via `kind.nodeVersion`)
 - Gets a dedicated API-server port (`700N`), service subnet (`10.N.0.0/16`), pod subnet (`10.1N.0.0/16`)
@@ -87,9 +87,9 @@ expose listening ports at `localhost` on the Mac. This is transparent to the use
 Because OrbStack owns the full network stack (virtual NIC, bridge, and routing rules), it can
 install proper routes without iptables surgery. It is a tightly integrated, proprietary solution.
 
-### klimax's approach
+### marina's approach
 
-klimax uses **pure L3 routing** via a static macOS route:
+marina uses **pure L3 routing** via a static macOS route:
 
 ```
 sudo route -n add -net 172.30.0.0/16 <lima0_IP>
@@ -118,7 +118,7 @@ This works well for development. You do not need to know the external IP — the
 However, ServiceLB assigns the node's IP (not a dedicated IP range), so multiple services on the
 same NodePort can conflict.
 
-### klimax
+### marina
 
 **MetalLB** (L2 mode) assigns dedicated IPs from a CIDR pool (`172.30.N.1–7` and
 `172.30.N.16–254`). These IPs are:
@@ -148,9 +148,9 @@ No built-in pull-through cache. Users add registry mirrors via the Docker daemon
 This applies only to Docker pulls. For Kubernetes pod image pulls (which go through containerd),
 additional containerd configuration is required and is not exposed through the OrbStack UI.
 
-### klimax
+### marina
 
-klimax provisions three pull-through mirror containers inside the VM on every `klimax up`:
+marina provisions three pull-through mirror containers inside the VM on every `marina up`:
 
 | Mirror | Port | Remote |
 |---|---|---|
@@ -160,8 +160,8 @@ klimax provisions three pull-through mirror containers inside the VM on every `k
 
 Mirrors are connected to the `kind` Docker network, so every kind cluster node can resolve them
 by hostname. Each cluster's containerd is patched at creation time to use these mirrors. The
-mirror cache is persisted on the macOS host (`~/.klimax/registry-cache/`) via virtiofs and
-survives `klimax destroy` (configurable via `registries.cacheStorage`).
+mirror cache is persisted on the macOS host (`~/.marina/registry-cache/`) via virtiofs and
+survives `marina destroy` (configurable via `registries.cacheStorage`).
 
 ---
 
@@ -170,7 +170,7 @@ survives `klimax destroy` (configurable via `registries.cacheStorage`).
 OrbStack merges its context into `~/.kube/config` with the hardcoded context name `orbstack`.
 The context name cannot be changed.
 
-klimax writes each cluster's kubeconfig to `~/.kube/klimax/<name>.kubeconfig` and optionally
+marina writes each cluster's kubeconfig to `~/.kube/marina/<name>.kubeconfig` and optionally
 merges it into `~/.kube/config` with the bare cluster name as context (controlled by
 `kind.autoMergeKubeconfig`). Multiple clusters, multiple contexts, no naming conflicts.
 
@@ -178,56 +178,56 @@ merges it into `~/.kube/config` with the bare cluster name as context (controlle
 
 ## Coexisting with OrbStack
 
-klimax and OrbStack coexist without special configuration:
+marina and OrbStack coexist without special configuration:
 
 - Each tool manages its own VM on a separate `bridge1xx` interface — no IP conflicts
-- klimax's Docker socket is at `~/.<vmName>.docker.sock` (e.g. `~/.klimax.docker.sock`); OrbStack's is at `~/.orbstack/run/docker.sock`; `/var/run/docker.sock` points to whichever was last activated — use `docker context` to switch
-- klimax's `172.30.0.0/16` route does not overlap with OrbStack's VM subnet
+- marina's Docker socket is at `~/.<vmName>.docker.sock` (e.g. `~/.marina.docker.sock`); OrbStack's is at `~/.orbstack/run/docker.sock`; `/var/run/docker.sock` points to whichever was last activated — use `docker context` to switch
+- marina's `172.30.0.0/16` route does not overlap with OrbStack's VM subnet
 
 If you also run Lima-based tools (Colima, Rancher Desktop, kind-on-lima), set
-`network.disablePortMirroring: true` in klimax's config to prevent API-server port conflicts
+`network.disablePortMirroring: true` in marina's config to prevent API-server port conflicts
 on `127.0.0.1`. This does not affect OrbStack, which does not use Lima port mirroring.
 
 ---
 
 ## Licensing and pricing
 
-| | klimax | OrbStack |
+| | marina | OrbStack |
 |---|---|---|
 | **License** | MIT (open source) | Proprietary (closed source) |
 | **Personal use** | Free | Free |
 | **Commercial use** | Free | $8/user/month (or ~$6.40/month billed annually) |
 | **Enterprise** | Free | Custom pricing |
-| **Source code** | [github.com/bcollard/klimax](https://github.com/bcollard/klimax) | Not available |
+| **Source code** | [github.com/bcollard/marina](https://github.com/bcollard/marina) | Not available |
 
 ---
 
-## What OrbStack does that klimax does not
+## What OrbStack does that marina does not
 
 Worth stating plainly, because the sections above are mostly framed the other
 way round.
 
 **Hostnames for plain containers.** OrbStack names every `docker run` container
-under `*.orb.local`, because it owns its whole network stack. Since v0.2.0 klimax
-names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.klimax.internal`,
-across all clusters, with no setup ([Local DNS names](https://klimax.dev/docs/local-dns.html)) —
+under `*.orb.local`, because it owns its whole network stack. Since v0.2.0 marina
+names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.marina.internal`,
+across all clusters, with no setup ([Local DNS names](https://marina.sh/docs/local-dns.html)) —
 but not containers outside a cluster.
 
-**Linux machines.** `orb create ubuntu` gives you a VM to log into. klimax
+**Linux machines.** `orb create ubuntu` gives you a VM to log into. marina
 provisions exactly one VM, to host containers and clusters. Running arbitrary
 Linux machines is out of scope by design.
 
-**Startup time.** OrbStack is usable in a couple of seconds. klimax restarts an
+**Startup time.** OrbStack is usable in a couple of seconds. marina restarts an
 existing VM in about fifteen, and a first boot takes minutes (image download,
-cloud-init, Docker, kind). Fine for a login-time `klimax autostart`; not
+cloud-init, Docker, kind). Fine for a login-time `marina autostart`; not
 comparable if you stop and start all day.
 
-**A full GUI.** [Klimax UI](https://klimax.dev/docs/klimax-ui.html) is a
+**A full GUI.** [Marina UI](https://marina.sh/docs/marina-ui.html) is a
 companion for watching VM, cluster and mirror state — not a control surface for
 everything.
 
 **Continuous disk reclaim.** OrbStack returns freed space to the host as it
-goes. klimax's root disk mounts with `discard`, but the image disk relies on the
+goes. marina's root disk mounts with `discard`, but the image disk relies on the
 weekly `fstrim.timer`, so reclaim there is periodic rather than immediate. A
 measured example: `fstrim /var/lib/containerd` returned 2.1 GiB that the sparse
 file was still holding. Run it by hand if you need the space back sooner.
@@ -243,7 +243,7 @@ file was still holding. Run it by hand if you need the space back sooner.
 - You want hostnames for **plain Docker containers**, not just Kubernetes Services
 - You want the **fastest possible** Docker engine on Apple Silicon for non-Kubernetes workloads
 
-## When to use klimax
+## When to use marina
 
 - You need **multiple concurrent kind clusters** (multi-team, multi-env, chaos testing)
 - You need **specific Kubernetes versions** pinned per cluster

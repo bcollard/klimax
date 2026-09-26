@@ -42,7 +42,7 @@ func TestMacOSAcceptsTheChain(t *testing.T) {
 		if err := os.WriteFile(root, []byte(c.RootPEM), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		for _, host := range []string{"web." + zone.name + ".klimax.internal", zone.name + ".klimax.internal"} {
+		for _, host := range []string{"web." + zone.name + ".marina.internal", zone.name + ".marina.internal"} {
 			out, err := exec.Command("security", "verify-cert", "-r", root,
 				"-c", filepath.Join(dir, "leaf.pem"), "-c", filepath.Join(dir, "inter.pem"),
 				"-p", "ssl", "-s", host).CombinedOutput()

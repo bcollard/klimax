@@ -1,4 +1,4 @@
-module github.com/bcollard/klimax
+module github.com/bcollard/marina
 
 go 1.26.0
 
