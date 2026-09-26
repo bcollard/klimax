@@ -126,6 +126,7 @@ internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/fleetzone.go            fleet zones: checkZoneNames/checkClusterNameFree (fleet ≠ cluster name), installFleetCA, joinFleetZone (adopt), leaveFleetZone (delete: owner-scoped purge; last member removes zone + CA)
 internal/cli/ca.go                   `klimax ca status|cert|attach|secret|trust|untrust`; reconcileLocalCA (up), localCAForCluster/installLocalCA (create), removeLocalCA (delete/destroy)
 internal/cli/dns.go                  `klimax dns list|attach`; helpers wired into up/create/delete (withLocalDNSForward, installLocalDNS, deleteCluster)
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
@@ -422,7 +423,7 @@ klimax dns attach <cluster>...         Install ExternalDNS + the CoreDNS forward
 klimax ca status [-o text|json|yaml]   Root CA path/expiry/keychain trust, per-cluster wildcards
 klimax ca cert                         Print the root CA (PEM)
 klimax ca attach <cluster>...          Issue/renew the cluster's wildcard + install it; ClusterIssuer if cert-manager exists
-klimax ca secret <cluster> -n <ns>     Copy default/klimax-wildcard-tls into another namespace
+klimax ca secret <cluster> -n <ns>     Copy default/klimax-wildcard-tls into another namespace (--fleet: klimax-fleet-wildcard-tls)
 klimax ca trust | untrust              Add/remove the root's System-keychain trust (sudo)
 
 klimax skill install                   Install the embedded Agent Skill into ~/.claude/skills/klimax/SKILL.md
@@ -537,6 +538,23 @@ openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
   Ingress hosts, not the default two-label automatic names; `nameTemplate:
   "{{.Name}}-{{.Namespace}}"` flattens them (considered as a default and rejected:
   ambiguous joins, shared 63-char label, and a rename for v0.2.x users).
+- **Fleet zones (`<fleet>.<domain>`).** Members' ExternalDNS get a second
+  `--domain-filter` for the fleet zone (set at create, `fleet adopt`/`--adopt`,
+  and `dns attach`, from the live `klimax.dev/fleet` label). Automatic names stay in
+  the cluster zone; fleet names come only from the hostname annotation. **First
+  member to publish a name owns it** (TXT registry; `--txt-owner-id` stays per
+  cluster, so `sync` is safe). Verified: deleting the owner hands the name to the
+  next claimant within one sync (~30s). Fleet CA: `fleets/<fleet>/` intermediate
+  constrained to `.<fleet>.<domain>`, wildcard in every member as
+  `default/klimax-fleet-wildcard-tls` (+ `klimax-fleet-ca` ClusterIssuer). A fleet
+  and a cluster may not share a name — both would own `<name>.<domain>`
+  (`checkZoneNames`, `checkClusterNameFree`).
+- **Cluster delete purges fleet-zone records by owner, not by prefix**
+  (`localdns.PurgeOwned`: the TXT registry records naming the cluster as owner,
+  plus the records beside them — exact keys, so a deeper name another member owns
+  survives). The last member's delete purges the whole zone and the fleet CA.
+- **Issuance is serialised** (`localca.storeMu`): a fleet applied with
+  `maxParallel > 1` has every member ask for the same fleet intermediate at once.
 - `up` creates + trusts the root (`sudo -n` when non-interactive → warning).
   `destroy` keeps the root and removes cluster intermediates. Turning `tls` off
   neither deletes nor untrusts — `klimax ca untrust` is explicit.

@@ -89,7 +89,7 @@ func installLocalCA(ctx context.Context, g *guest.Client, c *localca.Cluster) {
 	if c == nil {
 		return
 	}
-	res, err := localca.InstallInCluster(ctx, g, c)
+	res, err := localca.InstallInCluster(ctx, g, c.Name, c)
 	if err != nil {
 		slog.Warn("Local CA: could not install the cluster's certificates", "cluster", c.Name, "err", err, "fix", "klimax ca attach "+c.Name)
 		return
@@ -131,6 +131,7 @@ type caStatusReport struct {
 	Trusted  bool              `json:"trusted"            yaml:"trusted"`
 	NotAfter string            `json:"notAfter,omitempty" yaml:"notAfter,omitempty"`
 	Clusters []caClusterStatus `json:"clusters"           yaml:"clusters"`
+	Fleets   []caClusterStatus `json:"fleets"             yaml:"fleets"`
 }
 
 type caClusterStatus struct {
@@ -151,18 +152,24 @@ func newCAStatusCmd() *cobra.Command {
 				return err
 			}
 			store := caStore(cfg)
-			rep := caStatusReport{Enabled: cfg.TLSEnabled(), Domain: cfg.DNSDomain(), Clusters: []caClusterStatus{}}
+			rep := caStatusReport{Enabled: cfg.TLSEnabled(), Domain: cfg.DNSDomain(), Clusters: []caClusterStatus{}, Fleets: []caClusterStatus{}}
 			if root, err := store.Root(); err == nil {
 				rep.Exists, rep.Root = true, store.RootCertPath()
 				rep.NotAfter = root.NotAfter.Format(time.DateOnly)
 				rep.Trusted = store.Trusted()
 			}
-			for _, name := range store.Clusters() {
-				st := caClusterStatus{Name: name, Wildcard: "*." + cfg.ClusterDNSZone(name)}
-				if c, err := localca.LoadClusterWildcard(store, name); err == nil {
+			zoneStatus := func(kind localca.Kind, name string) caClusterStatus {
+				st := caClusterStatus{Name: name, Wildcard: "*." + name + "." + cfg.DNSDomain()}
+				if c, err := localca.LoadWildcard(store, kind, name); err == nil {
 					st.NotAfter = c.NotAfter.Format(time.DateOnly)
 				}
-				rep.Clusters = append(rep.Clusters, st)
+				return st
+			}
+			for _, name := range store.Clusters() {
+				rep.Clusters = append(rep.Clusters, zoneStatus(localca.ClusterZone, name))
+			}
+			for _, name := range store.Fleets() {
+				rep.Fleets = append(rep.Fleets, zoneStatus(localca.FleetZone, name))
 			}
 			switch outputFmt {
 			case "json":
@@ -186,6 +193,9 @@ func newCAStatusCmd() *cobra.Command {
 			fmt.Printf("root:     %s\n          constrained to .%s, expires %s, %s\n", rep.Root, rep.Domain, rep.NotAfter, trust)
 			for _, c := range rep.Clusters {
 				fmt.Printf("cluster:  %-16s %s  (expires %s)\n", c.Name, c.Wildcard, c.NotAfter)
+			}
+			for _, f := range rep.Fleets {
+				fmt.Printf("fleet:    %-16s %s  (expires %s)\n", f.Name, f.Wildcard, f.NotAfter)
 			}
 			return nil
 		},
@@ -254,7 +264,7 @@ Installing the root in the cluster's nodes restarts their containerd.`,
 				}
 				var res localca.InstallResult
 				if err == nil {
-					res, err = localca.InstallInCluster(ctx, g, c)
+					res, err = localca.InstallInCluster(ctx, g, name, c)
 				}
 				if err != nil {
 					slog.Error("Attach failed", "cluster", name, "err", err)
@@ -267,6 +277,7 @@ Installing the root in the cluster's nodes restarts their containerd.`,
 				}
 				fmt.Printf("✓ %s: %s in default/%s (expires %s); %s\n", name, c.WildcardNames[0], localca.WildcardSecret,
 					c.WildcardNotAfter.Format(time.DateOnly), issuer)
+				installFleetCA(ctx, g, cfg, name, liveFleetOf(ctx, g, name))
 			}
 			if len(failed) > 0 {
 				return fmt.Errorf("%d cluster(s) not attached: %v", len(failed), failed)
@@ -280,11 +291,13 @@ var namespaceRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
 func newCASecretCmd() *cobra.Command {
 	var namespace string
+	var fleetSecret bool
 	cmd := &cobra.Command{
 		Use:   "secret <cluster>",
 		Short: "Copy the cluster's wildcard Secret into another namespace",
 		Long: `A Secret can only be mounted from its own namespace, and an Ingress reads its TLS
-Secret from the Ingress's namespace. This copies default/klimax-wildcard-tls there.
+Secret from the Ingress's namespace. This copies default/klimax-wildcard-tls there
+(--fleet: default/klimax-fleet-wildcard-tls, the cluster's fleet's wildcard).
 Re-run after 'klimax ca attach' renews the wildcard.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -295,14 +308,19 @@ Re-run after 'klimax ca attach' renews the wildcard.`,
 			if err != nil {
 				return err
 			}
-			if err := localca.CopySecret(cmd.Context(), g, args[0], namespace); err != nil {
+			secret := localca.WildcardSecret
+			if fleetSecret {
+				secret = localca.FleetWildcardSecret
+			}
+			if err := localca.CopySecret(cmd.Context(), g, args[0], secret, namespace); err != nil {
 				return err
 			}
-			fmt.Printf("✓ %s/%s\n", namespace, localca.WildcardSecret)
+			fmt.Printf("✓ %s/%s\n", namespace, secret)
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Target namespace (required)")
+	cmd.Flags().BoolVar(&fleetSecret, "fleet", false, "Copy the fleet wildcard (klimax-fleet-wildcard-tls) instead of the cluster's")
 	_ = cmd.MarkFlagRequired("namespace")
 	return cmd
 }

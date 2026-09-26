@@ -9,12 +9,14 @@
 //	~/.klimax/pki/<domain>/
 //	├── root.crt                        name-constrained to .<domain>
 //	├── private/root.key                never leaves the Mac
-//	└── clusters/<cluster>/
-//	    ├── ca.crt                      intermediate, constrained to .<cluster>.<domain>
-//	    ├── chain.crt                   intermediate + root
-//	    ├── private/ca.key
-//	    ├── wildcard.crt                *.<cluster>.<domain> + <cluster>.<domain>, then the intermediate
-//	    └── private/wildcard.key
+//	├── clusters/<cluster>/
+//	│   ├── ca.crt                      intermediate, constrained to .<cluster>.<domain>
+//	│   ├── chain.crt                   intermediate + root
+//	│   ├── private/ca.key
+//	│   ├── wildcard.crt                *.<cluster>.<domain> + <cluster>.<domain>, then the intermediate
+//	│   └── private/wildcard.key
+//	└── fleets/<fleet>/                 same layout, for the fleet's shared zone
+//	                                    (kong-gw.<fleet>.<domain>), installed into every member
 //
 // The constraints are the point. The root goes into the System keychain, where
 // it would otherwise vouch for any site; constrained, nothing below it is
@@ -32,6 +34,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bcollard/homepki/pkg/pki"
@@ -44,6 +47,13 @@ const keyType = "ecdsa"
 // renewBefore is how close to expiry a wildcard certificate is re-issued. Leaves
 // live pki.LeafValidityDays (365); CAs live pki.CAValidityDays (~6 years).
 const renewBefore = 30 * 24 * time.Hour
+
+// storeMu serialises issuance. A fleet applied with maxParallel > 1 creates its
+// members concurrently, and every member asks for the same fleet intermediate:
+// unserialised, two goroutines would each generate one and interleave their
+// writes to ca.crt and ca.key. One process-wide lock is enough — issuance is a
+// few milliseconds, and klimax runs one command at a time.
+var storeMu sync.Mutex
 
 // Store is the CA for one DNS domain.
 type Store struct {
@@ -61,11 +71,26 @@ func New(klimaxHome, domain string) *Store {
 func (s *Store) RootCertPath() string { return filepath.Join(s.Dir, "root.crt") }
 func (s *Store) rootKeyPath() string  { return filepath.Join(s.Dir, "private", "root.key") }
 
-func (s *Store) clusterDir(cluster string) string { return filepath.Join(s.Dir, "clusters", cluster) }
+// Kind selects which zone an intermediate serves.
+type Kind string
 
-// Cluster holds one cluster's CA material, PEM-encoded for handing to the guest.
+const (
+	// ClusterZone is <cluster>.<domain>: one per cluster.
+	ClusterZone Kind = "clusters"
+	// FleetZone is <fleet>.<domain>: shared by a fleet's members.
+	FleetZone Kind = "fleets"
+)
+
+func (s *Store) zoneDir(kind Kind, name string) string {
+	return filepath.Join(s.Dir, string(kind), name)
+}
+func (s *Store) clusterDir(cluster string) string { return s.zoneDir(ClusterZone, cluster) }
+
+// Cluster holds one zone's CA material — a cluster's or a fleet's —
+// PEM-encoded for handing to the guest.
 type Cluster struct {
 	Name string
+	Kind Kind
 	// ChainPEM is the intermediate followed by the root: what a cert-manager
 	// CA issuer's Secret carries as tls.crt.
 	ChainPEM string
@@ -87,6 +112,12 @@ type Cluster struct {
 // EnsureRoot loads the root CA, creating it on first use. created reports
 // whether it was just made — the caller then needs to trust it.
 func (s *Store) EnsureRoot() (cert *x509.Certificate, key crypto.Signer, created bool, err error) {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	return s.ensureRoot()
+}
+
+func (s *Store) ensureRoot() (cert *x509.Certificate, key crypto.Signer, created bool, err error) {
 	cert, key, err = s.loadRoot()
 	if err == nil {
 		if !constrainedTo(cert, "."+s.Domain) {
@@ -98,15 +129,12 @@ func (s *Store) EnsureRoot() (cert *x509.Certificate, key crypto.Signer, created
 		return nil, nil, false, err
 	}
 
-	nc, err := pki.ParseNameConstraints([]string{"permitted;DNS:." + s.Domain})
-	if err != nil {
-		return nil, nil, false, err
-	}
+	nc := pki.NameConstraints{}.PermitDNS("." + s.Domain)
 	if key, err = pki.GenerateKey(keyType); err != nil {
 		return nil, nil, false, err
 	}
 	subject := pkix.Name{Organization: []string{"klimax"}, CommonName: "klimax local CA (" + s.Domain + ")"}
-	if cert, err = pki.SelfSignRoot(key, subject, nc); err != nil {
+	if cert, err = pki.SelfSignRoot(key, subject, nc, pki.Days(pki.CAValidityDays)); err != nil {
 		return nil, nil, false, err
 	}
 	if err := s.writePair(s.RootCertPath(), s.rootKeyPath(), key, cert); err != nil {
@@ -137,25 +165,39 @@ func (s *Store) loadRoot() (*x509.Certificate, crypto.Signer, error) {
 // renewing whatever is missing, expiring, or no longer chains to the current
 // root. Idempotent: a second call returns the same material.
 func (s *Store) EnsureCluster(cluster string) (*Cluster, error) {
-	root, rootKey, _, err := s.EnsureRoot()
+	return s.ensureZone(ClusterZone, cluster)
+}
+
+// EnsureFleet is EnsureCluster for a fleet's shared zone. Its intermediate is
+// constrained to .<fleet>.<domain>, so it cannot sign for any member's own
+// zone — nor a member's intermediate for the fleet's.
+func (s *Store) EnsureFleet(fleet string) (*Cluster, error) {
+	return s.ensureZone(FleetZone, fleet)
+}
+
+func (s *Store) ensureZone(kind Kind, name string) (*Cluster, error) {
+	if err := validName(name); err != nil {
+		return nil, err
+	}
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	root, rootKey, _, err := s.ensureRoot()
 	if err != nil {
 		return nil, err
 	}
-	zone := cluster + "." + s.Domain
-	dir := s.clusterDir(cluster)
+	cluster := name
+	zone := name + "." + s.Domain
+	dir := s.zoneDir(kind, name)
 	caCrt, caKey := filepath.Join(dir, "ca.crt"), filepath.Join(dir, "private", "ca.key")
 
 	inter, interKey, err := loadPair(caCrt, caKey)
-	if err != nil || verifyIntermediate(inter, root) != nil || !constrainedTo(inter, "."+zone) {
-		nc, err := pki.ParseNameConstraints([]string{"permitted;DNS:." + zone, "permitted;DNS:" + zone})
-		if err != nil {
-			return nil, err
-		}
+	if err != nil || pki.VerifyIntermediate(inter, root) != nil || !constrainedTo(inter, "."+zone) {
+		nc := pki.NameConstraints{}.PermitDNS("."+zone, zone)
 		if interKey, err = pki.GenerateKey(keyType); err != nil {
 			return nil, err
 		}
 		subject := pkix.Name{Organization: []string{"klimax"}, OrganizationalUnit: []string{cluster}, CommonName: "klimax " + cluster + " CA"}
-		if inter, err = pki.SignIntermediate(interKey.Public(), subject, nc, root, rootKey); err != nil {
+		if inter, err = pki.SignIntermediate(interKey.Public(), subject, nc, pki.Days(pki.CAValidityDays), root, rootKey); err != nil {
 			return nil, err
 		}
 		if err := s.writePair(caCrt, caKey, interKey, inter); err != nil {
@@ -177,7 +219,7 @@ func (s *Store) EnsureCluster(cluster string) (*Cluster, error) {
 			return nil, err
 		}
 		subject := pkix.Name{Organization: []string{"klimax"}, OrganizationalUnit: []string{cluster}, CommonName: names[0]}
-		if leaf, err = pki.SignLeaf(leafKey.Public(), subject, pki.SANs{DNS: names}, pki.ServerLeaf, inter, interKey); err != nil {
+		if leaf, err = pki.SignLeaf(leafKey.Public(), subject, pki.SANs{DNS: names}, pki.ServerLeaf, pki.Days(pki.LeafValidityDays), inter, interKey); err != nil {
 			return nil, err
 		}
 		if err := s.writePair(wcCrt, wcKey, leafKey, leaf, inter); err != nil {
@@ -187,6 +229,7 @@ func (s *Store) EnsureCluster(cluster string) (*Cluster, error) {
 
 	return &Cluster{
 		Name:             cluster,
+		Kind:             kind,
 		ChainPEM:         mustRead(filepath.Join(dir, "chain.crt")),
 		KeyPEM:           mustRead(caKey),
 		WildcardPEM:      mustRead(wcCrt),
@@ -200,16 +243,34 @@ func (s *Store) EnsureCluster(cluster string) (*Cluster, error) {
 // RemoveCluster deletes a cluster's intermediate and wildcard. There is no
 // revocation: a local CA has no CRL anyone checks. Deleting the key is what
 // stops anything new being signed with it.
-func (s *Store) RemoveCluster(cluster string) error {
-	if strings.ContainsAny(cluster, "/\\") || cluster == "" || cluster == "." || cluster == ".." {
-		return fmt.Errorf("invalid cluster name %q", cluster)
+func (s *Store) RemoveCluster(cluster string) error { return s.removeZone(ClusterZone, cluster) }
+
+// RemoveFleet deletes a fleet's intermediate and wildcard.
+func (s *Store) RemoveFleet(fleet string) error { return s.removeZone(FleetZone, fleet) }
+
+func (s *Store) removeZone(kind Kind, name string) error {
+	if err := validName(name); err != nil {
+		return err
 	}
-	return os.RemoveAll(s.clusterDir(cluster))
+	return os.RemoveAll(s.zoneDir(kind, name))
+}
+
+// validName refuses anything that would escape the store directory.
+func validName(name string) error {
+	if strings.ContainsAny(name, "/\\") || name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid name %q", name)
+	}
+	return nil
 }
 
 // Clusters lists the clusters that have CA material.
-func (s *Store) Clusters() []string {
-	entries, err := os.ReadDir(filepath.Join(s.Dir, "clusters"))
+func (s *Store) Clusters() []string { return s.zones(ClusterZone) }
+
+// Fleets lists the fleets that have CA material.
+func (s *Store) Fleets() []string { return s.zones(FleetZone) }
+
+func (s *Store) zones(kind Kind) []string {
+	entries, err := os.ReadDir(filepath.Join(s.Dir, string(kind)))
 	if err != nil {
 		return nil
 	}
@@ -256,15 +317,6 @@ func loadPair(certPath, keyPath string) (*x509.Certificate, crypto.Signer, error
 	return cert, key, nil
 }
 
-// verifyIntermediate checks that inter was signed by root. pki.VerifyChain needs
-// a leaf, so the intermediate is verified as the end of its own chain.
-func verifyIntermediate(inter, root *x509.Certificate) error {
-	roots := x509.NewCertPool()
-	roots.AddCert(root)
-	_, err := inter.Verify(x509.VerifyOptions{Roots: roots, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
-	return err
-}
-
 // constrainedTo reports whether a CA certificate's permitted DNS subtrees
 // include want.
 func constrainedTo(c *x509.Certificate, want string) bool {
@@ -281,8 +333,7 @@ func mustRead(p string) string {
 	return string(b)
 }
 
-// LoadClusterWildcard reads a cluster's wildcard certificate without issuing
-// anything.
-func LoadClusterWildcard(s *Store, cluster string) (*x509.Certificate, error) {
-	return pki.LoadCert(filepath.Join(s.clusterDir(cluster), "wildcard.crt"))
+// LoadWildcard reads a zone's wildcard certificate without issuing anything.
+func LoadWildcard(s *Store, kind Kind, name string) (*x509.Certificate, error) {
+	return pki.LoadCert(filepath.Join(s.zoneDir(kind, name), "wildcard.crt"))
 }

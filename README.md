@@ -603,6 +603,7 @@ klimax dns attach <cluster>...      # add a cluster created before network.dns w
 
 - **Names:** `<service>.<namespace>.<cluster>.klimax.internal` automatically, for LoadBalancer Services only — ClusterIP, headless and NodePort Services are not published (their addresses are not reachable from the Mac). Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.klimax.internal` (it must sit under the cluster's own zone). Ingress hosts under `*.<cluster>.klimax.internal` are published too.
 - **How:** `klimax up` runs etcd and CoreDNS on the kind network (`172.30.255.52` / `.53`); each cluster runs ExternalDNS, which writes its Services into etcd; `/etc/resolver/klimax.internal` sends the Mac's lookups to CoreDNS through the existing host route. The resolver file needs **sudo once** — its address never changes, so it is never rewritten.
+- **Fleet-wide names:** members of a [fleet](#fleets--klimax-fleet) can also publish under `<fleet>.klimax.internal` — annotate a Service with `external-dns.kubernetes.io/hostname: kong-gw.stonex.klimax.internal`. The first member to publish a name owns it; if that member is deleted, another member that claims the name takes it over. A fleet and a cluster may not share a name (both would own `<name>.klimax.internal`).
 - **Turn it off** with `network.dns.enabled: false` and `klimax up`: the containers, the iptables exemption and the resolver file are removed.
 - **A new name appears within ~15 s** (ExternalDNS's sync interval). Don't look it up before then: macOS keeps a "no such name" answer for about 75 s, whatever the zone's TTL says. `klimax dns list` shows when it is published; `sudo killall -HUP mDNSResponder` clears the cache.
 - **Caveats:** tools that do their own DNS skip `/etc/resolver` — `dig` (use `dig @172.30.255.53` or `dscacheutil -q host -a name <name>`), Go programs built with the pure-Go resolver, and Chrome with a custom Secure DNS provider. No public CA issues certificates for `.internal`; use a private CA.
@@ -622,11 +623,12 @@ curl https://shop.dev.klimax.internal/     # serve that Secret; browsers trust i
 | `klimax ca status [-o json\|yaml]` | Root path, expiry, keychain trust, each cluster's wildcard |
 | `klimax ca cert` | Print the root (PEM) — e.g. for a pod's trust store |
 | `klimax ca attach <cluster>...` | Issue/renew a cluster's wildcard; adds a `klimax-ca` ClusterIssuer when cert-manager is installed |
-| `klimax ca secret <cluster> -n <ns>` | Copy the wildcard Secret into another namespace |
+| `klimax ca secret <cluster> -n <ns> [--fleet]` | Copy the cluster's (or, with `--fleet`, its fleet's) wildcard Secret into another namespace |
 | `klimax ca trust` / `untrust` | Add or remove the root's keychain trust (sudo) |
 
 - **Constrained by design.** The root may only issue under `.klimax.internal` and each cluster's intermediate only under `.<cluster>.klimax.internal`, so trusting the root cannot be abused for any other site. The root's key never leaves `~/.klimax/pki/`.
 - **One label.** `*.dev.klimax.internal` covers annotated names and Ingress hosts (`shop.dev.klimax.internal`), not the automatic `web.default.dev.klimax.internal`. For those, use cert-manager with the `klimax-ca` ClusterIssuer, or set `nameTemplate: "{{.Name}}-{{.Namespace}}"`.
+- **Fleets** get their own intermediate, constrained to `.<fleet>.klimax.internal`, and a `*.<fleet>.klimax.internal` wildcard in every member as `default/klimax-fleet-wildcard-tls` (plus a `klimax-fleet-ca` ClusterIssuer with cert-manager). Neither a member's intermediate nor the fleet's can sign for the other's zone.
 - **Pods** trust the root once it is mounted: the ConfigMap `default/klimax-root-ca` holds it.
 - `klimax destroy` keeps the root (like the registry cache); cluster intermediates are removed with their clusters.
 

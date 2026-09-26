@@ -137,6 +137,13 @@ func (c *Config) ClusterDNSZone(cluster string) string {
 	return cluster + "." + c.DNSDomain()
 }
 
+// FleetDNSZone is a fleet's shared zone, for fleet-wide names such as
+// kong-gw.<fleet>.<domain>. It sits beside the cluster zones, which is why a
+// fleet may not share its name with a cluster.
+func (c *Config) FleetDNSZone(fleet string) string {
+	return fleet + "." + c.DNSDomain()
+}
+
 var dnsLabelRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // validateDNS checks network.dns. Only called when the feature is on: a bad
