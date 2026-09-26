@@ -472,6 +472,10 @@ Facts that shaped it, all verified on the live VM:
 - **The etcd plugin serves TTL 300 for ExternalDNS's TTL-0 records**;
   `rewrite ttl regex .* 5-30` caps it so a Service moved to a new VIP is not
   cached for five minutes. The plugin serves no wildcard records.
+- **Negative answers are cached for 30s** (the etcd plugin's SOA minimum;
+  `rewrite ttl` does not touch the authority section). A lookup made before
+  ExternalDNS's first 15s sync keeps failing on the Mac for up to 30s after the
+  record exists — measured, and it is what a first "it doesn't resolve" is.
 - **`cluster delete` purges `/skydns/<reversed zone>/`** — ExternalDNS dies with
   its cluster and never cleans up.
 - **Clients that skip `/etc/resolver`:** `dig`, Go's pure-Go resolver
