@@ -25,6 +25,8 @@ github.com/apparentlymart/go-textseg/v15 v15.0.0/go.mod h1:K8XmNZdhEBkdlyDdvbmms
 github.com/armon/go-proxyproto v0.0.0-20210323213023-7e956b284f0a/go.mod h1:QmP9hvJ91BbJmGVGSbutW19IC0Q9phDCLGaomwTJbgU=
 github.com/balajiv113/fd v0.0.0-20230330094840-143eec500f3e h1:IdMhFPEfTZQU971tIHx3UhY4l+yCeynprnINrDTSrOc=
 github.com/balajiv113/fd v0.0.0-20230330094840-143eec500f3e/go.mod h1:aXGMJsd3XrnUFTuyf/pTGg5jG6CY8JMZ5juywvShjgQ=
+github.com/bcollard/homepki v0.7.1 h1:rrmXzI8OHlg+WWjj5TNO+U96x95aeszVDVnEd+SbPkY=
+github.com/bcollard/homepki v0.7.1/go.mod h1:MRKKc4J2vghh25Gs0KdddAygS9BB5Wl8/1ERJNxAzhE=
 github.com/bmatcuk/doublestar/v4 v4.7.1 h1:fdDeAqgT47acgwd9bd9HxJRDmc9UAmPpc+2m0CXv75Q=
 github.com/bmatcuk/doublestar/v4 v4.7.1/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

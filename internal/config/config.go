@@ -311,6 +311,12 @@ func applyDefaults(cfg *Config) {
 	if cfg.Network.DNS.Domain == "" {
 		cfg.Network.DNS.Domain = DefaultDNSDomain
 	}
+	if cfg.Network.DNS.NameTemplate == "" {
+		cfg.Network.DNS.NameTemplate = DefaultDNSNameTemplate
+	}
+	if cfg.Network.DNS.TLS.Enabled == nil {
+		cfg.Network.DNS.TLS.Enabled = boolPtr(true)
+	}
 	if cfg.Kind.NodeVersion == "" {
 		cfg.Kind.NodeVersion = DefaultKindNodeVersion
 	}

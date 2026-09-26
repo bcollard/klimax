@@ -182,6 +182,9 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	// nameserver is on the kind network, reachable only through it.
 	reconcileHostResolver(cfg)
 
+	// 12. Local CA for the zone: create the root on first use, trust it.
+	reconcileLocalCA(cfg)
+
 	slog.Info("klimax up complete",
 		"vm", cfg.VM.Name,
 		"kindCIDR", cfg.Network.KindBridgeCIDR,
@@ -190,7 +193,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 	)
 	fmt.Printf("\nVM ready.\n  eval $(klimax docker-env)          # use VM Docker daemon\n  klimax cluster create <name>       # create a kind cluster\n")
 	if cfg.DNSEnabled() {
-		fmt.Printf("  LoadBalancer Services resolve as <service>.<namespace>.<cluster>.%s\n", cfg.DNSDomain())
+		fmt.Printf("  LoadBalancer Services resolve as %s\n", cfg.DNSNameExample(""))
 	}
 	fmt.Println()
 	return nil

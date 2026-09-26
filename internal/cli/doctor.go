@@ -46,6 +46,7 @@ const (
 	checkIDRosettaVM   = "rosetta-vm"
 	checkIDProxy       = "proxy"
 	checkIDDNS         = "dns"
+	checkIDTLS         = "tls"
 )
 
 // doctorCheck is one diagnosis. Fixable marks the checks `--fix` can repair
@@ -264,6 +265,7 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 
 	// Local DNS zone.
 	rep.Checks = append(rep.Checks, checkLocalDNS(ctx, g, cfg))
+	rep.Checks = append(rep.Checks, checkLocalCA(cfg))
 
 	// Rosetta inside the VM.
 	rosettaActive := false
@@ -321,6 +323,11 @@ func applyDoctorFixes(ctx context.Context, rep *doctorReport, env *doctorEnv) {
 				err = fmt.Errorf("VM is not running")
 			} else {
 				err = fixLocalDNS(ctx, env)
+			}
+		case checkIDTLS:
+			reconcileLocalCA(env.cfg)
+			if !caStore(env.cfg).Trusted() {
+				err = fmt.Errorf("the root is still not trusted")
 			}
 		case checkIDIPForward:
 			if env.guest == nil {
@@ -637,4 +644,30 @@ func fixLocalDNS(ctx context.Context, env *doctorEnv) error {
 		return err
 	}
 	return localdns.EnsureHostResolver(env.cfg, term.IsTerminal(int(os.Stdin.Fd())))
+}
+
+// checkLocalCA reports whether the local CA's root exists, is trusted by macOS,
+// and is not about to expire. Host-side only, so it runs without the VM.
+func checkLocalCA(cfg *config.Config) doctorCheck {
+	if !cfg.TLSEnabled() {
+		return doctorCheck{ID: checkIDTLS, Status: checkOK, Message: "Local CA is disabled (network.dns.tls.enabled: false)"}
+	}
+	store := caStore(cfg)
+	root, err := store.Root()
+	if err != nil {
+		return doctorCheck{ID: checkIDTLS, Status: checkFail, Message: "The local CA has no root yet",
+			Fix: "klimax up -c " + configFile, Fixable: true}
+	}
+	if !store.Trusted() {
+		return doctorCheck{ID: checkIDTLS, Status: checkFail,
+			Message: "The local CA root is not trusted by macOS — browsers reject klimax.internal certificates",
+			Fix:     "klimax ca trust", Fixable: true}
+	}
+	if left := time.Until(root.NotAfter); left < 90*24*time.Hour {
+		return doctorCheck{ID: checkIDTLS, Status: checkWarn,
+			Message: fmt.Sprintf("The local CA root expires on %s", root.NotAfter.Format(time.DateOnly)),
+			Detail:  "Move " + store.Dir + " aside, run klimax up, then klimax ca attach on each cluster."}
+	}
+	return doctorCheck{ID: checkIDTLS, Status: checkOK,
+		Message: fmt.Sprintf("Local CA for .%s is trusted (root expires %s)", cfg.DNSDomain(), root.NotAfter.Format(time.DateOnly))}
 }

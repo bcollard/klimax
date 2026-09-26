@@ -38,7 +38,7 @@ const ExternalDNSNamespace = "external-dns"
 // cluster running kube-prometheus-stack.
 //
 // --fqdn-template gives every LoadBalancer Service a name with no annotation
-// (OrbStack-style); --combine-fqdn-annotation keeps that name when an
+// (OrbStack-style), from network.dns.nameTemplate; --combine-fqdn-annotation keeps that name when an
 // external-dns.kubernetes.io/hostname annotation adds a custom one.
 func ExternalDNSManifest(cfg *config.Config, cluster string) string {
 	zone := cfg.ClusterDNSZone(cluster)
@@ -123,7 +123,7 @@ spec:
             - --domain-filter=%[4]s
             - --policy=sync
             - --interval=15s
-            - --fqdn-template={{.Name}}.{{.Namespace}}.%[4]s
+            - --fqdn-template=%[6]s.%[4]s
             - --combine-fqdn-annotation
           env:
             - name: ETCD_URLS
@@ -137,7 +137,7 @@ spec:
             runAsGroup: 65532
             runAsNonRoot: true
             runAsUser: 65532
-`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP())
+`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP(), cfg.DNSNameTemplate())
 }
 
 // InstallExternalDNS applies the manifest to a cluster and waits for it.

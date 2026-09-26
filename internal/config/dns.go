@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+	"text/template"
 )
 
 // DNSConfig controls klimax's local DNS zone for LoadBalancer Services.
@@ -33,10 +34,44 @@ type DNSConfig struct {
 	// because corporate networks and GCP (metadata.google.internal) already use
 	// it and a resolver file for the whole TLD would take those names over.
 	Domain string `yaml:"domain"`
+	// NameTemplate is the automatic name every LoadBalancer Service and Ingress
+	// gets, as an ExternalDNS --fqdn-template relative to the cluster's zone:
+	// klimax appends ".<cluster>.<domain>". Fields: .Name, .Namespace, .Labels,
+	// .Annotations. Default "{{.Name}}.{{.Namespace}}", mirroring Kubernetes'
+	// own <svc>.<ns>.svc.cluster.local.
+	//
+	// A wildcard certificate covers one label, so the cluster's
+	// *.<cluster>.<domain> wildcard does not cover these automatic names — it
+	// covers names directly under the cluster zone: annotated names and
+	// Ingress hosts such as shop.<cluster>.<domain>. "{{.Name}}-{{.Namespace}}"
+	// flattens the automatic names into that one label, at the cost of
+	// ambiguity (a-b in c vs a in b-c) and a shared 63-character label.
+	NameTemplate string `yaml:"nameTemplate"`
+	// TLS runs a local CA for the zone. See TLSConfig.
+	TLS TLSConfig `yaml:"tls"`
+}
+
+// TLSConfig controls klimax's local certificate authority for the DNS zone.
+//
+// A root CA on the Mac, name-constrained to .<domain>, trusted in the System
+// keychain; one intermediate per cluster, constrained to .<cluster>.<domain>;
+// and a *.<cluster>.<domain> wildcard certificate signed by it and stored in
+// the cluster as the TLS Secret default/klimax-wildcard-tls. The constraints
+// are what make trusting the root safe: nothing it or its intermediates sign
+// is accepted for any other domain, and a leaked intermediate only covers its
+// own cluster.
+type TLSConfig struct {
+	// Enabled is the toggle. nil = default (true). Has no effect when
+	// network.dns is disabled.
+	Enabled *bool `yaml:"enabled"`
 }
 
 // DefaultDNSDomain is the zone served when network.dns.domain is unset.
 const DefaultDNSDomain = "klimax.internal"
+
+// DefaultDNSNameTemplate is the automatic per-Service name, relative to the
+// cluster zone.
+const DefaultDNSNameTemplate = "{{.Name}}.{{.Namespace}}"
 
 // dnsHostOctets are the last two octets of the DNS containers' addresses.
 // x.y.255.0/24 is outside every MetalLB pool (x.y.<num>.* for num 1–99) and far
@@ -59,6 +94,20 @@ func (c *Config) DNSDomain() string {
 		return strings.ToLower(d)
 	}
 	return DefaultDNSDomain
+}
+
+// DNSNameTemplate returns the configured automatic-name template, or the default.
+func (c *Config) DNSNameTemplate() string {
+	if t := strings.TrimSpace(c.Network.DNS.NameTemplate); t != "" {
+		return t
+	}
+	return DefaultDNSNameTemplate
+}
+
+// TLSEnabled reports whether the local CA is on. It needs the DNS zone: the CA
+// is constrained to it and issues for its names.
+func (c *Config) TLSEnabled() bool {
+	return c.DNSEnabled() && (c.Network.DNS.TLS.Enabled == nil || *c.Network.DNS.TLS.Enabled)
 }
 
 // DNSServerIP is the CoreDNS container's address on the kind network — the one
@@ -112,6 +161,8 @@ func validateDNS(c *Config) []error {
 		errs = append(errs, fmt.Errorf("network.dns.domain %q: .local is reserved for multicast DNS and resolves inconsistently — use a subdomain of .internal", domain))
 	}
 
+	errs = append(errs, validateNameTemplate(c.DNSNameTemplate())...)
+
 	_, cidr, err := net.ParseCIDR(c.Network.KindBridgeCIDR)
 	if err == nil {
 		for _, ip := range []string{c.DNSEtcdIP(), c.DNSServerIP()} {
@@ -121,4 +172,42 @@ func validateDNS(c *Config) []error {
 		}
 	}
 	return errs
+}
+
+// validateNameTemplate parses the template and renders it for a sample Service,
+// so a typo fails `klimax up` instead of silently publishing nothing.
+func validateNameTemplate(tmpl string) []error {
+	t, err := template.New("nameTemplate").Option("missingkey=zero").Parse(tmpl)
+	if err != nil {
+		return []error{fmt.Errorf("network.dns.nameTemplate %q: %w", tmpl, err)}
+	}
+	var b strings.Builder
+	sample := map[string]any{"Name": "web", "Namespace": "default", "Labels": map[string]string{}, "Annotations": map[string]string{}}
+	if err := t.Execute(&b, sample); err != nil {
+		return []error{fmt.Errorf("network.dns.nameTemplate %q: %w", tmpl, err)}
+	}
+	out := b.String()
+	if out == "" {
+		return []error{fmt.Errorf("network.dns.nameTemplate %q renders to an empty name", tmpl)}
+	}
+	for _, l := range strings.Split(out, ".") {
+		if !dnsLabelRE.MatchString(l) {
+			return []error{fmt.Errorf("network.dns.nameTemplate %q renders %q for a sample Service — not a valid relative DNS name (klimax appends the cluster zone itself)", tmpl, out)}
+		}
+	}
+	return nil
+}
+
+// DNSNameExample renders the automatic name with placeholders, for messages:
+// "<service>-<namespace>.dev.klimax.internal". cluster "" gives "<cluster>".
+func (c *Config) DNSNameExample(cluster string) string {
+	if cluster == "" {
+		cluster = "<cluster>"
+	}
+	var b strings.Builder
+	t, err := template.New("x").Option("missingkey=zero").Parse(c.DNSNameTemplate())
+	if err != nil || t.Execute(&b, map[string]any{"Name": "<service>", "Namespace": "<namespace>"}) != nil {
+		return "<service>." + cluster + "." + c.DNSDomain()
+	}
+	return b.String() + "." + cluster + "." + c.DNSDomain()
 }

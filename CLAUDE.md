@@ -86,7 +86,11 @@ internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/localdns/localdns.go        Ensure/Remove (etcd + CoreDNS containers at x.y.255.52/.53), Corefile, PurgeCluster, ListRecords, ProbeFromHost
 internal/localdns/externaldns.go     ExternalDNSManifest / InstallExternalDNS (plain kubectl, not Helm), ClusterForward (CoreDNS stanza)
 internal/localdns/resolver.go        EnsureHostResolver / RemoveHostResolvers — /etc/resolver/<domain> on the Mac (marker-guarded, sudo only on change)
-internal/config/dns.go               DNSConfig, DNSEnabled/DNSDomain/DNSServerIP/DNSEtcdIP/ClusterDNSZone, validateDNS
+internal/config/dns.go               DNSConfig (+ NameTemplate, TLSConfig), DNSEnabled/TLSEnabled/DNSDomain/DNSNameTemplate/DNSServerIP/DNSEtcdIP/ClusterDNSZone, validateDNS
+internal/localca/localca.go          Store: EnsureRoot / EnsureCluster (intermediate + wildcard, renew <30d) / RemoveCluster — in-process via github.com/bcollard/homepki/pkg/pki
+internal/localca/cluster.go          InstallInCluster (wildcard Secret, root ConfigMap, ClusterIssuer if cert-manager present), CopySecret
+internal/localca/trust.go            Trusted / Trust / Untrust — macOS System keychain via `security` under sudo
+internal/hostsudo/hostsudo.go        Run — sudo (or `sudo -n` when non-interactive) for the resolver file and keychain trust
 internal/fleet/fleet.go              Fleet manifest: types, Parse, Validate (names-only minimal form, dependsOn DAG, cycle detection)
 internal/fleet/plan.go               Resolve → Plan (num pre-assignment, defaults merge, existence marking), DeletionOrder
 internal/routing/macos.go            EnsureRoute, DeleteRoute, RouteExists, Lima0IP
@@ -122,6 +126,7 @@ internal/cli/kubeconfig.go           `klimax kubeconfig` (path/env/merge/remove/
 internal/cli/cluster_apply.go        `klimax cluster apply -f`/`delete -f` — Fleet manifest: dependsOn DAG scheduler, maxParallel, skip-existing, serialized kubeconfig merge, per-cluster overrides
 internal/cli/fleet.go                `klimax fleet` subcommands (list/describe/create/delete/label) — fleet membership tracked by the klimax.dev/fleet node label, not the manifest; describe curates infra labels in text, full set in json/yaml
 internal/cli/registry.go             `klimax registry clean-cache`
+internal/cli/ca.go                   `klimax ca status|cert|attach|secret|trust|untrust`; reconcileLocalCA (up), localCAForCluster/installLocalCA (create), removeLocalCA (delete/destroy)
 internal/cli/dns.go                  `klimax dns list|attach`; helpers wired into up/create/delete (withLocalDNSForward, installLocalDNS, deleteCluster)
 internal/cli/skill.go                `klimax skill install|path` — install the embedded Agent Skill for AI coding tools
 internal/cli/completion.go           `klimax completion bash|zsh|fish|powershell`
@@ -180,6 +185,9 @@ network:
   dns:
     enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
     domain: "klimax.internal"        # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
+    nameTemplate: "{{.Name}}.{{.Namespace}}"  # ExternalDNS --fqdn-template relative to <cluster>.<domain>; validated by rendering a sample
+    tls:
+      enabled: true                  # default true: local CA (see "Local CA"); ignored when dns.enabled is false
                                      # NOT VM-level: reconciled on every `klimax up`; false removes everything
 
 kind:
@@ -411,6 +419,12 @@ klimax registry clean-cache            Stop mirror containers + delete cache dir
 klimax dns list [-o text|json|yaml]    List names published in the local DNS zone (A records only; TXT ownership records hidden)
 klimax dns attach <cluster>...         Install ExternalDNS + the CoreDNS forward on existing clusters (restarts their CoreDNS)
 
+klimax ca status [-o text|json|yaml]   Root CA path/expiry/keychain trust, per-cluster wildcards
+klimax ca cert                         Print the root CA (PEM)
+klimax ca attach <cluster>...          Issue/renew the cluster's wildcard + install it; ClusterIssuer if cert-manager exists
+klimax ca secret <cluster> -n <ns>     Copy default/klimax-wildcard-tls into another namespace
+klimax ca trust | untrust              Add/remove the root's System-keychain trust (sudo)
+
 klimax skill install                   Install the embedded Agent Skill into ~/.claude/skills/klimax/SKILL.md
   --claude                             Target Claude Code's user skills dir (default true)
   --print                              Write the skill to stdout instead of installing
@@ -491,6 +505,43 @@ Facts that shaped it, all verified on the live VM:
 The no-NAT script's bridge lookup was fixed alongside: it used to yield the
 network id without the `br-` prefix, so Rule 3 (`-o <name>`) silently matched
 nothing. The script now removes that dead rule.
+
+## Local CA (`network.dns.tls`)
+
+In-process, via `github.com/bcollard/homepki/pkg/pki` (stdlib-only; no homepki or
+openssl binary). ECDSA P-256 everywhere — homepki defaults to RSA-2048.
+
+| Tier | Where | Constraint | Lifetime |
+|---|---|---|---|
+| Root | `~/.klimax/pki/<domain>/root.crt`, key in `private/` (0600/0700) — never leaves the Mac | `.<domain>` (critical) | ~6 years (`pki.CAValidityDays`) |
+| Intermediate, per cluster | `clusters/<cluster>/ca.crt` + `chain.crt` | `.<cluster>.<domain>` and `<cluster>.<domain>` | ~6 years |
+| Wildcard leaf, per cluster | `clusters/<cluster>/wildcard.crt` (leaf + intermediate) | — | 365 days; `EnsureCluster` re-issues within 30 days |
+
+- **Constraints are what make keychain trust safe.** Verified: a `github.com` leaf
+  signed with a cluster intermediate is rejected by Go (`CANotAuthorizedForThisName`),
+  curl (`permitted subtree violation`) and macOS. cert-manager does **not** check
+  constraints when signing — enforcement is client-side, which is where it counts.
+- **klimax never installs cert-manager.** A kubectl-applied cert-manager would
+  collide with the Helm install most recipes do. When one is present,
+  `InstallInCluster` adds Secret `<cm-ns>/klimax-ca` (intermediate chain + key) and
+  ClusterIssuer `klimax-ca`, retrying while the webhook comes up.
+- **In the cluster:** Secret `default/klimax-wildcard-tls` (`tls.crt` = leaf +
+  intermediate, `ca.crt` = root), ConfigMap `default/klimax-root-ca`, and the root in
+  each node's trust store (`kind.ConfigureCACerts`, file `klimax-local-ca.crt`) so
+  containerd trusts registries on zone names.
+- **Key material never reaches a log.** `guest.Run` logs commands and `RunScript`
+  logs script bodies at debug level, so keys go through `guest.WriteSecretFile`
+  (content on stdin, path allowlisted) into `/tmp/klimax-ca-<cluster>/`, removed by
+  the install script's `trap`.
+- **A wildcard covers one label.** `*.<cluster>.<domain>` covers annotated names and
+  Ingress hosts, not the default two-label automatic names; `nameTemplate:
+  "{{.Name}}-{{.Namespace}}"` flattens them (considered as a default and rejected:
+  ambiguous joins, shared 63-char label, and a rename for v0.2.x users).
+- `up` creates + trusts the root (`sudo -n` when non-interactive → warning).
+  `destroy` keeps the root and removes cluster intermediates. Turning `tls` off
+  neither deletes nor untrusts — `klimax ca untrust` is explicit.
+- **macOS negative cache is ~75s** regardless of the zone's SOA (measured with TTL 5,
+  minimum 30). The `denial 5` cap helps the VM and pods only.
 
 ## Registry mirrors reach dockerd and the clusters differently
 
