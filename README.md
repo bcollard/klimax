@@ -110,7 +110,7 @@ brew install --cask marina
 
 ### Coming from klimax
 
-marina was called **klimax** before v1.0. Moving over is one command:
+marina was called **klimax** before v0.3. Moving over is one command:
 
 ```sh
 brew update && brew upgrade --cask klimax   # installs marina; `klimax` stays as an alias for now

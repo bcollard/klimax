@@ -4,9 +4,9 @@ Go CLI that wraps **Lima** to manage a macOS Virtualization.framework VM running
 
 ---
 
-## Renamed from klimax (v1.0)
+## Renamed from klimax (v0.3)
 
-marina was **klimax** until v1.0 ("klimax" reads as "climax" in English). The
+marina was **klimax** until v0.3 ("klimax" reads as "climax" in English). The
 rename is a clean break, not a compatibility layer — see `internal/cli/migrate.go`:
 
 - Every identifier moved: module `github.com/bcollard/marina`, `~/.marina`

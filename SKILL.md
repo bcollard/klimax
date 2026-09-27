@@ -17,7 +17,7 @@ metadata:
 
 Project: https://github.com/bcollard/marina
 
-> marina was called **klimax** before v1.0. `klimax` is still installed as an alias; an existing `~/.klimax` must be moved over once with `marina migrate` (`marina up` refuses to start until then).
+> marina was called **klimax** before v0.3. `klimax` is still installed as an alias; an existing `~/.klimax` must be moved over once with `marina migrate` (`marina up` refuses to start until then).
 
 ## Install (idempotent)
 

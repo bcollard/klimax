@@ -16,7 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// marina was called klimax before v1.0. `marina migrate` moves an existing
+// marina was called klimax before v0.3. `marina migrate` moves an existing
 // klimax installation over. It is a clean break, not a compatibility layer:
 // the klimax VM and its clusters are deleted and re-created under marina, and
 // only what is expensive to rebuild is carried over — the config and the
@@ -54,7 +54,7 @@ func newMigrateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
 		Short: "Move a klimax installation (~/.klimax) over to marina",
-		Long: `marina was called klimax before v1.0. This moves an existing installation over:
+		Long: `marina was called klimax before v0.3. This moves an existing installation over:
 
   1. deletes the klimax VM and its clusters (re-create them with marina afterwards)
   2. copies ~/.klimax/config.yaml to ~/.marina/config.yaml, renaming the VM

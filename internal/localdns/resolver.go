@@ -20,7 +20,7 @@ const ResolverDir = "/etc/resolver"
 // never touches a resolver file someone else put there.
 const resolverMarker = "# Managed by marina"
 
-// legacyResolverMarker is what klimax (marina before v1.0) wrote. Its files
+// legacyResolverMarker is what klimax (marina before v0.3) wrote. Its files
 // are cleaned up like marina's own: after a migration, /etc/resolver/klimax.internal
 // would otherwise keep pointing macOS at a zone nothing serves.
 const legacyResolverMarker = "# Managed by klimax"

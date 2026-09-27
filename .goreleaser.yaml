@@ -76,7 +76,7 @@ homebrew_casks:
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: https://marina.run
     description: Lima-based macOS VZ VM + multi-kind cluster manager
-    # Transition alias for scripts written against klimax (marina before v1.0):
+    # Transition alias for scripts written against klimax (marina before v0.3):
     # `klimax …` keeps working and runs marina. Drop it in a later release.
     custom_block: |
       binary "marina", target: "klimax"
