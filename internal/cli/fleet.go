@@ -10,21 +10,21 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/kind"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
 // fleetLabelKey is the node label that records which fleet a cluster belongs to.
-const fleetLabelKey = "klimax.dev/fleet"
+const fleetLabelKey = "marina.run/fleet"
 
 func newFleetCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fleet",
-		Short: "Manage fleets of kind clusters (grouped by the klimax.dev/fleet label)",
+		Short: "Manage fleets of kind clusters (grouped by the marina.run/fleet label)",
 		Long: `A fleet is a set of kind clusters created from a Fleet manifest. Members are
-tracked by the klimax.dev/fleet=<name> node label, so fleet operations work on
+tracked by the marina.run/fleet=<name> node label, so fleet operations work on
 live clusters regardless of the original manifest.`,
 	}
 	cmd.AddCommand(
@@ -44,7 +44,7 @@ live clusters regardless of the original manifest.`,
 func newFleetAdoptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adopt <fleet> <cluster> [cluster...]",
-		Short: "Adopt existing clusters into a fleet (sets their klimax.dev/fleet label)",
+		Short: "Adopt existing clusters into a fleet (sets their marina.run/fleet label)",
 		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runFleetAdopt(cmd.Context(), args[0], args[1:])
@@ -67,7 +67,7 @@ func runFleetAdopt(ctx context.Context, name string, clusters []string) error {
 	}
 	for _, c := range clusters {
 		if !slices.Contains(live, c) {
-			return fmt.Errorf("cluster %q not found (see 'klimax cluster list')", c)
+			return fmt.Errorf("cluster %q not found (see 'marina cluster list')", c)
 		}
 	}
 	if err := checkZoneNames(ctx, g, cfg, name); err != nil {
@@ -182,7 +182,7 @@ func runFleetDescribe(ctx context.Context, name, outputFmt string) error {
 
 // infraLabelPrefixes are the standard read-only node labels kubelet sets. They
 // are hidden from the `describe` text view (JSON/YAML output keeps everything).
-// topology.kubernetes.io/* is intentionally NOT hidden — klimax sets region/zone.
+// topology.kubernetes.io/* is intentionally NOT hidden — marina sets region/zone.
 var infraLabelPrefixes = []string{
 	"kubernetes.io/",
 	"beta.kubernetes.io/",
@@ -190,7 +190,7 @@ var infraLabelPrefixes = []string{
 	"node.kubernetes.io/",
 }
 
-// formatLabels renders the klimax/custom labels as sorted "k=v" pairs, hiding
+// formatLabels renders the marina/custom labels as sorted "k=v" pairs, hiding
 // the standard Kubernetes infrastructure node labels.
 func formatLabels(labels map[string]string) string {
 	keys := make([]string, 0, len(labels))
@@ -233,7 +233,7 @@ func newFleetCreateCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if filename == "" {
-				return errors.New("a manifest is required: klimax fleet create -f <file>")
+				return errors.New("a manifest is required: marina fleet create -f <file>")
 			}
 			return runClusterApply(cmd.Context(), filename, dryRun, maxParallel, adopt)
 		},
@@ -360,7 +360,7 @@ func runFleetList(ctx context.Context, outputFmt string) error {
 		return err
 	}
 
-	// Only real fleets (skip clusters with no klimax.dev/fleet label).
+	// Only real fleets (skip clusters with no marina.run/fleet label).
 	names := make([]string, 0, len(byFleet))
 	for name := range byFleet {
 		if name != "" {

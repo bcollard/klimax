@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// processStartTime is implemented for darwin only. klimax targets macOS, and the
+// processStartTime is implemented for darwin only. marina targets macOS, and the
 // staleness check that uses it exists for a macOS failure mode; elsewhere the
 // caller treats the error as "cannot tell" and skips the check.
 func processStartTime(int) (time.Time, error) {

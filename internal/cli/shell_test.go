@@ -33,12 +33,12 @@ func TestSplitGuestPath(t *testing.T) {
 		wantPath  string
 		wantGuest bool
 	}{
-		{"vm:/tmp/file", "klimax", "/tmp/file", true},
-		{"klimax:/tmp/file", "klimax", "/tmp/file", true},
-		{"./local/file", "klimax", "./local/file", false},
-		{"/abs/local/file", "klimax", "/abs/local/file", false},
+		{"vm:/tmp/file", "marina", "/tmp/file", true},
+		{"marina:/tmp/file", "marina", "/tmp/file", true},
+		{"./local/file", "marina", "./local/file", false},
+		{"/abs/local/file", "marina", "/abs/local/file", false},
 		// A relative path that merely contains a colon is not a guest path.
-		{"weird:name.txt", "klimax", "weird:name.txt", false},
+		{"weird:name.txt", "marina", "weird:name.txt", false},
 	}
 	for _, tt := range tests {
 		gotPath, gotGuest := splitGuestPath(tt.in, tt.vmName)

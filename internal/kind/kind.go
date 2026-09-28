@@ -13,11 +13,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/limatemplate"
-	"github.com/bcollard/klimax/internal/registry"
-	"github.com/bcollard/klimax/internal/routing"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/limatemplate"
+	"github.com/bcollard/marina/internal/registry"
+	"github.com/bcollard/marina/internal/routing"
 )
 
 // CreateCluster creates a kind cluster with the given config.
@@ -25,7 +25,7 @@ import (
 //  1. Writes a kind cluster config with containerd patches for all registries.
 //  2. Creates the cluster using the configured node image version.
 //  3. Installs MetalLB and configures an IP address pool.
-//  4. Exports the kubeconfig to ~/.kube/klimax/<name>.kubeconfig on the host,
+//  4. Exports the kubeconfig to ~/.kube/marina/<name>.kubeconfig on the host,
 //     with the API server address set to the VM's lima0 IP (direct mode, the
 //     default when useDirectIP is true) or 127.0.0.1 (loopback mode).
 func CreateCluster(ctx context.Context, g *guest.Client, cl config.ClusterConfig, kindCfg config.KindConfig, regCfg config.RegistryConfig, caCerts map[string]string, kindCIDR string, useDirectIP bool) error {
@@ -97,7 +97,7 @@ kubeadmConfigPatches:
       node-labels: "ingress-ready=true,topology.kubernetes.io/region=%s,topology.kubernetes.io/zone=%s"
 %s`, cl.Name, apiPort, cl.Num, cl.Num, cl.Region, cl.Zone, certSANsPatch)
 
-	configPath := fmt.Sprintf("/tmp/klimax-kind-%s.yaml", cl.Name)
+	configPath := fmt.Sprintf("/tmp/marina-kind-%s.yaml", cl.Name)
 
 	createScript := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
@@ -236,11 +236,11 @@ func ConfigureCACerts(ctx context.Context, g *guest.Client, clusterName string, 
 }
 
 // applyNodeLabels labels every node in the cluster at creation. It always applies
-// managed-by=klimax, plus any caller-supplied labels (klimax.dev/fleet, custom).
+// managed-by=marina, plus any caller-supplied labels (marina.run/fleet, custom).
 // Topology labels (region/zone) and ingress-ready are already set at node
 // registration via the kubeadm node-labels patch.
 func applyNodeLabels(ctx context.Context, g *guest.Client, clusterName string, labels map[string]string) error {
-	merged := map[string]string{"managed-by": "klimax"}
+	merged := map[string]string{"managed-by": "marina"}
 	maps.Copy(merged, labels)
 
 	keys := make([]string, 0, len(merged))
@@ -266,7 +266,7 @@ func LabelNodes(ctx context.Context, g *guest.Client, clusterName string, args [
 	slog.Info("Labeling cluster nodes", "cluster", clusterName, "ops", len(args))
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
+KIND_KUBECONFIG=/tmp/marina-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 kubectl --kubeconfig ${KIND_KUBECONFIG} label nodes --all --overwrite %s
 `, clusterName, clusterName, strings.Join(args, " "))
@@ -286,7 +286,7 @@ func installMetalLB(ctx context.Context, g *guest.Client, cl config.ClusterConfi
 
 	metallbScript := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
+KIND_KUBECONFIG=/tmp/marina-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 
 kubectl --kubeconfig ${KIND_KUBECONFIG} apply \
@@ -300,8 +300,8 @@ kubectl --kubeconfig ${KIND_KUBECONFIG} \
 kubectl --kubeconfig ${KIND_KUBECONFIG} \
   -n metallb-system wait deploy controller --timeout=180s --for=condition=Available
 
-KLIMAX_POOL=/tmp/klimax-metallb-pool-$$.yaml
-cat > ${KLIMAX_POOL} <<EOF
+MARINA_POOL=/tmp/marina-metallb-pool-$$.yaml
+cat > ${MARINA_POOL} <<EOF
 apiVersion: metallb.io/v1beta1
 kind: IPAddressPool
 metadata:
@@ -324,15 +324,15 @@ EOF
 # webhook connection error. Retry until it is accepted rather than sleeping a
 # fixed amount: measured, the blind "sleep 5" was nearly a third of the whole
 # MetalLB phase, while the webhook is usually ready in well under a second.
-KLIMAX_DEADLINE=$((SECONDS + 60))
-until kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f ${KLIMAX_POOL}; do
-  if [ ${SECONDS} -ge ${KLIMAX_DEADLINE} ]; then
+MARINA_DEADLINE=$((SECONDS + 60))
+until kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f ${MARINA_POOL}; do
+  if [ ${SECONDS} -ge ${MARINA_DEADLINE} ]; then
     echo "ERROR: MetalLB IPAddressPool/L2Advertisement not accepted within 60s" >&2
     exit 1
   fi
   sleep 1
 done
-rm -f ${KLIMAX_POOL}
+rm -f ${MARINA_POOL}
 
 echo "MetalLB configured for cluster %s"
 `,
@@ -348,7 +348,7 @@ echo "MetalLB configured for cluster %s"
 
 // exportKubeconfig fetches the kubeconfig from the VM, patches the server address
 // to apiServerAddr (127.0.0.1 in loopback mode, lima0 IP in direct mode), and
-// writes it to ~/.kube/klimax/<name>.kubeconfig on the macOS host.
+// writes it to ~/.kube/marina/<name>.kubeconfig on the macOS host.
 func exportKubeconfig(ctx context.Context, g *guest.Client, clusterName string, apiPort int, apiServerAddr string) error {
 	slog.Info("Exporting kubeconfig to host", "cluster", clusterName, "apiPort", apiPort, "apiServerAddr", apiServerAddr)
 
@@ -381,7 +381,7 @@ func KindKubeconfigPath(clusterName string) string {
 
 func kindKubeconfigPath(clusterName string) string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".kube", "klimax", clusterName+".kubeconfig")
+	return filepath.Join(home, ".kube", "marina", clusterName+".kubeconfig")
 }
 
 // ApplyCoreDNSPatch patches the CoreDNS ConfigMap to forward the given custom DNS
@@ -428,7 +428,7 @@ func ApplyCoreDNSPatch(ctx context.Context, g *guest.Client, clusterName string,
 
 	script := fmt.Sprintf(`#!/bin/bash
 set -euo pipefail
-KIND_KUBECONFIG=/tmp/klimax-kube-%s.yaml
+KIND_KUBECONFIG=/tmp/marina-kube-%s.yaml
 kind get kubeconfig --name %s | sed 's|https://0.0.0.0:|https://127.0.0.1:|g' > ${KIND_KUBECONFIG}
 cat <<'EOF' | kubectl --kubeconfig ${KIND_KUBECONFIG} apply -f -
 apiVersion: v1

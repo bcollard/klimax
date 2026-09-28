@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/fleet"
-	"github.com/bcollard/klimax/internal/kind"
+	"github.com/bcollard/marina/internal/fleet"
+	"github.com/bcollard/marina/internal/kind"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,8 +21,8 @@ func TestCustomLabelsDropsInfraAndManaged(t *testing.T) {
 		"node.kubernetes.io/exclude":            "true",
 		"topology.kubernetes.io/region":         "europe-west1",
 		"topology.kubernetes.io/zone":           "europe-west1-b",
-		"managed-by":                            "klimax",
-		"klimax.dev/fleet":                      "mesh",
+		"managed-by":                            "marina",
+		"marina.run/fleet":                      "mesh",
 		"env":                                   "prod",
 		"team":                                  "platform",
 	})
@@ -41,7 +41,7 @@ func TestCustomLabelsReturnsNilWhenOnlyInfra(t *testing.T) {
 	// nil (not an empty map) keeps `labels:` out of the emitted YAML entirely.
 	if got := customLabels(map[string]string{
 		"kubernetes.io/hostname": "dev-control-plane",
-		"managed-by":             "klimax",
+		"managed-by":             "marina",
 	}); got != nil {
 		t.Errorf("got %v, want nil", got)
 	}
@@ -58,8 +58,8 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "all share a fleet label",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"klimax.dev/fleet": "mesh"}),
-				"b": info("v1.36.1", map[string]string{"klimax.dev/fleet": "mesh"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
+				"b": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 			},
 			want: "mesh",
 		},
@@ -67,8 +67,8 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "mixed fleets fall back",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"klimax.dev/fleet": "mesh"}),
-				"b": info("v1.36.1", map[string]string{"klimax.dev/fleet": "gw"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
+				"b": info("v1.36.1", map[string]string{"marina.run/fleet": "gw"}),
 			},
 			want: "exported",
 		},
@@ -76,7 +76,7 @@ func TestDeriveFleetName(t *testing.T) {
 			name:  "one unlabelled falls back",
 			names: []string{"a", "b"},
 			infos: map[string]*kind.ClusterInfo{
-				"a": info("v1.36.1", map[string]string{"klimax.dev/fleet": "mesh"}),
+				"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 				"b": info("v1.36.1", map[string]string{}),
 			},
 			want: "exported",
@@ -104,12 +104,12 @@ func TestAssembleFleetCapturesLiveState(t *testing.T) {
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
 			"topology.kubernetes.io/zone":   "europe-west1-b",
-			"klimax.dev/fleet":              "mesh",
+			"marina.run/fleet":              "mesh",
 			"kubernetes.io/hostname":        "dev-control-plane",
 			"env":                           "dev",
 		}),
 		"staging": info("v1.36.1", map[string]string{
-			"klimax.dev/fleet": "mesh",
+			"marina.run/fleet": "mesh",
 		}),
 	}
 
@@ -148,7 +148,7 @@ func TestAssembleFleetCapturesLiveState(t *testing.T) {
 
 func TestAssembleFleetExplicitNameAndNoNums(t *testing.T) {
 	infos := map[string]*kind.ClusterInfo{
-		"a": info("v1.36.1", map[string]string{"klimax.dev/fleet": "mesh"}),
+		"a": info("v1.36.1", map[string]string{"marina.run/fleet": "mesh"}),
 	}
 	man := assembleFleet([]string{"a"}, map[string]int{"a": 7}, infos, "chosen", false)
 	if man.Metadata.Name != "chosen" {
@@ -165,7 +165,7 @@ func TestAssembleFleetRoundTripsThroughParse(t *testing.T) {
 	infos := map[string]*kind.ClusterInfo{
 		"dev": info("v1.36.1", map[string]string{
 			"topology.kubernetes.io/region": "europe-west1",
-			"klimax.dev/fleet":              "mesh",
+			"marina.run/fleet":              "mesh",
 			"env":                           "dev",
 		}),
 	}

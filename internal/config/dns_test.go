@@ -52,7 +52,7 @@ func TestDNSValidation(t *testing.T) {
 		name, domain, cidr, wantErr string
 	}{
 		{"bare TLD", "internal", "", "at least two labels"},
-		{"mdns", "klimax.local", "", ".local is reserved"},
+		{"mdns", "marina.local", "", ".local is reserved"},
 		{"bad label", "kli_max.internal", "", "not a valid DNS label"},
 		{"cidr too small", "", "172.30.0.0/24", "inside network.kindBridgeCIDR"},
 		{"custom ok", "lab.internal", "", ""},

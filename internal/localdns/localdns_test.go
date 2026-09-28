@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bcollard/klimax/internal/config"
+	"github.com/bcollard/marina/internal/config"
 	"gopkg.in/yaml.v3"
 )
 

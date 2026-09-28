@@ -1,4 +1,4 @@
-// Package localca is klimax's certificate authority for the local DNS zone
+// Package localca is marina's certificate authority for the local DNS zone
 // (network.dns.tls): a root on the Mac, an intermediate per cluster, and a
 // wildcard certificate per cluster.
 //
@@ -6,7 +6,7 @@
 // linked in-process — no homepki or openssl binary is needed. This package only
 // decides the layout, names and constraints.
 //
-//	~/.klimax/pki/<domain>/
+//	~/.marina/pki/<domain>/
 //	├── root.crt                        name-constrained to .<domain>
 //	├── private/root.key                never leaves the Mac
 //	├── clusters/<cluster>/
@@ -52,19 +52,19 @@ const renewBefore = 30 * 24 * time.Hour
 // members concurrently, and every member asks for the same fleet intermediate:
 // unserialised, two goroutines would each generate one and interleave their
 // writes to ca.crt and ca.key. One process-wide lock is enough — issuance is a
-// few milliseconds, and klimax runs one command at a time.
+// few milliseconds, and marina runs one command at a time.
 var storeMu sync.Mutex
 
 // Store is the CA for one DNS domain.
 type Store struct {
-	Dir    string // ~/.klimax/pki/<domain>
+	Dir    string // ~/.marina/pki/<domain>
 	Domain string
 }
 
-// New returns the store for domain under klimaxHome. Nothing is created until
+// New returns the store for domain under marinaHome. Nothing is created until
 // an Ensure call.
-func New(klimaxHome, domain string) *Store {
-	return &Store{Dir: filepath.Join(klimaxHome, "pki", domain), Domain: domain}
+func New(marinaHome, domain string) *Store {
+	return &Store{Dir: filepath.Join(marinaHome, "pki", domain), Domain: domain}
 }
 
 // RootCertPath is the root certificate — the file to trust.
@@ -133,7 +133,7 @@ func (s *Store) ensureRoot() (cert *x509.Certificate, key crypto.Signer, created
 	if key, err = pki.GenerateKey(keyType); err != nil {
 		return nil, nil, false, err
 	}
-	subject := pkix.Name{Organization: []string{"klimax"}, CommonName: "klimax local CA (" + s.Domain + ")"}
+	subject := pkix.Name{Organization: []string{"marina"}, CommonName: "marina local CA (" + s.Domain + ")"}
 	if cert, err = pki.SelfSignRoot(key, subject, nc, pki.Days(pki.CAValidityDays)); err != nil {
 		return nil, nil, false, err
 	}
@@ -203,7 +203,7 @@ func (s *Store) ensureZone(kind Kind, name string) (*Cluster, error) {
 		if interKey, err = pki.GenerateKey(keyType); err != nil {
 			return nil, err
 		}
-		subject := pkix.Name{Organization: []string{"klimax"}, OrganizationalUnit: []string{cluster}, CommonName: "klimax " + cluster + " CA"}
+		subject := pkix.Name{Organization: []string{"marina"}, OrganizationalUnit: []string{cluster}, CommonName: "marina " + cluster + " CA"}
 		if inter, err = pki.SignIntermediate(interKey.Public(), subject, nc, pki.Days(pki.CAValidityDays), root, rootKey); err != nil {
 			return nil, err
 		}
@@ -225,7 +225,7 @@ func (s *Store) ensureZone(kind Kind, name string) (*Cluster, error) {
 		if leafKey, err = pki.GenerateKey(keyType); err != nil {
 			return nil, err
 		}
-		subject := pkix.Name{Organization: []string{"klimax"}, OrganizationalUnit: []string{cluster}, CommonName: names[0]}
+		subject := pkix.Name{Organization: []string{"marina"}, OrganizationalUnit: []string{cluster}, CommonName: names[0]}
 		if leaf, err = pki.SignLeaf(leafKey.Public(), subject, pki.SANs{DNS: names}, pki.ServerLeaf, pki.Days(pki.LeafValidityDays), inter, interKey); err != nil {
 			return nil, err
 		}

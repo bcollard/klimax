@@ -10,23 +10,23 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/limatemplate"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/limatemplate"
 	"github.com/lima-vm/lima/v2/pkg/instance"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/lima-vm/lima/v2/pkg/store"
 	"gopkg.in/yaml.v3"
 )
 
-// Manager handles the Lima VM lifecycle for a named klimax instance.
+// Manager handles the Lima VM lifecycle for a named marina instance.
 type Manager struct {
 	name       string
-	klimaxHome string // ~/.klimax — used to locate the cached guest agent
+	marinaHome string // ~/.marina — used to locate the cached guest agent
 }
 
 // New creates a Manager for the given Lima instance name.
-func New(name, klimaxHome string) *Manager {
-	return &Manager{name: name, klimaxHome: klimaxHome}
+func New(name, marinaHome string) *Manager {
+	return &Manager{name: name, marinaHome: marinaHome}
 }
 
 // EnsureRunning is idempotent: creates the instance if it doesn't exist,
@@ -61,14 +61,14 @@ func (m *Manager) EnsureRunning(ctx context.Context, cfg *config.Config, showLog
 		go tailLimaLog(logCtx, filepath.Join(inst.Dir, "ha.stderr.log"), "lima-err")
 	}
 
-	guestAgent, err := EnsureGuestAgent(ctx, m.klimaxHome)
+	guestAgent, err := EnsureGuestAgent(ctx, m.marinaHome)
 	if err != nil {
 		return nil, fmt.Errorf("guest agent: %w", err)
 	}
 
 	// StartWithPaths blocks until the guest is reachable — image download plus
 	// first boot plus cloud-init, which is minutes with no output of its own.
-	// Lima does report progress, but through logrus, which klimax quiets to
+	// Lima does report progress, but through logrus, which marina quiets to
 	// error by default (resolveLimaLogLevel), so the default path shows nothing
 	// at all between here and "VM is running" and looks hung. Skip the heartbeat
 	// when showLogs is on: that path is already noisy.
@@ -204,7 +204,7 @@ func (m *Manager) create(ctx context.Context, cfg *config.Config) (*limatype.Ins
 var heartbeatInterval = 15 * time.Second
 
 // provisionPhase is the Lima requirement that dominates a first boot: every
-// provision.system script runs inside it. On a fresh VM that is klimax
+// provision.system script runs inside it. On a fresh VM that is marina
 // installing packages, Docker, kind and kubectl — minutes of work that Lima
 // reports as a single unnamed wait.
 const provisionPhase = "boot scripts must have finished"
@@ -239,7 +239,7 @@ func startHeartbeat(ctx context.Context, logPath string) func() {
 
 				if first {
 					slog.Info("Still starting the VM — a first boot downloads the image and runs cloud-init",
-						"elapsed", elapsed, "detail", "klimax up --show-vm-logs")
+						"elapsed", elapsed, "detail", "marina up --show-vm-logs")
 					first = false
 					continue
 				}

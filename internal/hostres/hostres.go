@@ -13,7 +13,7 @@ import (
 type HostResources struct {
 	CPUs        int
 	MemoryBytes uint64
-	FreeDisk    uint64 // free bytes on the filesystem holding the klimax home
+	FreeDisk    uint64 // free bytes on the filesystem holding the marina home
 }
 
 // Read gathers the host's CPU count, physical memory and free disk.
@@ -24,15 +24,15 @@ func Read() HostResources {
 }
 
 // ReadFor is Read, additionally reporting free space on the filesystem holding
-// klimaxHome. Pass "" to skip the disk lookup.
-func ReadFor(klimaxHome string) HostResources {
+// marinaHome. Pass "" to skip the disk lookup.
+func ReadFor(marinaHome string) HostResources {
 	res := HostResources{CPUs: runtime.NumCPU()}
 	if mem, err := hostMemoryBytes(); err == nil {
 		res.MemoryBytes = mem
 	}
-	if klimaxHome != "" {
+	if marinaHome != "" {
 		var st unix.Statfs_t
-		if err := unix.Statfs(klimaxHome, &st); err == nil {
+		if err := unix.Statfs(marinaHome, &st); err == nil {
 			res.FreeDisk = uint64(st.Bavail) * uint64(st.Bsize)
 		}
 	}
@@ -106,7 +106,7 @@ func CheckResources(res HostResources, cpus int, memory, disk, imageDisk string)
 	return out
 }
 
-// Sizing rules for the defaults klimax picks when a config leaves a value unset.
+// Sizing rules for the defaults marina picks when a config leaves a value unset.
 const (
 	// cpuShare is the fraction of the Mac's cores given to the VM.
 	cpuShare = 0.75
@@ -148,7 +148,7 @@ func DefaultMemoryBytes(total uint64) uint64 {
 	}
 	want := uint64(float64(total) * memShare)
 	if want < minMemoryBytes {
-		// Only reachable on a machine too small to run klimax well anyway; the
+		// Only reachable on a machine too small to run marina well anyway; the
 		// over-commit check still warns if this exceeds what is there.
 		want = minMemoryBytes
 	}

@@ -6,19 +6,19 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bcollard/klimax/internal/config"
-	"github.com/bcollard/klimax/internal/guest"
-	"github.com/bcollard/klimax/internal/kind"
-	"github.com/bcollard/klimax/internal/limatemplate"
-	"github.com/bcollard/klimax/internal/localdns"
-	"github.com/bcollard/klimax/internal/routing"
-	"github.com/bcollard/klimax/internal/vm"
+	"github.com/bcollard/marina/internal/config"
+	"github.com/bcollard/marina/internal/guest"
+	"github.com/bcollard/marina/internal/kind"
+	"github.com/bcollard/marina/internal/limatemplate"
+	"github.com/bcollard/marina/internal/localdns"
+	"github.com/bcollard/marina/internal/routing"
+	"github.com/bcollard/marina/internal/vm"
 	"github.com/lima-vm/lima/v2/pkg/limatype"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
 
-// statusReport is the machine-readable shape of `klimax status`. Clusters and
+// statusReport is the machine-readable shape of `marina status`. Clusters and
 // IPTables are omitted (nil) when the VM is not running, since neither can be
 // determined without a guest connection — VM.Status says why.
 type statusReport struct {
@@ -59,8 +59,8 @@ type statusTLS struct {
 type statusMounts struct {
 	// Shares is what the VM has, or will have on its next start.
 	Shares []statusMount `json:"shares"          yaml:"shares"`
-	// PendingRestart is set when vm.mounts in the klimax config no longer
-	// matches Shares — `klimax up` offers to restart the VM and apply it.
+	// PendingRestart is set when vm.mounts in the marina config no longer
+	// matches Shares — `marina up` offers to restart the VM and apply it.
 	PendingRestart bool   `json:"pendingRestart"  yaml:"pendingRestart"`
 	Error          string `json:"error,omitempty" yaml:"error,omitempty"`
 }
@@ -136,7 +136,7 @@ func collectStatus(ctx context.Context) (*statusReport, error) {
 		return nil, err
 	}
 
-	mgr := vm.New(cfg.VM.Name, KlimaxHome())
+	mgr := vm.New(cfg.VM.Name, MarinaHome())
 	inst, err := mgr.Inspect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("inspecting VM: %w", err)
@@ -283,7 +283,7 @@ func printStatusText(rep *statusReport) {
 		}
 	}
 	if rep.Mounts != nil && rep.Mounts.PendingRestart {
-		fmt.Println("  ⚠ vm.mounts in the config differs — apply with: klimax up")
+		fmt.Println("  ⚠ vm.mounts in the config differs — apply with: marina up")
 	}
 
 	fmt.Println("\n=== Local DNS ===")
@@ -297,22 +297,22 @@ func printStatusText(rep *statusReport) {
 		case *rep.DNS.ServerRunning:
 			fmt.Println("  server:   running")
 		default:
-			fmt.Println("  server:   NOT RUNNING — run: klimax up")
+			fmt.Println("  server:   NOT RUNNING — run: marina up")
 		}
 		if rep.DNS.HostResolver {
 			fmt.Printf("  resolver: /etc/resolver/%s → present\n", rep.DNS.Domain)
 		} else {
-			fmt.Printf("  resolver: /etc/resolver/%s → MISSING — run: klimax up\n", rep.DNS.Domain)
+			fmt.Printf("  resolver: /etc/resolver/%s → MISSING — run: marina up\n", rep.DNS.Domain)
 		}
 		switch t := rep.DNS.TLS; {
 		case t == nil:
 			fmt.Println("  tls:      disabled (network.dns.tls.enabled: false)")
 		case !t.Exists:
-			fmt.Println("  tls:      no root CA yet — run: klimax up")
+			fmt.Println("  tls:      no root CA yet — run: marina up")
 		case t.Trusted:
-			fmt.Printf("  tls:      local CA trusted in the System keychain (klimax ca status)\n")
+			fmt.Printf("  tls:      local CA trusted in the System keychain (marina ca status)\n")
 		default:
-			fmt.Printf("  tls:      local CA NOT trusted — run: klimax ca trust\n")
+			fmt.Printf("  tls:      local CA NOT trusted — run: marina ca trust\n")
 		}
 	}
 

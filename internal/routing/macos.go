@@ -8,12 +8,12 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/bcollard/klimax/internal/guest"
+	"github.com/bcollard/marina/internal/guest"
 )
 
 // EnsureRoute idempotently adds a macOS route for cidr via the VM's lima0 IP.
 // If a route for that CIDR already points at lima0IP it is a no-op — importantly
-// it does NOT invoke sudo, so re-running `klimax up` against an already-running VM
+// it does NOT invoke sudo, so re-running `marina up` against an already-running VM
 // never prompts for a password. Only a missing or stale (wrong-gateway) route
 // triggers the sudo delete+add.
 func EnsureRoute(cidr, lima0IP string) error {
@@ -43,7 +43,7 @@ func EnsureRoute(cidr, lima0IP string) error {
 // given CIDR, and whether a route dedicated to that CIDR exists. It returns
 // ok=false when only a broader/default route matches, so the caller knows a
 // dedicated route still needs to be added. It performs no privileged operations
-// (no sudo), making it safe to call on every `klimax up`.
+// (no sudo), making it safe to call on every `marina up`.
 func RouteGateway(cidr string) (string, bool) {
 	ip, ipNet, err := net.ParseCIDR(cidr)
 	if err != nil {

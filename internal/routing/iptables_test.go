@@ -10,7 +10,7 @@ import (
 
 func TestRenderNoNatScript(t *testing.T) {
 	on := renderNoNatScript("172.30.0.0/16", LocalDNS{ServerIP: "172.30.255.53", Domain: "demo.internal"})
-	for _, want := range []string{`KIND_CIDR="172.30.0.0/16"`, `DNS_IP="172.30.255.53"`, `DNS_DOMAIN="demo.internal"`, "--comment klimax-dns"} {
+	for _, want := range []string{`KIND_CIDR="172.30.0.0/16"`, `DNS_IP="172.30.255.53"`, `DNS_DOMAIN="demo.internal"`, "--comment marina-dns"} {
 		if !strings.Contains(on, want) {
 			t.Errorf("script missing %q", want)
 		}

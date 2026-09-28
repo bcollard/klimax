@@ -10,32 +10,32 @@ func newCompletionCmd(root *cobra.Command) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "completion [bash|zsh|fish|powershell]",
 		Short: "Generate shell auto-completion script",
-		Long: `Generate an auto-completion script for klimax for the specified shell.
+		Long: `Generate an auto-completion script for marina for the specified shell.
 
 To load completions for the current session only:
 
-  bash:        source <(klimax completion bash)
-  zsh:         source <(klimax completion zsh)
-  fish:        klimax completion fish | source
-  powershell:  klimax completion powershell | Out-String | Invoke-Expression
+  bash:        source <(marina completion bash)
+  zsh:         source <(marina completion zsh)
+  fish:        marina completion fish | source
+  powershell:  marina completion powershell | Out-String | Invoke-Expression
 
 To load completions permanently:
 
   bash (macOS via Homebrew bash-completion):
-    klimax completion bash > $(brew --prefix)/etc/bash_completion.d/klimax
+    marina completion bash > $(brew --prefix)/etc/bash_completion.d/marina
 
   bash (Linux):
-    klimax completion bash > /etc/bash_completion.d/klimax
+    marina completion bash > /etc/bash_completion.d/marina
 
   zsh:
     echo "autoload -U compinit; compinit" >> ~/.zshrc
-    klimax completion zsh > "${fpath[1]}/_klimax"
+    marina completion zsh > "${fpath[1]}/_marina"
 
   fish:
-    klimax completion fish > ~/.config/fish/completions/klimax.fish
+    marina completion fish > ~/.config/fish/completions/marina.fish
 
   powershell:
-    klimax completion powershell >> $PROFILE
+    marina completion powershell >> $PROFILE
 `,
 		DisableFlagsInUseLine: true,
 		ValidArgs:             []string{"bash", "zsh", "fish", "powershell"},
