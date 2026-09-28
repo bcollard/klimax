@@ -74,7 +74,7 @@ func localCAForCluster(cfg *config.Config, cluster string, caCerts map[string]st
 		return nil, caCerts
 	}
 	// Nodes trust the root too, so containerd can pull from a registry served
-	// on a klimax.internal name.
+	// on a demo.internal name.
 	merged := maps.Clone(caCerts)
 	if merged == nil {
 		merged = map[string]string{}
@@ -113,7 +113,7 @@ func removeLocalCA(cfg *config.Config, cluster string) {
 func newCACmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ca",
-		Short: "Manage the local CA for the klimax.internal zone (network.dns.tls)",
+		Short: "Manage the local CA for the demo.internal zone (network.dns.tls)",
 		Long: `klimax runs a certificate authority for the local DNS zone: a root on the Mac,
 name-constrained to .<domain> and trusted in the System keychain, an intermediate per
 cluster constrained to .<cluster>.<domain>, and a *.<cluster>.<domain> wildcard in each

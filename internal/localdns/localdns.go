@@ -1,4 +1,4 @@
-// Package localdns runs klimax's local DNS zone (klimax.internal by default):
+// Package localdns runs klimax's local DNS zone (demo.internal by default):
 // an etcd + CoreDNS pair on the kind network that every cluster's ExternalDNS
 // writes LoadBalancer Services into, and the Mac resolves through
 // /etc/resolver.
@@ -43,8 +43,8 @@ const (
 
 	// EtcdPrefix is where the CoreDNS etcd plugin (SkyDNS layout) and
 	// ExternalDNS's coredns provider both look. Names are stored label-reversed
-	// under it: web.default.dev.klimax.internal →
-	// /skydns/internal/klimax/dev/default/web/<id>.
+	// under it: web.default.dev.demo.internal →
+	// /skydns/internal/demo/dev/default/web/<id>.
 	EtcdPrefix = "/skydns"
 
 	corefileDir  = "/etc/klimax/dns"
@@ -214,8 +214,8 @@ func parseRecords(out string) []Record {
 	return recs
 }
 
-// keyToName turns /skydns/internal/klimax/dev/default/web/<id> back into
-// web.default.dev.klimax.internal. The last path segment is ExternalDNS's
+// keyToName turns /skydns/internal/demo/dev/default/web/<id> back into
+// web.default.dev.demo.internal. The last path segment is ExternalDNS's
 // per-target id, not a label.
 func keyToName(key string) string {
 	parts := strings.Split(strings.Trim(strings.TrimPrefix(key, EtcdPrefix), "/"), "/")

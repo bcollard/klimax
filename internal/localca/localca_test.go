@@ -14,7 +14,7 @@ import (
 
 func newStore(t *testing.T) *Store {
 	t.Helper()
-	return New(t.TempDir(), "klimax.internal")
+	return New(t.TempDir(), "demo.internal")
 }
 
 func parseChain(t *testing.T, pemData string) []*x509.Certificate {
@@ -58,7 +58,7 @@ func TestRootIsConstrainedAndReused(t *testing.T) {
 	if !root.IsCA || root.MaxPathLen != 1 {
 		t.Errorf("root: IsCA=%v MaxPathLen=%d, want CA with pathlen 1", root.IsCA, root.MaxPathLen)
 	}
-	if !root.PermittedDNSDomainsCritical || !constrainedTo(root, ".klimax.internal") {
+	if !root.PermittedDNSDomainsCritical || !constrainedTo(root, ".demo.internal") {
 		t.Errorf("root constraints = %v (critical=%v)", root.PermittedDNSDomains, root.PermittedDNSDomainsCritical)
 	}
 	again, _, created, err := s.EnsureRoot()
@@ -76,7 +76,7 @@ func TestRootIsConstrainedAndReused(t *testing.T) {
 
 func TestRootForAnotherDomainIsRefused(t *testing.T) {
 	home := t.TempDir()
-	a := New(home, "klimax.internal")
+	a := New(home, "demo.internal")
 	if _, _, _, err := a.EnsureRoot(); err != nil {
 		t.Fatal(err)
 	}
@@ -94,12 +94,12 @@ func TestClusterWildcardCoversTheZone(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, ok := range map[string]bool{
-		"web-default.dev.klimax.internal":     true, // the flat nameTemplate
-		"shop.dev.klimax.internal":            true, // annotated names and Ingress hosts
-		"dev.klimax.internal":                 true,
-		"web.default.dev.klimax.internal":     false, // the default automatic name: a wildcard covers one label only
-		"web-default.staging.klimax.internal": false,
-		"github.com":                          false,
+		"web-default.dev.demo.internal":     true, // the flat nameTemplate
+		"shop.dev.demo.internal":            true, // annotated names and Ingress hosts
+		"dev.demo.internal":                 true,
+		"web.default.dev.demo.internal":     false, // the default automatic name: a wildcard covers one label only
+		"web-default.staging.demo.internal": false,
+		"github.com":                        false,
 	} {
 		if err := verify(t, c, name); (err == nil) != ok {
 			t.Errorf("%s: verify err=%v, want ok=%v", name, err, ok)
@@ -123,10 +123,10 @@ func TestIntermediateCannotSignOutsideItsZone(t *testing.T) {
 		t.Fatal(err)
 	}
 	inter := parseChain(t, c.ChainPEM)[0]
-	if !constrainedExactly(inter, "dev.klimax.internal") || inter.MaxPathLen != 0 || !inter.MaxPathLenZero {
+	if !constrainedExactly(inter, "dev.demo.internal") || inter.MaxPathLen != 0 || !inter.MaxPathLenZero {
 		t.Fatalf("intermediate: constraints=%v pathlen=%d", inter.PermittedDNSDomains, inter.MaxPathLen)
 	}
-	for _, name := range []string{"github.com", "web.staging.klimax.internal"} {
+	for _, name := range []string{"github.com", "web.staging.demo.internal"} {
 		evil := signWith(t, s, "dev", name)
 		roots := x509.NewCertPool()
 		roots.AddCert(parseChain(t, c.RootPEM)[0])
@@ -190,7 +190,7 @@ func TestNewRootOrphansAndReplacesClusterMaterial(t *testing.T) {
 	if fresh.ChainPEM == old.ChainPEM || fresh.WildcardPEM == old.WildcardPEM {
 		t.Fatal("material signed by a replaced root must be re-issued")
 	}
-	if err := verify(t, fresh, "shop.dev.klimax.internal"); err != nil {
+	if err := verify(t, fresh, "shop.dev.demo.internal"); err != nil {
 		t.Errorf("re-issued wildcard does not verify: %v", err)
 	}
 }
@@ -234,9 +234,9 @@ func TestFleetZoneIsIsolated(t *testing.T) {
 		t.Errorf("fleet material: kind=%s secret=%s issuer=%s", f.Kind, f.SecretName(), f.IssuerName())
 	}
 	for name, ok := range map[string]bool{
-		"gateway.lab.klimax.internal":      true,
-		"gateway.lab-east.klimax.internal": false,
-		"github.com":                       false,
+		"gateway.lab.demo.internal":      true,
+		"gateway.lab-east.demo.internal": false,
+		"github.com":                     false,
 	} {
 		if err := verify(t, f, name); (err == nil) != ok {
 			t.Errorf("fleet wildcard for %s: err=%v, want ok=%v", name, err, ok)
@@ -246,13 +246,13 @@ func TestFleetZoneIsIsolated(t *testing.T) {
 	if _, err := s.EnsureCluster("lab-east"); err != nil {
 		t.Fatal(err)
 	}
-	evil := signWith(t, s, "lab-east", "gateway.lab.klimax.internal")
+	evil := signWith(t, s, "lab-east", "gateway.lab.demo.internal")
 	roots := x509.NewCertPool()
 	roots.AddCert(parseChain(t, f.RootPEM)[0])
 	inter, _ := clusterCA(t, s, "lab-east")
 	inters := x509.NewCertPool()
 	inters.AddCert(inter)
-	if _, err := evil.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inters, DNSName: "gateway.lab.klimax.internal"}); err == nil {
+	if _, err := evil.Verify(x509.VerifyOptions{Roots: roots, Intermediates: inters, DNSName: "gateway.lab.demo.internal"}); err == nil {
 		t.Error("a member's intermediate must not be able to sign fleet-wide names")
 	}
 

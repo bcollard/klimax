@@ -153,7 +153,7 @@ type NetworkConfig struct {
 	// the kind nodes. Leave it unset to use the Mac's system proxy settings,
 	// which Lima propagates into the guest on its own.
 	Proxy ProxyConfig `yaml:"proxy,omitempty"`
-	// DNS serves LoadBalancer Services under a local zone (klimax.internal by
+	// DNS serves LoadBalancer Services under a local zone (demo.internal by
 	// default). See DNSConfig.
 	DNS DNSConfig `yaml:"dns"`
 }

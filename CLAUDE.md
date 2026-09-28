@@ -185,7 +185,7 @@ network:
                                      # ⚠ VM-level: only takes effect on new VMs (klimax destroy && up).
   dns:
     enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
-    domain: "klimax.internal"        # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
+    domain: "demo.internal"          # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
     nameTemplate: "{{.Name}}.{{.Namespace}}"  # ExternalDNS --fqdn-template relative to <cluster>.<domain>; validated by rendering a sample
     tls:
       enabled: true                  # default true: local CA (see "Local CA"); ignored when dns.enabled is false

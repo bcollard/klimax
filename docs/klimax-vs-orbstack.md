@@ -19,7 +19,7 @@ local Kubernetes setup.
 | **Container runtime** | Docker | Docker (or containerd) |
 | **Host→pod routing** | Pure L3 — static macOS route, no SNAT | Custom VZ network stack + event-based port forwarding |
 | **LoadBalancer** | MetalLB — routable IPs via L3 | ServiceLB (klipper-lb) |
-| **Service hostnames** | `<svc>.<ns>.<cluster>.klimax.internal`, every cluster, no setup | `*.k8s.orb.local`, one cluster, no setup |
+| **Service hostnames** | `<svc>.<ns>.<cluster>.demo.internal`, every cluster, no setup | `*.k8s.orb.local`, one cluster, no setup |
 | **Container hostnames** | None | `*.orb.local` |
 | **Registry mirrors** | Pre-provisioned (docker.io, quay.io, gcr.io) | Manual `daemon.json` config only |
 | **Port mirroring** | Optional — disable with `disablePortMirroring` | Always on (event-based, not Lima) |
@@ -209,7 +209,7 @@ way round.
 
 **Hostnames for plain containers.** OrbStack names every `docker run` container
 under `*.orb.local`, because it owns its whole network stack. Since v0.2.0 klimax
-names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.klimax.internal`,
+names every Kubernetes LoadBalancer Service — `<svc>.<ns>.<cluster>.demo.internal`,
 across all clusters, with no setup ([Local DNS names](https://klimax.dev/docs/local-dns.html)) —
 but not containers outside a cluster.
 

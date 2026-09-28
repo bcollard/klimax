@@ -660,7 +660,7 @@ func checkLocalCA(cfg *config.Config) doctorCheck {
 	}
 	if !store.Trusted() {
 		return doctorCheck{ID: checkIDTLS, Status: checkFail,
-			Message: "The local CA root is not trusted by macOS — browsers reject klimax.internal certificates",
+			Message: "The local CA root is not trusted by macOS — browsers reject demo.internal certificates",
 			Fix:     "klimax ca trust", Fixable: true}
 	}
 	if left := time.Until(root.NotAfter); left < 90*24*time.Hour {

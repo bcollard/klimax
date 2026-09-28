@@ -129,7 +129,7 @@ network:
     enabled: true
     # .internal is reserved by ICANN for private use. Keep a subdomain: GCP and
     # many corporate networks already use other names under .internal.
-    domain: "klimax.internal"
+    domain: "demo.internal"
     # Automatic name, relative to <cluster>.<domain> (ExternalDNS --fqdn-template;
     # fields .Name .Namespace .Labels .Annotations). Override per Service with the
     # external-dns.kubernetes.io/hostname annotation.

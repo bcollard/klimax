@@ -27,7 +27,7 @@ import (
 type DNSConfig struct {
 	// Enabled is the global toggle. nil = default (true).
 	Enabled *bool `yaml:"enabled"`
-	// Domain is the zone klimax serves. Default "klimax.internal".
+	// Domain is the zone klimax serves. Default "demo.internal".
 	//
 	// .internal is reserved by ICANN for private use and never delegated in
 	// the public root. klimax takes a subdomain rather than all of .internal,
@@ -67,7 +67,7 @@ type TLSConfig struct {
 }
 
 // DefaultDNSDomain is the zone served when network.dns.domain is unset.
-const DefaultDNSDomain = "klimax.internal"
+const DefaultDNSDomain = "demo.internal"
 
 // DefaultDNSNameTemplate is the automatic per-Service name, relative to the
 // cluster zone.
@@ -206,7 +206,7 @@ func validateNameTemplate(tmpl string) []error {
 }
 
 // DNSNameExample renders the automatic name with placeholders, for messages:
-// "<service>-<namespace>.dev.klimax.internal". cluster "" gives "<cluster>".
+// "<service>-<namespace>.dev.demo.internal". cluster "" gives "<cluster>".
 func (c *Config) DNSNameExample(cluster string) string {
 	if cluster == "" {
 		cluster = "<cluster>"
