@@ -10,8 +10,8 @@ import (
 
 // DNSConfig controls klimax's local DNS zone for LoadBalancer Services.
 //
-// With it on, every cluster publishes its LoadBalancer Services and Ingress
-// hosts as <svc>.<namespace>.<cluster>.<domain>, resolvable from the Mac, the
+// With it on, every cluster publishes its LoadBalancer Services (and, with
+// Ingress on, Ingress hosts) as <svc>.<namespace>.<cluster>.<domain>, resolvable from the Mac, the
 // VM and every pod — without owning a domain. The pieces:
 //
 //   - an etcd and a CoreDNS container on the kind network, at fixed addresses
@@ -34,8 +34,8 @@ type DNSConfig struct {
 	// because corporate networks and GCP (metadata.google.internal) already use
 	// it and a resolver file for the whole TLD would take those names over.
 	Domain string `yaml:"domain"`
-	// NameTemplate is the automatic name every LoadBalancer Service and Ingress
-	// gets, as an ExternalDNS --fqdn-template relative to the cluster's zone:
+	// NameTemplate is the automatic name every LoadBalancer Service (and, with
+	// Ingress on, every Ingress) gets, as an ExternalDNS --fqdn-template relative to the cluster's zone:
 	// klimax appends ".<cluster>.<domain>". Fields: .Name, .Namespace, .Labels,
 	// .Annotations. Default "{{.Name}}.{{.Namespace}}", mirroring Kubernetes'
 	// own <svc>.<ns>.svc.cluster.local.
@@ -47,6 +47,16 @@ type DNSConfig struct {
 	// flattens the automatic names into that one label, at the cost of
 	// ambiguity (a-b in c vs a in b-c) and a shared 63-character label.
 	NameTemplate string `yaml:"nameTemplate"`
+	// Ingress adds ExternalDNS's ingress source: Ingress rule hosts (and
+	// hostname annotations on Ingresses) are published at the controller's
+	// VIP. nil = default (false). Off by default because ExternalDNS applies
+	// --fqdn-template to every source, so each Ingress would also get
+	// NameTemplate rendered for the Ingress object itself
+	// (<ingress>.<ns>.<cluster>.<domain>). Without it, name an ingress
+	// controller's hosts with a hostname annotation on its Service.
+	// Takes effect at cluster creation, or on `klimax dns attach` for an
+	// existing cluster.
+	Ingress *bool `yaml:"ingress"`
 	// TLS runs a local CA for the zone. See TLSConfig.
 	TLS TLSConfig `yaml:"tls"`
 }
@@ -102,6 +112,12 @@ func (c *Config) DNSNameTemplate() string {
 		return t
 	}
 	return DefaultDNSNameTemplate
+}
+
+// DNSIngressEnabled reports whether ExternalDNS publishes Ingresses as well as
+// LoadBalancer Services. Defaults to false.
+func (c *Config) DNSIngressEnabled() bool {
+	return c.Network.DNS.Ingress != nil && *c.Network.DNS.Ingress
 }
 
 // TLSEnabled reports whether the local CA is on. It needs the DNS zone: the CA

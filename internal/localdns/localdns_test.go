@@ -150,6 +150,21 @@ func TestOwnedKeys(t *testing.T) {
 	}
 }
 
+func TestExternalDNSManifestIngress(t *testing.T) {
+	cfg := testConfig(t)
+	// network.dns.ingress defaults to off: the template would name every
+	// Ingress object too.
+	if m := ExternalDNSManifest(cfg, "dev", ""); strings.Contains(m, "--source=ingress") {
+		t.Error("the ingress source must be off by default")
+	}
+	on := true
+	cfg.Network.DNS.Ingress = &on
+	m := ExternalDNSManifest(cfg, "dev", "")
+	if !strings.Contains(m, "--source=service\n            - --source=ingress\n") {
+		t.Error("network.dns.ingress: true must add the ingress source after the service one")
+	}
+}
+
 func TestExternalDNSManifestFleet(t *testing.T) {
 	cfg := testConfig(t)
 	m := ExternalDNSManifest(cfg, "lab-east", "lab")

@@ -41,6 +41,11 @@ const ExternalDNSNamespace = "external-dns"
 // (OrbStack-style), from network.dns.nameTemplate; --combine-fqdn-annotation keeps that name when an
 // external-dns.kubernetes.io/hostname annotation adds a custom one.
 //
+// --source=ingress, only when network.dns.ingress is true, publishes Ingress
+// rule hosts at the controller's VIP. The template applies to that source too,
+// so every Ingress also gets a name built from the Ingress object's own
+// name and namespace — the reason the source is off by default.
+//
 // fleet, when set, adds the fleet's zone (<fleet>.<domain>) to the filter, so a
 // member cluster can publish fleet-wide names such as gateway.<fleet>.<domain>
 // through the hostname annotation. Automatic names always stay in the
@@ -48,6 +53,10 @@ const ExternalDNSNamespace = "external-dns"
 func ExternalDNSManifest(cfg *config.Config, cluster, fleet string) string {
 	zone := cfg.ClusterDNSZone(cluster)
 	fleetFilter := ""
+	ingressSource := ""
+	if cfg.DNSIngressEnabled() {
+		ingressSource = "\n            - --source=ingress"
+	}
 	if fleet != "" {
 		fleetFilter = "\n            - --domain-filter=" + cfg.FleetDNSZone(fleet)
 	}
@@ -123,8 +132,7 @@ spec:
         - name: external-dns
           image: %[2]s
           args:
-            - --source=service
-            - --source=ingress
+            - --source=service%[8]s
             - --service-type-filter=LoadBalancer
             - --provider=coredns
             - --registry=txt
@@ -146,7 +154,7 @@ spec:
             runAsGroup: 65532
             runAsNonRoot: true
             runAsUser: 65532
-`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP(), cfg.DNSNameTemplate(), fleetFilter)
+`, ExternalDNSNamespace, ExternalDNSImage, cluster, zone, cfg.DNSEtcdIP(), cfg.DNSNameTemplate(), fleetFilter, ingressSource)
 }
 
 // InstallExternalDNS applies the manifest to a cluster and waits for it.

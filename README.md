@@ -261,6 +261,7 @@ network:
     enabled: true                   # default; false removes the containers, rules and resolver file
     domain: "demo.internal"         # names: <service>.<namespace>.<cluster>.<domain>
     nameTemplate: "{{.Name}}.{{.Namespace}}"   # automatic name, relative to <cluster>.<domain>
+    ingress: false                  # true also publishes Ingress hosts (and a template name per Ingress)
     tls:
       enabled: true                 # local CA: trusted root + a *.<cluster>.<domain> wildcard per cluster
 
@@ -601,7 +602,7 @@ klimax dns list                     # every published name and its VIP (-o json|
 klimax dns attach <cluster>...      # add a cluster created before network.dns was on
 ```
 
-- **Names:** `<service>.<namespace>.<cluster>.demo.internal` automatically, for LoadBalancer Services only — ClusterIP, headless and NodePort Services are not published (their addresses are not reachable from the Mac). Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.demo.internal` (it must sit under the cluster's own zone). Ingress hosts under `*.<cluster>.demo.internal` are published too.
+- **Names:** `<service>.<namespace>.<cluster>.demo.internal` automatically, for LoadBalancer Services only — ClusterIP, headless and NodePort Services are not published (their addresses are not reachable from the Mac). Add a custom one with the annotation `external-dns.kubernetes.io/hostname: app.dev.demo.internal` (it must sit under the cluster's own zone). Ingress hosts are not published by default: annotate the ingress controller's Service with the hostnames instead, or set `network.dns.ingress: true` to publish Ingress rule hosts at the controller's VIP — along with an automatic `<ingress>.<namespace>.<cluster>.demo.internal` for each Ingress, since the name template applies to Ingresses as well. Run `klimax dns attach <cluster>` to apply the setting to an existing cluster.
 - **How:** `klimax up` runs etcd and CoreDNS on the kind network (`172.30.255.52` / `.53`); each cluster runs ExternalDNS, which writes its Services into etcd; `/etc/resolver/demo.internal` sends the Mac's lookups to CoreDNS through the existing host route. The resolver file needs **sudo once** — its address never changes, so it is never rewritten.
 - **Fleet-wide names:** members of a [fleet](#fleets--klimax-fleet) can also publish under `<fleet>.demo.internal` — annotate a Service with `external-dns.kubernetes.io/hostname: gateway.lab.demo.internal`. The first member to publish a name owns it; if that member is deleted, another member that claims the name takes it over. A fleet and a cluster may not share a name (both would own `<name>.demo.internal`).
 - **Turn it off** with `network.dns.enabled: false` and `klimax up`: the containers, the iptables exemption and the resolver file are removed.

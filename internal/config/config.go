@@ -314,6 +314,9 @@ func applyDefaults(cfg *Config) {
 	if cfg.Network.DNS.NameTemplate == "" {
 		cfg.Network.DNS.NameTemplate = DefaultDNSNameTemplate
 	}
+	if cfg.Network.DNS.Ingress == nil {
+		cfg.Network.DNS.Ingress = boolPtr(false)
+	}
 	if cfg.Network.DNS.TLS.Enabled == nil {
 		cfg.Network.DNS.TLS.Enabled = boolPtr(true)
 	}

@@ -187,6 +187,8 @@ network:
     enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
     domain: "demo.internal"          # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
     nameTemplate: "{{.Name}}.{{.Namespace}}"  # ExternalDNS --fqdn-template relative to <cluster>.<domain>; validated by rendering a sample
+    ingress: false                   # default false: true adds ExternalDNS --source=ingress (Ingress hosts + a template name per Ingress);
+                                     # applied at cluster create / `klimax dns attach`
     tls:
       enabled: true                  # default true: local CA (see "Local CA"); ignored when dns.enabled is false
                                      # NOT VM-level: reconciled on every `klimax up`; false removes everything
@@ -443,7 +445,7 @@ Global flags (all commands): `-c config.yaml`, `--debug`, `--lima-log-level <lev
 
 ## Local DNS (`network.dns`)
 
-Every LoadBalancer Service (and Ingress host) resolves as
+Every LoadBalancer Service (and Ingress host, with `network.dns.ingress: true`) resolves as
 `<svc>.<ns>.<cluster>.<domain>` from the Mac, the VM and every pod, with no
 domain to own. On by default. The real-domain alternative (ExternalDNS + a
 cloud provider) is documented on the website and is still the only way to get
@@ -487,6 +489,14 @@ Facts that shaped it, all verified on the live VM:
   headless Services resolve to pod IPs (10.x, unroutable from the Mac) and
   host-network pods to node IPs. Shipped without it in v0.2.0; fixed in v0.2.1
   (existing clusters: `klimax dns attach`, and `policy: sync` removes the extras).
+- **`--source=ingress` is opt-in** (`network.dns.ingress`, default false). It
+  publishes Ingress rule hosts at the controller's VIP, but `--fqdn-template`
+  applies to every source, so each Ingress also gets
+  `<ingress>.<ns>.<cluster>.<domain>` — a name for the Ingress object that nobody
+  asked for (`ingress-hostname-source: annotation-only` suppresses the rule hosts,
+  not the template name). ExternalDNS has no per-source template, so the source is
+  off unless asked for. Existing clusters pick up a change on `klimax dns attach`;
+  `policy: sync` removes the records of a dropped source.
 - **Each cluster owns a disjoint subzone** (`--domain-filter=<cluster>.<domain>`,
   `--txt-owner-id=<cluster>`), which makes `--policy=sync` safe.
 - **The etcd plugin serves TTL 300 for ExternalDNS's TTL-0 records, and a fixed

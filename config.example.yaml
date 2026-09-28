@@ -114,9 +114,9 @@ network:
 
   # Local DNS for LoadBalancer Services, with no domain to own.
   # Every LoadBalancer Service gets <service>.<namespace>.<cluster>.<domain>,
-  # resolvable from the Mac, the VM and every pod. Ingress hosts under
-  # *.<cluster>.<domain> are published too, and an
-  # external-dns.kubernetes.io/hostname annotation adds a custom name.
+  # resolvable from the Mac, the VM and every pod. An
+  # external-dns.kubernetes.io/hostname annotation adds a custom name; Ingress
+  # hosts are published only with ingress: true below.
   #
   # What klimax runs for it:
   #   - etcd + CoreDNS containers on the kind network (x.y.255.52 / x.y.255.53)
@@ -134,6 +134,11 @@ network:
     # fields .Name .Namespace .Labels .Annotations). Override per Service with the
     # external-dns.kubernetes.io/hostname annotation.
     nameTemplate: "{{.Name}}.{{.Namespace}}"
+    # Also publish Ingress rule hosts at the ingress controller's VIP (ExternalDNS
+    # --source=ingress). Off by default: the nameTemplate applies to Ingresses
+    # too, so each one would also get <ingress>.<ns>.<cluster>.<domain>.
+    # Applies to new clusters; `klimax dns attach <cluster>` for existing ones.
+    ingress: false
     # Local CA for the zone. klimax creates a root in ~/.klimax/pki/<domain>/,
     # name-constrained to .<domain> and trusted in the System keychain (sudo once),
     # an intermediate per cluster constrained to .<cluster>.<domain>, and a
