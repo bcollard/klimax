@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/bcollard/marina/internal/config"
 	"github.com/bcollard/marina/internal/vm"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -27,8 +28,8 @@ import (
 //     disk needs formatting by looking for the ext4 label lima-<disk name>, so a
 //     disk renamed to marina-img would be reformatted on first boot. Images come
 //     back from the registry cache.
-//   - the local CA (~/.klimax/pki): its root is name-constrained to
-//     .klimax.internal and cannot issue for marina.internal.
+//   - the local CA (~/.klimax/pki): marina creates and trusts its own root
+//     under ~/.marina/pki, and prints how to untrust the old ones.
 const (
 	legacyName       = "klimax"
 	legacyAutostart  = "dev.klimax.autostart"
@@ -58,7 +59,7 @@ func newMigrateCmd() *cobra.Command {
 
   1. deletes the klimax VM and its clusters (re-create them with marina afterwards)
   2. copies ~/.klimax/config.yaml to ~/.marina/config.yaml, renaming the VM
-     "klimax" → "marina" and the DNS zone klimax.internal → marina.internal
+     "klimax" → "marina" and the DNS zone klimax.internal → demo.internal
   3. moves the registry cache, so no image is downloaded again
   4. removes the klimax launchd agent
 
@@ -105,7 +106,7 @@ func runMigrate(ctx context.Context, yes, dryRun bool) error {
 			step("config: no %s — marina up will write a default one", oldCfgPath)
 			break
 		}
-		step("config: %s → %s (VM %q → %q, %s → marina.internal)", oldCfgPath, newCfgPath, oldVM, rewrittenVMName(oldVM), legacyDNSDomain)
+		step("config: %s → %s (VM %q → %q, %s → %s)", oldCfgPath, newCfgPath, oldVM, rewrittenVMName(oldVM), legacyDNSDomain, config.DefaultDNSDomain)
 		if !dryRun {
 			if err := os.MkdirAll(newHome, 0o750); err != nil {
 				return err
@@ -163,12 +164,14 @@ func runMigrate(ctx context.Context, yes, dryRun bool) error {
 	}
 	fmt.Println("  marina docker-context            # then: docker context rm klimax")
 	fmt.Println("  marina skill install --force     # replaces the klimax Agent Skill")
-	if _, err := os.Stat(filepath.Join(oldHome, "pki")); err == nil {
-		fmt.Printf("  sudo security remove-trusted-cert -d %s   # the old klimax CA\n",
-			filepath.Join(oldHome, "pki", legacyDNSDomain, "root.crt"))
+	// One root per zone the klimax install served: klimax.internal before
+	// v0.2.5, demo.internal after, or a custom network.dns.domain.
+	oldRoots, _ := filepath.Glob(filepath.Join(oldHome, "pki", "*", "root.crt"))
+	for _, root := range oldRoots {
+		fmt.Printf("  sudo security remove-trusted-cert -d %s   # an old klimax CA\n", root)
 	}
-	fmt.Println("\nHostnames change from *.klimax.internal to *.marina.internal, and the fleet")
-	fmt.Println("label from klimax.dev/fleet to marina.run/fleet. Remove ~/.klimax once marina works.")
+	fmt.Printf("\nHostnames under %s move to %s, and the fleet label from\n", legacyDNSDomain, config.DefaultDNSDomain)
+	fmt.Println("klimax.dev/fleet to marina.run/fleet. Remove ~/.klimax once marina works.")
 	return nil
 }
 
@@ -245,9 +248,10 @@ func rewrittenVMName(old string) string {
 var legacyVMNameLine = regexp.MustCompile(`(?m)^(\s*name:\s*)"?klimax"?(\s*(#.*)?)$`)
 
 // rewriteLegacyConfig adapts a klimax config for marina, line by line so the
-// user's comments and layout survive: the default VM name and the DNS zone.
+// user's comments and layout survive: the default VM name, and the old default
+// DNS zone (now demo.internal). A custom zone is kept.
 // Anything else is valid as-is — the schema did not change.
 func rewriteLegacyConfig(s string) string {
 	s = legacyVMNameLine.ReplaceAllString(s, `${1}"marina"${2}`)
-	return strings.ReplaceAll(s, legacyDNSDomain, "marina.internal")
+	return strings.ReplaceAll(s, legacyDNSDomain, config.DefaultDNSDomain)
 }

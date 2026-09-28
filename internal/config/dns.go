@@ -54,7 +54,7 @@ type DNSConfig struct {
 	// NameTemplate rendered for the Ingress object itself
 	// (<ingress>.<ns>.<cluster>.<domain>). Without it, name an ingress
 	// controller's hosts with a hostname annotation on its Service.
-	// Takes effect at cluster creation, or on `klimax dns attach` for an
+	// Takes effect at cluster creation, or on `marina dns attach` for an
 	// existing cluster.
 	Ingress *bool `yaml:"ingress"`
 	// TLS runs a local CA for the zone. See TLSConfig.

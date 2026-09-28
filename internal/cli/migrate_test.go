@@ -18,7 +18,7 @@ kind:
     - domain: "corp.internal"
 `
 	out := rewriteLegacyConfig(in)
-	for _, want := range []string{`  name: "marina"      # the VM`, `domain: "marina.internal"`, `# my config`, `domain: "corp.internal"`, `cpus: 8`} {
+	for _, want := range []string{`  name: "marina"      # the VM`, `domain: "demo.internal"`, `# my config`, `domain: "corp.internal"`, `cpus: 8`} {
 		if !strings.Contains(out, want) {
 			t.Errorf("rewritten config missing %q:\n%s", want, out)
 		}

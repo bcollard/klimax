@@ -10,15 +10,16 @@ marina was **klimax** until v0.3 ("klimax" reads as "climax" in English). The
 rename is a clean break, not a compatibility layer — see `internal/cli/migrate.go`:
 
 - Every identifier moved: module `github.com/bcollard/marina`, `~/.marina`
-  (LIMA_HOME), VM `marina` / disk `marina-img`, `marina.internal`, labels
+  (LIMA_HOME), VM `marina` / disk `marina-img`, labels
   `marina.run/fleet` + `managed-by=marina`, `apiVersion: marina.run/v1alpha1`,
   `marina-*` Secrets/ClusterIssuers/containers, launchd `run.marina.autostart`.
 - `marina migrate` deletes the klimax VM (by pointing LIMA_HOME at `~/.klimax` —
   the klimax binary is gone after `brew upgrade`), rewrites the config (default
-  VM name, DNS zone), moves the registry cache, removes the launchd agent.
+  VM name; the old default zone `klimax.internal` → `demo.internal`, the default
+  since klimax v0.2.5), moves the registry cache, removes the launchd agent.
   **It does not move the image disk** (Lima would reformat a renamed disk: it
-  checks the ext4 label `lima-<disk name>`) nor the CA (constrained to
-  `.klimax.internal`).
+  checks the ext4 label `lima-<disk name>`) nor the CA (marina creates its own root under `~/.marina/pki`; migrate prints
+  the `security remove-trusted-cert` command for each old root).
 - `marina up` refuses to run while an unmigrated `~/.klimax` exists (two VMs on
   one kind CIDR would fight over the host route).
 - `/etc/resolver` cleanup also removes files carrying the old `# Managed by klimax` marker.
@@ -226,7 +227,7 @@ network:
     domain: "demo.internal"          # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
     nameTemplate: "{{.Name}}.{{.Namespace}}"  # ExternalDNS --fqdn-template relative to <cluster>.<domain>; validated by rendering a sample
     ingress: false                   # default false: true adds ExternalDNS --source=ingress (Ingress hosts + a template name per Ingress);
-                                     # applied at cluster create / `klimax dns attach`
+                                     # applied at cluster create / `marina dns attach`
     tls:
       enabled: true                  # default true: local CA (see "Local CA"); ignored when dns.enabled is false
                                      # NOT VM-level: reconciled on every `marina up`; false removes everything

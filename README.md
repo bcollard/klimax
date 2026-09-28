@@ -118,7 +118,7 @@ marina migrate                              # deletes the klimax VM, moves the c
 marina up
 ```
 
-What changes for you: hostnames `*.klimax.internal` → `*.marina.internal`, the fleet label `klimax.dev/fleet` → `marina.run/fleet`, Fleet manifests' `apiVersion` → `marina.run/v1alpha1`, and a new local CA to trust (one sudo prompt). Clusters are re-created; cached images are not downloaded again. `marina migrate --dry-run` shows the plan first.
+What changes for you: hostnames `*.klimax.internal` → `*.demo.internal` (unchanged if you were already on `demo.internal`, the default since v0.2.5), the fleet label `klimax.dev/fleet` → `marina.run/fleet`, Fleet manifests' `apiVersion` → `marina.run/v1alpha1`, and a new local CA to trust (one sudo prompt). Clusters are re-created; cached images are not downloaded again. `marina migrate --dry-run` shows the plan first.
 
 ### Upgrading
 
