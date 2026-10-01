@@ -118,6 +118,16 @@ func ReadInstanceMounts(path string) ([]limatype.Mount, error) {
 // The VM must be stopped: Lima reads this file at start, so an edit under a
 // running instance is at best ignored and at worst confuses a later restart.
 func WriteInstanceMounts(path string, mounts []limatype.Mount) error {
+	// Sit next to mountType when there is one, so the file keeps the field
+	// grouping limatemplate.Build produces.
+	return writeInstanceKey(path, "mounts", mounts, len(mounts) == 0, "mountType")
+}
+
+// writeInstanceKey replaces one top-level key of a Lima instance config with
+// value, or drops the key when remove is set (Lima's schema marks these
+// omitempty, so absent is its idle state). A missing key is inserted before
+// insertBefore, or appended when that key is absent too.
+func writeInstanceKey(path, key string, value any, remove bool, insertBefore string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
@@ -136,30 +146,26 @@ func WriteInstanceMounts(path string, mounts []limatype.Mount) error {
 	}
 	root := doc.Content[0]
 
-	idx := mappingKeyIndex(root, "mounts")
+	idx := mappingKeyIndex(root, key)
 	switch {
-	case len(mounts) == 0:
+	case remove:
 		if idx >= 0 {
-			// Drop the key entirely rather than writing `mounts: []`: Lima's
-			// own schema marks mounts omitempty, so absent is its idle state.
 			root.Content = slices.Delete(root.Content, idx, idx+2)
 		}
 	default:
 		var val yaml.Node
-		if err := val.Encode(mounts); err != nil {
-			return fmt.Errorf("encoding mounts: %w", err)
+		if err := val.Encode(value); err != nil {
+			return fmt.Errorf("encoding %s: %w", key, err)
 		}
 		if idx >= 0 {
 			root.Content[idx+1] = &val
 		} else {
-			key := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "mounts"}
-			// Sit next to mountType when there is one, so the file keeps the
-			// field grouping limatemplate.Build produces.
-			at := mappingKeyIndex(root, "mountType")
+			keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
+			at := mappingKeyIndex(root, insertBefore)
 			if at < 0 {
 				at = len(root.Content)
 			}
-			root.Content = slices.Insert(root.Content, at, key, &val)
+			root.Content = slices.Insert(root.Content, at, keyNode, &val)
 		}
 	}
 

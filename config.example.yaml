@@ -56,7 +56,7 @@ vm:
   # writable defaults to false (matching Lima). A read-only share is the safer
   # thing to hand a container by accident, so opt in per directory.
   #
-  # Unlike imageDisk and disablePortMirroring, this list does NOT need the VM
+  # Unlike imageDisk, this list does NOT need the VM
   # recreated: `marina up` spots the change and offers to restart the VM
   # (`marina status` shows the VM's current shares and flags a pending change).
   # A restart still stops every kind cluster on the VM.
@@ -109,7 +109,8 @@ network:
   # security software (CrowdStrike) blocks TCP connections to vzNAT IPs, or if you
   # run only a single marina VM and prefer stable 127.0.0.1 kubeconfigs.
   #
-  # ⚠ VM-level setting: only takes effect on new VMs (marina destroy && marina up).
+  # On an existing VM, `marina up` offers a restart to apply a change. Clusters keep
+  # the API address they were created with — recreate them to switch modes.
   # disablePortMirroring: true
 
   # Local DNS for LoadBalancer Services, with no domain to own.

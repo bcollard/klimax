@@ -80,7 +80,7 @@ func runUp(ctx context.Context, showVMLogs bool) error {
 			if err := reviewConfigBeforeCreate(cfg); err != nil {
 				return err
 			}
-		} else if err := reconcileMounts(ctx, mgr, existing, cfg); err != nil {
+		} else if err := reconcileInstanceConfig(ctx, mgr, existing, cfg); err != nil {
 			return err
 		}
 	}
@@ -232,47 +232,64 @@ func checkMountLocations(cfg *config.Config) error {
 	return errors.Join(errs...)
 }
 
-// reconcileMounts brings an existing VM's host-directory shares in line with
-// vm.mounts.
+// instanceChange is one Lima instance setting whose value in the instance config
+// differs from what marina's config asks for.
+type instanceChange struct {
+	key   string // config key, for messages
+	write func(limaYAML string) error
+}
+
+// reconcileInstanceConfig brings an existing VM's instance config in line with
+// the settings Lima only reads at VM start: vm.mounts and
+// network.disablePortMirroring.
 //
-// Mounts are the one Lima instance setting worth reconciling in place. Adding a
-// directory is a casual, frequent thing to want, and the alternative — the
-// `marina destroy && marina up` that vm.imageDisk and disablePortMirroring
-// require — throws away every kind cluster on the VM in order to share a folder.
-// A mount has no on-disk state and no guest-side migration either: Lima reads
-// the list when it starts, so a stopped VM plus an edited instance config is the
-// entire change.
+// Neither has on-disk state or a guest-side migration — a stopped VM plus an
+// edited instance config is the entire change — so they are applied in place
+// rather than demanding the `marina destroy && marina up` that vm.imageDisk
+// needs, which would throw away every kind cluster on the VM.
 //
 // Nothing is written while the VM runs. Lima would ignore the edit until a
 // restart, and a half-applied config that disagrees with the running VM is worse
-// than one that plainly says "restart to apply".
-func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instance, cfg *config.Config) error {
+// than one that plainly says "restart to apply". All changes share one restart
+// prompt.
+func reconcileInstanceConfig(ctx context.Context, mgr *vm.Manager, inst *limatype.Instance, cfg *config.Config) error {
 	limaYAML := vm.InstanceYAMLPath(inst.Dir)
-	live, err := vm.ReadInstanceMounts(limaYAML)
-	if err != nil {
-		slog.Warn("Could not read mounts from the instance config — leaving them unchanged",
-			"path", limaYAML, "err", err)
+	var changes []instanceChange
+	if c := mountsChange(limaYAML, cfg); c != nil {
+		changes = append(changes, *c)
+	}
+	if c := portMirroringChange(limaYAML, cfg); c != nil {
+		changes = append(changes, *c)
+	}
+	if len(changes) == 0 {
 		return nil
 	}
-	desired := limatemplate.BuildMounts(cfg)
-	if vm.MountsEqual(live, desired) {
-		return nil
+	keys := make([]string, len(changes))
+	for i, c := range changes {
+		keys[i] = c.key
 	}
+	what := strings.Join(keys, " and ")
 
-	fmt.Printf("\nvm.mounts differs from the VM's current shares:\n  on the VM:\n%s\n  in %s:\n%s\n",
-		vm.DescribeMounts(live), configFile, vm.DescribeMounts(desired))
+	writeAll := func() error {
+		for _, c := range changes {
+			if err := c.write(limaYAML); err != nil {
+				return fmt.Errorf("applying %s to %s: %w", c.key, limaYAML, err)
+			}
+		}
+		return nil
+	}
 
 	if inst.Status != limatype.StatusRunning {
-		if err := vm.WriteInstanceMounts(limaYAML, desired); err != nil {
-			return fmt.Errorf("updating mounts in %s: %w", limaYAML, err)
+		if err := writeAll(); err != nil {
+			return err
 		}
-		fmt.Printf("Applied — the VM is stopped, so the new shares take effect as it starts.\n\n")
+		fmt.Printf("Applied — the VM is stopped, so the change takes effect as it starts.\n\n")
 		return nil
 	}
 
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
-		slog.Warn("Non-interactive: leaving the VM's mounts unchanged",
-			"apply", "marina down && marina up")
+		slog.Warn("Non-interactive: leaving the VM's instance config unchanged",
+			"settings", what, "apply", "marina down && marina up")
 		fmt.Println()
 		return nil
 	}
@@ -286,18 +303,72 @@ func reconcileMounts(ctx context.Context, mgr *vm.Manager, inst *limatype.Instan
 	}
 
 	if err := mgr.Stop(ctx); err != nil {
-		return fmt.Errorf("stopping the VM to apply mounts: %w", err)
+		return fmt.Errorf("stopping the VM to apply %s: %w", what, err)
 	}
-	if err := vm.WriteInstanceMounts(limaYAML, desired); err != nil {
-		// The VM is stopped and the config is untouched, so the next `marina up`
-		// starts it exactly as it was. Say so rather than leaving the user
-		// wondering what state they are in.
-		return fmt.Errorf("updating mounts in %s (the VM is stopped; 'marina up' restarts it unchanged): %w", limaYAML, err)
+	if err := writeAll(); err != nil {
+		// The VM is stopped; say what state that leaves rather than leaving the
+		// user guessing.
+		return fmt.Errorf("%w (the VM is stopped; 'marina up' restarts it)", err)
 	}
 	// EnsureRunning re-inspects, finds the VM stopped, and starts it with the
-	// new mounts.
-	fmt.Printf("Mounts updated — restarting the VM.\n\n")
+	// new config.
+	fmt.Printf("Updated %s — restarting the VM.\n\n", what)
 	return nil
+}
+
+// mountsChange compares vm.mounts with the VM's current shares.
+func mountsChange(limaYAML string, cfg *config.Config) *instanceChange {
+	live, err := vm.ReadInstanceMounts(limaYAML)
+	if err != nil {
+		slog.Warn("Could not read mounts from the instance config — leaving them unchanged",
+			"path", limaYAML, "err", err)
+		return nil
+	}
+	desired := limatemplate.BuildMounts(cfg)
+	if vm.MountsEqual(live, desired) {
+		return nil
+	}
+	fmt.Printf("\nvm.mounts differs from the VM's current shares:\n  on the VM:\n%s\n  in %s:\n%s\n",
+		vm.DescribeMounts(live), configFile, vm.DescribeMounts(desired))
+	return &instanceChange{
+		key:   "vm.mounts",
+		write: func(p string) error { return vm.WriteInstanceMounts(p, desired) },
+	}
+}
+
+// portMirroringChange compares network.disablePortMirroring with the VM's
+// portForwards. Left unreconciled, a VM created in direct mode keeps ignoring
+// every guest port while clusters created after the flag flipped get
+// 127.0.0.1 kubeconfigs that nothing listens behind.
+func portMirroringChange(limaYAML string, cfg *config.Config) *instanceChange {
+	live, err := vm.ReadInstancePortForwards(limaYAML)
+	if err != nil {
+		slog.Warn("Could not read portForwards from the instance config — leaving them unchanged",
+			"path", limaYAML, "err", err)
+		return nil
+	}
+	want := cfg.Network.PortMirroringDisabled()
+	if vm.PortMirroringDisabled(live) == want {
+		return nil
+	}
+	mode := func(disabled bool) string {
+		if disabled {
+			return "off (kubeconfigs use the VM's lima0 IP)"
+		}
+		return "on (guest ports mirrored to 127.0.0.1)"
+	}
+	fmt.Printf("\nnetwork.disablePortMirroring differs from the VM:\n  on the VM:   port mirroring %s\n  in %s: port mirroring %s\n",
+		mode(!want), configFile, mode(want))
+	if want {
+		fmt.Printf("  Clusters created with a 127.0.0.1 kubeconfig stop being reachable from the Mac; recreate them.\n")
+	} else {
+		fmt.Printf("  Existing clusters keep the API address they were created with.\n")
+	}
+	desired := limatemplate.BuildPortForwards(cfg)
+	return &instanceChange{
+		key:   "network.disablePortMirroring",
+		write: func(p string) error { return vm.WriteInstancePortForwards(p, desired) },
+	}
 }
 
 // reviewConfigBeforeCreate runs just before a VM is created. It surfaces config

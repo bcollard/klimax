@@ -138,6 +138,7 @@ internal/routing/iptables.go         InstallNoNat (+ Rule 4: local-DNS raw exemp
 internal/vm/guestagent.go            EnsureGuestAgent — downloads & caches lima-guestagent from GitHub releases
 internal/vm/disk.go                  EnsureImageDisk / ResizeImageDisk — the persistent Lima data disk for the container image store
 internal/vm/mounts.go                Read/WriteInstanceMounts (yaml-node surgery on the instance config), NormalizeMounts, MountsEqual — vm.mounts reconciliation
+internal/vm/portforwards.go          Read/WriteInstancePortForwards, PortMirroringDisabled (detects the catch-all ignore rule) — disablePortMirroring reconciliation
 internal/config/proxy.go             ProxyConfig, NoProxy/NoProxyString/ProxyEnv — the computed no_proxy list
 internal/hostres/hostres.go          Read/ReadFor (host CPU, RAM, free disk), DefaultCPUs + DefaultMemoryBytes (host-scaled
                                      defaults), CheckResources (over-commit warnings). Its own package because
@@ -221,7 +222,8 @@ network:
                                      # kind clusters — prevents API-server port conflicts on 127.0.0.1.
                                      # Set false to force loopback (127.0.0.1) — e.g. host security software
                                      # (CrowdStrike) blocking vzNAT IPs.
-                                     # ⚠ VM-level: only takes effect on new VMs (marina destroy && up).
+                                     # NOT VM-level: `marina up` offers a restart to apply; clusters keep
+                                     # the mode they were created with (read at cluster create).
   dns:
     enabled: true                    # default true: local DNS for LoadBalancer Services (see "Local DNS")
     domain: "demo.internal"          # names: <svc>.<ns>.<cluster>.<domain>; must not be a bare TLD or .local
@@ -822,15 +824,27 @@ image-disk machinery. `limatemplate.BuildMounts()` builds the whole list —
 registry cache first, then user mounts — and is exported so `marina up` can
 compute the desired set without regenerating the rest of the instance YAML.
 
-### Why `vm.mounts` reconciles in place instead of needing `destroy && up`
+### Why `vm.mounts` and `disablePortMirroring` reconcile in place instead of needing `destroy && up`
 
-`vm.imageDisk` and `network.disablePortMirroring` are baked in at instance
-creation because they have on-disk or guest-side consequences. Mounts have
-neither: Lima reads the list when the VM starts, so a stopped VM plus an edited
-`lima.yaml` *is* the whole change. Making people pay a `marina destroy` — which
-throws away every kind cluster — to share a folder would be absurd.
+`vm.imageDisk` is baked in at instance creation because it has on-disk
+consequences. Mounts and `portForwards` have none: Lima reads them when the VM
+starts, so a stopped VM plus an edited `lima.yaml` *is* the whole change. Making
+people pay a `marina destroy` — which throws away every kind cluster — to share
+a folder would be absurd.
 
-`cli.reconcileMounts` therefore:
+> `disablePortMirroring` used to be documented as VM-level and was never
+> reconciled. Flipping it to `false` on an existing VM then gave new clusters
+> `127.0.0.1` kubeconfigs while the VM's catch-all `ignore: true` rule kept
+> anything from listening there — `connection refused`, with nothing pointing
+> at the cause. The flag is still read at `cluster create` (kubeconfig server,
+> cert SANs), so existing clusters keep their mode; direct → loopback leaves
+> them working, loopback → direct breaks them (no lima0 SAN) and the prompt says so.
+
+`cli.reconcileInstanceConfig` collects one `instanceChange` per drifted setting
+(`mountsChange`, `portMirroringChange` — the latter compares
+`vm.PortMirroringDisabled` on the live rules against the config, then writes
+`limatemplate.BuildPortForwards(cfg)`) and applies them under one restart
+prompt. For mounts it:
 
 1. reads the live `mounts:` out of the instance `lima.yaml` (not
    `limatype.Instance.Config`, which has Lima's defaults filled in);

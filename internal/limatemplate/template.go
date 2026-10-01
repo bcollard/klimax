@@ -276,7 +276,7 @@ if ! command -v kind >/dev/null 2>&1; then
 fi
 `
 
-// buildPortForwards returns the Lima portForwards rules for the given config.
+// BuildPortForwards returns the Lima portForwards rules for the given config.
 // The Docker socket forward is always included. When DisablePortMirroring is
 // true, a catch-all TCP ignore rule is prepended so Lima's hostagent does not
 // auto-mirror any guest TCP port to 127.0.0.1 on the host — required when
@@ -287,7 +287,7 @@ fi
 // the global ignoreTCP flag and stops at the first non-ignore rule.
 // GuestIP must be net.IPv4zero (not nil) so Lima's ignore check also matches
 // ports bound to all interfaces (0.0.0.0) inside the VM.
-func buildPortForwards(cfg *config.Config) []limatype.PortForward {
+func BuildPortForwards(cfg *config.Config) []limatype.PortForward {
 	var fwds []limatype.PortForward
 	if cfg.Network.PortMirroringDisabled() {
 		fwds = append(fwds, limatype.PortForward{
@@ -380,7 +380,7 @@ func Build(cfg *config.Config) *limatype.LimaYAML {
 
 		// Forward the Docker socket to the host so macOS tools (docker CLI, kind) can use it.
 		// Socket lands at ~/.<vmName>.docker.sock; set DOCKER_HOST=unix://$HOME/.<name>.docker.sock.
-		PortForwards: buildPortForwards(cfg),
+		PortForwards: BuildPortForwards(cfg),
 
 		// Trust anchors must exist before the provision script runs: cloud-init
 		// installs Docker from get.docker.com, which fails TLS verification

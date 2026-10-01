@@ -265,8 +265,8 @@ network:
   # otherwise two VMs racing to mirror the same port (e.g. 7001) to 127.0.0.1 conflict.
   # With disablePortMirroring: true, kubeconfigs use the VM's direct lima0 IP instead
   # of 127.0.0.1. Set to false to force loopback (127.0.0.1) — e.g. host security
-  # software (CrowdStrike) blocking vzNAT IPs. ⚠ VM-level: only takes effect on new
-  # VMs (marina destroy && up).
+  # software (CrowdStrike) blocking vzNAT IPs. On an existing VM, `marina up` offers
+  # a restart to apply a change; clusters keep the API address they were created with.
   # disablePortMirroring: true
 
   dns:                              # local DNS for LoadBalancer Services
@@ -472,7 +472,7 @@ marina status  # shows the VM's current shares
 | `writable` | Defaults to `false`, matching Lima. Opt in per directory. |
 | `mountPoint` | Optional guest path. Leave it out unless you mean it: a guest path that differs from the host path is the one case where `-v <host path>` stops working. |
 
-Unlike `vm.imageDisk` and `network.disablePortMirroring`, this list does **not** need the VM recreated. `marina up` compares it against the VM's current shares and offers to restart — a restart still stops every kind cluster on the VM, so it asks first, and does nothing when run non-interactively.
+Unlike `vm.imageDisk`, this list does **not** need the VM recreated. `marina up` compares it against the VM's current shares and offers to restart — a restart still stops every kind cluster on the VM, so it asks first, and does nothing when run non-interactively.
 
 > **Mounts are host-directory shares only.** The VM's root disk (`vm.disk`) and the image store (`vm.imageDisk`) are virtio-blk block devices, not virtiofs mounts, and `mountType` has no bearing on them.
 
@@ -705,7 +705,7 @@ Lima's TCP port mirroring is disabled for the marina VM, so marina coexists clea
 
 Cluster API servers listen on `0.0.0.0:700N` inside the VM. Lima's hostagent forwards these ports to `127.0.0.1:700N` on the host, and exported kubeconfigs point at `https://127.0.0.1:700N` — a stable address that survives VM restarts. Use this when running only a single marina VM, or when host-based security software (e.g. endpoint agents like CrowdStrike) blocks direct vzNAT IP access.
 
-This is a VM-level setting — it only takes effect on new VMs (`marina destroy && marina up`).
+Changing it on an existing VM: `marina up` notices the difference and offers to restart the VM to apply it (non-interactive runs only warn). The setting is also read at `marina cluster create`, so a cluster keeps the API address it was created with — recreate it to switch modes. Going back to direct mode breaks clusters created in loopback mode: their certificates have no `lima0` SAN.
 
 ### Registry mirrors
 
@@ -742,9 +742,9 @@ With this setting (the default):
 - The API server cert automatically includes the `lima0` IP as a SAN, so TLS verification works out of the box.
 - Every other Lima VM (Rancher Desktop, Colima, kind-on-lima) keeps forwarding its own ports to `127.0.0.1` completely unaffected.
 
-This is a VM-level setting — it is applied when the VM is created. (Set it to `false` before
-`marina up` if you need stable `127.0.0.1` kubeconfigs or your host security software blocks
-vzNAT IPs.)
+Set it to `false` if you need stable `127.0.0.1` kubeconfigs or your host security software
+blocks vzNAT IPs. On an existing VM, `marina up` offers a restart to apply the change; create
+clusters afterwards so their kubeconfigs use the new address.
 
 > The `lima0` IP is assigned dynamically by macOS and may change on VM restart.
 > Run `marina kubeconfig merge <name>` after a restart to refresh kubeconfigs.
