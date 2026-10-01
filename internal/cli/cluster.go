@@ -783,12 +783,14 @@ func runClusterE2ETestNginx(ctx context.Context, cleanup bool) error {
 	}
 
 	fmt.Printf("--- Curling http://%s ---\n", lbIP)
-	// Retry with --retry-connrefused: MetalLB may not have sent its gratuitous
-	// ARP and kube-proxy may not have written the DNAT rule yet, causing an
-	// immediate RST from the kind node. Allow up to ~30s for both to converge.
+	// MetalLB may not have sent its gratuitous ARP and kube-proxy may not have
+	// written the DNAT rule yet: the node then rejects the SYN (ICMP port
+	// unreachable → "connection refused"), or nothing answers at all and macOS
+	// reports "network is unreachable". --retry-connrefused covers only the
+	// first, so retry every error. Allow up to ~30s for both to converge.
 	c := exec.CommandContext(ctx, "curl",
 		"--max-time", "11", "--connect-timeout", "10",
-		"--retry", "6", "--retry-delay", "5", "--retry-connrefused",
+		"--retry", "6", "--retry-delay", "5", "--retry-all-errors",
 		"-I", "-v",
 		"http://"+lbIP)
 	c.Stdout = os.Stdout
