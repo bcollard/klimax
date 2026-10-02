@@ -124,6 +124,7 @@ internal/kind/query.go               ClustersMatchingSelector (kubectl -l), Clus
 internal/kind/addons.go              InstallMetricsServer (addon installers)
 internal/localdns/localdns.go        Ensure/Remove (etcd + CoreDNS containers at x.y.255.52/.53), Corefile, PurgeCluster, ListRecords, ProbeFromHost
 internal/localdns/externaldns.go     ExternalDNSManifest / InstallExternalDNS (plain kubectl, not Helm), ClusterForward (CoreDNS stanza)
+internal/localdns/system.go          probe record (marina-probe.<domain> → server IP), LookupViaSystem (getaddrinfo), FindManagedDNSProfiles (MDM DoH/DoT)
 internal/localdns/resolver.go        EnsureHostResolver / RemoveHostResolvers — /etc/resolver/<domain> on the Mac (marker-guarded, sudo only on change)
 internal/config/dns.go               DNSConfig (+ NameTemplate, TLSConfig), DNSEnabled/TLSEnabled/DNSDomain/DNSNameTemplate/DNSServerIP/DNSEtcdIP/ClusterDNSZone, validateDNS
 internal/localca/localca.go          Store: EnsureRoot / EnsureCluster (intermediate + wildcard, renew <30d) / RemoveCluster — in-process via github.com/bcollard/homepki/pkg/pki
@@ -381,7 +382,8 @@ marina down --remove-route             Stop VM and remove macOS host route (requ
 marina destroy                         Delete all clusters, delete VM, remove route
 marina status                          Show VM state, host mounts, local DNS, clusters, route, iptables
   -o text|json|yaml                    Output format (json/yaml for tooling; `clusters.names` is always a list)
-marina doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state, local DNS path)
+marina doctor                          Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta host+VM state, local DNS path,
+                                       local DNS through the macOS resolver — catches MDM encrypted-DNS profiles)
   -o text|json|yaml                    Output format; each check has a stable `id`, `status`, `fixable`
   --fix                                Apply the repairs marina can perform: route, iptables, IP forwarding.
                                        VM creation/start, Rosetta install and hostagent cleanup stay advisory.
@@ -551,6 +553,17 @@ Facts that shaped it, all verified on the live VM:
 - **Clients that skip `/etc/resolver`:** `dig`, Go's pure-Go resolver
   (`PreferGo`/`netgo`), Chrome with a custom Secure DNS provider. Go's default
   resolver on macOS (cgo or not) and Chrome's default setting work.
+- **An MDM encrypted-DNS profile bypasses `/etc/resolver` for every app.**
+  `com.apple.dnsSettings.managed` (seen with Kandji → Quad9 DoH, no exemptions)
+  makes mDNSResponder send the zone's queries to the DoH server, which answers
+  NXDOMAIN; `scutil --dns` still lists the resolver block as reachable. Only the
+  MDM admin can fix it: an `OnDemandRules` `EvaluateConnection` rule with
+  `DomainAction: NeverConnect` for the zone. The `dns` doctor check could not see
+  this — it queries the server directly, like `dig @server` — so `localdns.Ensure`
+  now writes a probe record (`marina-probe.<domain>` → the server IP, hidden from
+  `dns list`) and the `dns-system-resolver` check resolves it through getaddrinfo,
+  naming the profile when one is installed. `up` warns only when a profile exists
+  *and* the lookup fails (a profile can exempt the zone).
 - `validateDNS` rejects `.local` (mDNS: resolves in some tools and not others)
   and a bare TLD, and requires a /16-ish `kindBridgeCIDR` so `x.y.255.53` is inside it.
 

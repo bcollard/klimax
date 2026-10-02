@@ -110,7 +110,12 @@ func Ensure(ctx context.Context, g *guest.Client, cfg *config.Config) error {
 	}
 
 	mount := fmt.Sprintf(" -v %s:/etc/coredns:ro", corefileDir)
-	return ensureContainer(ctx, g, ServerContainer, CoreDNSImage, cfg.DNSServerIP(), mount, "-conf /etc/coredns/Corefile")
+	if err := ensureContainer(ctx, g, ServerContainer, CoreDNSImage, cfg.DNSServerIP(), mount, "-conf /etc/coredns/Corefile"); err != nil {
+		return err
+	}
+	// Rewritten every run: etcd keeps its data in the container, so a
+	// recreated etcd comes back without it.
+	return EnsureProbeRecord(ctx, g, cfg)
 }
 
 // ensureContainer runs one DNS container at a fixed kind-network address,
@@ -181,14 +186,15 @@ type Record struct {
 
 // ListRecords returns the A records in the zone, sorted by name. ExternalDNS's
 // ownership TXT records are left out: they are bookkeeping, not names anyone
-// resolves.
+// resolves. So is marina's own probe record.
 func ListRecords(ctx context.Context, g *guest.Client, cfg *config.Config) ([]Record, error) {
 	out, err := g.Run(ctx, fmt.Sprintf(
 		"docker exec %s etcdctl get --prefix %s", EtcdContainer, shellQuote(zoneKey(cfg.DNSDomain()))))
 	if err != nil {
 		return nil, fmt.Errorf("reading records (is the VM up with network.dns enabled?): %w", err)
 	}
-	return parseRecords(out), nil
+	probe := ProbeName(cfg)
+	return slices.DeleteFunc(parseRecords(out), func(r Record) bool { return r.Name == probe }), nil
 }
 
 // parseRecords reads `etcdctl get` output: alternating key and value lines.
@@ -243,7 +249,27 @@ func ServerRunning(ctx context.Context, g *guest.Client) (bool, error) {
 // /etc/resolver, so it tests the network path on its own: the host route, the
 // raw-table exemption and the container. Any answer — including NXDOMAIN for
 // the probe name — means the path works; only a timeout or refusal fails.
+// LookupViaSystem tests the other half, the Mac's resolver configuration.
 func ProbeFromHost(ctx context.Context, cfg *config.Config) error {
+	_, err := lookupDirect(ctx, cfg)
+	var dnsErr *net.DNSError
+	if err == nil || (errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
+		return nil
+	}
+	return err
+}
+
+// ProbeRecordServed reports whether the server answers the probe name. It is
+// false on a VM whose DNS containers predate the probe record, which would
+// otherwise read as a resolver problem on the Mac.
+func ProbeRecordServed(ctx context.Context, cfg *config.Config) bool {
+	addrs, err := lookupDirect(ctx, cfg)
+	return err == nil && slices.Contains(addrs, cfg.DNSServerIP())
+}
+
+// lookupDirect queries the DNS server for the probe name, skipping the Mac's
+// resolver configuration entirely.
+func lookupDirect(ctx context.Context, cfg *config.Config) ([]string, error) {
 	r := &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
@@ -253,12 +279,7 @@ func ProbeFromHost(ctx context.Context, cfg *config.Config) error {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
-	_, err := r.LookupHost(ctx, "marina-probe."+cfg.DNSDomain())
-	var dnsErr *net.DNSError
-	if err == nil || (errors.As(err, &dnsErr) && dnsErr.IsNotFound) {
-		return nil
-	}
-	return err
+	return r.LookupHost(ctx, ProbeName(cfg))
 }
 
 // ownerRE extracts the owner from an ExternalDNS TXT registry record. The text

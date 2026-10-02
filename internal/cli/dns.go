@@ -91,7 +91,28 @@ func reconcileHostResolver(cfg *config.Config) {
 		slog.Warn("Could not write the macOS resolver file — names resolve inside the VM and clusters, not yet on the Mac",
 			"path", localdns.ResolverPath(cfg), "err", err,
 			"fix", "run 'marina up' from a terminal, which can answer the sudo prompt")
+		return
 	}
+	if cfg.DNSEnabled() {
+		warnManagedDNSProfile(cfg)
+	}
+}
+
+// warnManagedDNSProfile flags an MDM encrypted-DNS profile that takes the zone
+// away from /etc/resolver. It warns only when the system-resolver lookup
+// fails too: a profile can exempt the domain, and then everything works.
+func warnManagedDNSProfile(cfg *config.Config) {
+	profs := localdns.FindManagedDNSProfiles()
+	if len(profs) == 0 {
+		return
+	}
+	addrs, err := localdns.LookupViaSystem(context.Background(), cfg)
+	if err == nil && slices.Contains(addrs, cfg.DNSServerIP()) {
+		return
+	}
+	slog.Warn("An MDM encrypted-DNS profile sends "+cfg.DNSDomain()+" lookups past /etc/resolver — names resolve in the VM and clusters, not in Mac apps",
+		"profile", profs[0].Path, "server", profs[0].Server,
+		"fix", "ask your MDM admin to exempt "+cfg.DNSDomain()+" (DNS Settings OnDemandRules: EvaluateConnection, DomainAction NeverConnect); details: marina doctor")
 }
 
 // ─── marina dns ──────────────────────────────────────────────────────────────

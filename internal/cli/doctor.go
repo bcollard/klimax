@@ -5,10 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -46,6 +48,7 @@ const (
 	checkIDRosettaVM   = "rosetta-vm"
 	checkIDProxy       = "proxy"
 	checkIDDNS         = "dns"
+	checkIDDNSSystem   = "dns-system-resolver"
 	checkIDTLS         = "tls"
 )
 
@@ -264,7 +267,11 @@ func diagnose(ctx context.Context) (*doctorReport, *doctorEnv, error) {
 	rep.Checks = append(rep.Checks, checkProxy(ctx, g, cfg))
 
 	// Local DNS zone.
-	rep.Checks = append(rep.Checks, checkLocalDNS(ctx, g, cfg))
+	dnsCheck := checkLocalDNS(ctx, g, cfg)
+	rep.Checks = append(rep.Checks, dnsCheck)
+	if cfg.DNSEnabled() && dnsCheck.Status == checkOK {
+		rep.Checks = append(rep.Checks, checkSystemResolver(ctx, cfg))
+	}
 	rep.Checks = append(rep.Checks, checkLocalCA(cfg))
 
 	// Rosetta inside the VM.
@@ -323,6 +330,12 @@ func applyDoctorFixes(ctx context.Context, rep *doctorReport, env *doctorEnv) {
 				err = fmt.Errorf("VM is not running")
 			} else {
 				err = fixLocalDNS(ctx, env)
+			}
+		case checkIDDNSSystem:
+			if env.guest == nil {
+				err = fmt.Errorf("VM is not running")
+			} else {
+				err = localdns.EnsureProbeRecord(ctx, env.guest, env.cfg)
 			}
 		case checkIDTLS:
 			reconcileLocalCA(env.cfg)
@@ -632,7 +645,52 @@ func checkLocalDNS(ctx context.Context, g *guest.Client, cfg *config.Config) doc
 			"The server answers, but macOS is not sending the zone to it.")
 	}
 	return doctorCheck{ID: checkIDDNS, Status: checkOK,
-		Message: fmt.Sprintf("Local DNS serves %s at %s, and the Mac resolves through it", cfg.DNSDomain(), cfg.DNSServerIP())}
+		Message: fmt.Sprintf("Local DNS serves %s at %s, reachable from the Mac", cfg.DNSDomain(), cfg.DNSServerIP())}
+}
+
+// checkSystemResolver resolves marina's probe record the way apps do. The dns
+// check above talks to the server directly, like `dig @server`, so it stays
+// green when something between the apps and /etc/resolver — an MDM encrypted
+// DNS profile, a VPN's DNS proxy — sends the zone's lookups elsewhere.
+func checkSystemResolver(ctx context.Context, cfg *config.Config) doctorCheck {
+	name := localdns.ProbeName(cfg)
+	if !localdns.ProbeRecordServed(ctx, cfg) {
+		return doctorCheck{ID: checkIDDNSSystem, Status: checkFail,
+			Message: fmt.Sprintf("The DNS server has no %s record to test the Mac's resolver with (DNS set up by an older marina)", name),
+			Fix:     "marina up -c " + configFile, Fixable: true}
+	}
+	addrs, err := localdns.LookupViaSystem(ctx, cfg)
+	if err == nil && slices.Contains(addrs, cfg.DNSServerIP()) {
+		return doctorCheck{ID: checkIDDNSSystem, Status: checkOK,
+			Message: fmt.Sprintf("macOS resolves %s names through /etc/resolver (as curl and browsers do)", cfg.DNSDomain())}
+	}
+	var dnsErr *net.DNSError
+	got := "no such name"
+	switch {
+	case err == nil:
+		got = strings.Join(addrs, ", ")
+	case !errors.As(err, &dnsErr) || !dnsErr.IsNotFound:
+		got = err.Error()
+	}
+	c := doctorCheck{ID: checkIDDNSSystem, Status: checkFail,
+		Message: fmt.Sprintf("macOS does not resolve %s names through /etc/resolver: %s gave %q, want %s", cfg.DNSDomain(), name, got, cfg.DNSServerIP()),
+	}
+	if profs := localdns.FindManagedDNSProfiles(); len(profs) > 0 {
+		p := profs[0]
+		via := p.Protocol
+		if p.Server != "" {
+			via = strings.TrimSpace(via + " " + p.Server)
+		}
+		if via == "" {
+			via = "an encrypted DNS server"
+		}
+		c.Detail = fmt.Sprintf("An MDM encrypted-DNS profile (%s) sends lookups to %s, and it does not exempt %s, so /etc/resolver is never consulted.", p.Path, via, cfg.DNSDomain())
+		c.Fix = fmt.Sprintf("ask your MDM admin to exempt %s in the DNS Settings profile: an OnDemandRules EvaluateConnection rule with DomainAction NeverConnect for Domains [%s]", cfg.DNSDomain(), cfg.DNSDomain())
+		return c
+	}
+	c.Detail = "Something on this Mac overrides DNS for apps: a VPN or security agent DNS proxy (System Settings > Network > VPN & Filters), or an NXDOMAIN cached before the zone existed."
+	c.Fix = "sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder — then re-run marina doctor; if it still fails, check `systemextensionsctl list` for a DNS proxy"
+	return c
 }
 
 // fixLocalDNS re-runs the same reconciliation `marina up` does for network.dns.

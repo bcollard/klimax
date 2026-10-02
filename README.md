@@ -342,7 +342,7 @@ hidden. Use `--lima-log-level trace|debug|info|warn|error|off` to surface them
 | `marina down --remove-route` | Stop the VM and remove the macOS host route (requires sudo) |
 | `marina destroy` | Stop + delete VM, delete all clusters, remove host route |
 | `marina status` | Show VM state, host mounts, clusters, route, and iptables rule presence (`-o text\|json\|yaml`) |
-| `marina doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta); `--fix` applies what marina can repair, `-o text\|json\|yaml` |
+| `marina doctor` | Diagnose common issues (VM, route, iptables, IP forwarding, Rosetta, local DNS through the macOS resolver); `--fix` applies what marina can repair, `-o text\|json\|yaml` |
 | `marina version` | Print the marina version |
 | `marina shell` | Open an interactive SSH session in the VM |
 | `marina shell <cmd> [args...]` | Run a command in the VM and exit with its exit code |
@@ -620,6 +620,7 @@ marina dns attach <cluster>...      # add a cluster created before network.dns w
 - **Turn it off** with `network.dns.enabled: false` and `marina up`: the containers, the iptables exemption and the resolver file are removed.
 - **A new name appears within ~15 s** (ExternalDNS's sync interval). Don't look it up before then: macOS keeps a "no such name" answer for about 75 s, whatever the zone's TTL says. `marina dns list` shows when it is published; `sudo killall -HUP mDNSResponder` clears the cache.
 - **Caveats:** tools that do their own DNS skip `/etc/resolver` — `dig` (use `dig @172.30.255.53` or `dscacheutil -q host -a name <name>`), Go programs built with the pure-Go resolver, and Chrome with a custom Secure DNS provider. No public CA issues certificates for `.internal`; use a private CA.
+- **MDM encrypted-DNS profiles** (`com.apple.dnsSettings.managed`, pushed by Kandji, Jamf, Intune…) send every lookup to their DoH/DoT server, and `/etc/resolver` is never consulted: `dig @172.30.255.53` answers, curl and browsers get "no such name". The user cannot override a managed profile; the MDM admin has to exempt the zone with an `OnDemandRules` rule (`Action: EvaluateConnection`, `DomainAction: NeverConnect`, `Domains: [demo.internal]`). `marina doctor` detects it (check `dns-system-resolver`) and `marina up` warns.
 
 ### HTTPS on local names (`network.dns.tls`)
 

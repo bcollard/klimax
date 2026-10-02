@@ -147,7 +147,8 @@ type NetworkConfig struct {
 	// force loopback (127.0.0.1) addressing — e.g. if host security software
 	// (CrowdStrike) blocks TCP connections to vzNAT IPs.
 	// nil = default (true).
-	// ⚠ Lima instance config: only takes effect on new VMs (marina destroy && up).
+	// Reconciled on existing VMs by `marina up` (restart prompt); clusters keep
+	// the mode they were created with.
 	DisablePortMirroring *bool `yaml:"disablePortMirroring"`
 	// Proxy configures an HTTP(S) proxy for dockerd, the registry mirrors and
 	// the kind nodes. Leave it unset to use the Mac's system proxy settings,
